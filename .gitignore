@@ -1,0 +1,57 @@
+# Environment variables
+.env
+.env.real
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+portfolio_holdings.xlsx
+test_portfolio.xlsx
+temp_portfolio_holdings.xlsx
+temp_portfolio_manage.xlsx
+
+# Google Cloud
+service-account-key.json
+*.pem
+
+# Logs
+logs/
+*.log
