@@ -11,10 +11,13 @@ import warnings
 from typing import Dict, Any, List
 from dotenv import load_dotenv
 
-# Suppress FutureWarning for google.generativeai
+# Suppress FutureWarning for google generative AI libraries
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+except ModuleNotFoundError:
+    genai = None
 
 load_dotenv()
 
@@ -34,6 +37,545 @@ from tradingview_community import get_community_data
 from tradingview_search import find_ticker_by_company_name
 
 
+def _clamp_score(value: float) -> int:
+    try:
+        value_f = float(value)
+    except Exception:
+        return 0
+    if value_f < 0:
+        return 0
+    if value_f > 100:
+        return 100
+    return int(round(value_f))
+
+
+def _payload(result: Dict[str, Any]) -> Dict[str, Any] | None:
+    """
+    Tool responses in this repo commonly look like:
+    {"status":"SUCCESS", "data":{"success": true, "data": {...}}}
+    """
+    if not isinstance(result, dict):
+        return None
+    if str(result.get("status", "")).upper() != "SUCCESS":
+        return None
+    data = result.get("data")
+    if isinstance(data, dict) and data.get("success") and isinstance(data.get("data"), dict):
+        return data.get("data")
+    return None
+
+
+def _signal_from_score(score: int) -> str:
+    if score <= 0:
+        return "Unavailable"
+    if score >= 67:
+        return "Bullish"
+    if score <= 33:
+        return "Bearish"
+    return "Neutral"
+
+
+def _risk_label_from_score(score: int) -> str:
+    if score <= 0:
+        return "Unavailable"
+    if score >= 67:
+        return "High"
+    if score <= 33:
+        return "Low"
+    return "Medium"
+
+
+def fundamental_score(market_data_result: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Fundamental score uses only validated market-data fields (TTM margins, EPS/revenue when available).
+    """
+    missing: List[str] = []
+    factors: List[Dict[str, Any]] = []
+
+    payload = _payload(market_data_result) or {}
+    ttm = payload.get("ttm") if isinstance(payload.get("ttm"), dict) else {}
+    indicators = payload.get("indicators") if isinstance(payload.get("indicators"), dict) else {}
+
+    eps = ttm.get("earnings_per_share_ttm")
+    revenue = ttm.get("total_revenue_ttm")
+    net_margin = ttm.get("net_margin_ttm")
+    gross_margin = ttm.get("gross_margin_ttm")
+    market_cap = indicators.get("market_cap_calc")
+
+    score = 50.0
+    used_any = False
+
+    if eps is None:
+        missing.append("ttm.earnings_per_share_ttm")
+    else:
+        used_any = True
+        try:
+            eps_f = float(eps)
+            delta = 10 if eps_f > 0 else -10
+            score += delta
+            factors.append({"factor": "EPS (TTM)", "impact": delta, "value": eps_f})
+        except Exception:
+            missing.append("ttm.earnings_per_share_ttm")
+
+    if revenue is None:
+        missing.append("ttm.total_revenue_ttm")
+    else:
+        used_any = True
+        try:
+            rev_f = float(revenue)
+            delta = 5 if rev_f > 0 else -5
+            score += delta
+            factors.append({"factor": "Revenue (TTM)", "impact": delta, "value": rev_f})
+        except Exception:
+            missing.append("ttm.total_revenue_ttm")
+
+    if net_margin is None:
+        missing.append("ttm.net_margin_ttm")
+    else:
+        used_any = True
+        try:
+            nm = float(net_margin)
+            if nm >= 20:
+                delta = 15
+            elif nm >= 10:
+                delta = 8
+            elif nm >= 0:
+                delta = 2
+            else:
+                delta = -15
+            score += delta
+            factors.append({"factor": "Net Margin (TTM)", "impact": delta, "value": nm})
+        except Exception:
+            missing.append("ttm.net_margin_ttm")
+
+    if gross_margin is None:
+        missing.append("ttm.gross_margin_ttm")
+    else:
+        used_any = True
+        try:
+            gm = float(gross_margin)
+            if gm >= 50:
+                delta = 10
+            elif gm >= 35:
+                delta = 5
+            elif gm >= 20:
+                delta = 1
+            else:
+                delta = -8
+            score += delta
+            factors.append({"factor": "Gross Margin (TTM)", "impact": delta, "value": gm})
+        except Exception:
+            missing.append("ttm.gross_margin_ttm")
+
+    if market_cap is None:
+        missing.append("indicators.market_cap_calc")
+    else:
+        used_any = True
+        try:
+            mc = float(market_cap)
+            # Scale-neutral mild boost for large caps (stability proxy)
+            delta = 5 if mc >= 50_000_000_000 else (2 if mc >= 10_000_000_000 else 0)
+            score += delta
+            factors.append({"factor": "Market Cap", "impact": delta, "value": mc})
+        except Exception:
+            missing.append("indicators.market_cap_calc")
+
+    if not used_any:
+        return {"score": 0, "signal": "Unavailable", "factors": [], "missing_fields": sorted(set(missing))}
+
+    s = _clamp_score(score)
+    return {"score": s, "signal": _signal_from_score(s), "factors": factors, "missing_fields": sorted(set(missing))}
+
+
+def valuation_score(market_data_result: Dict[str, Any]) -> Dict[str, Any]:
+    missing: List[str] = []
+    factors: List[Dict[str, Any]] = []
+
+    payload = _payload(market_data_result) or {}
+    indicators = payload.get("indicators") if isinstance(payload.get("indicators"), dict) else {}
+    pe = indicators.get("price_earnings")
+    if pe is None:
+        missing.append("indicators.price_earnings")
+        return {"score": 0, "signal": "Unavailable", "factors": [], "missing_fields": missing}
+
+    try:
+        pe_f = float(pe)
+    except Exception:
+        missing.append("indicators.price_earnings")
+        return {"score": 0, "signal": "Unavailable", "factors": [], "missing_fields": missing}
+
+    # Simple P/E heuristic: lower is generally “cheaper” but too low can be distressed.
+    score = 50.0
+    if pe_f <= 0:
+        score = 0
+        factors.append({"factor": "P/E", "impact": -50, "value": pe_f})
+        return {"score": 0, "signal": "Unavailable", "factors": factors, "missing_fields": missing}
+    if pe_f < 10:
+        score = 70
+        factors.append({"factor": "P/E (low)", "impact": +20, "value": pe_f})
+    elif pe_f <= 18:
+        score = 80
+        factors.append({"factor": "P/E (reasonable)", "impact": +30, "value": pe_f})
+    elif pe_f <= 28:
+        score = 60
+        factors.append({"factor": "P/E (elevated)", "impact": +10, "value": pe_f})
+    elif pe_f <= 45:
+        score = 35
+        factors.append({"factor": "P/E (high)", "impact": -15, "value": pe_f})
+    else:
+        score = 20
+        factors.append({"factor": "P/E (very high)", "impact": -30, "value": pe_f})
+
+    s = _clamp_score(score)
+    return {"score": s, "signal": _signal_from_score(s), "factors": factors, "missing_fields": sorted(set(missing))}
+
+
+def risk_score(market_data_result: Dict[str, Any]) -> Dict[str, Any]:
+    missing: List[str] = []
+    factors: List[Dict[str, Any]] = []
+
+    payload = _payload(market_data_result) or {}
+    indicators = payload.get("indicators") if isinstance(payload.get("indicators"), dict) else {}
+
+    beta = indicators.get("beta_1_year")
+    week_high = indicators.get("price_52_week_high")
+    week_low = indicators.get("price_52_week_low")
+
+    used_any = False
+    score = 50.0  # higher => higher risk
+
+    if beta is None:
+        missing.append("indicators.beta_1_year")
+    else:
+        used_any = True
+        try:
+            b = float(beta)
+            if b >= 1.6:
+                delta = +25
+            elif b >= 1.2:
+                delta = +12
+            elif b >= 0.9:
+                delta = 0
+            else:
+                delta = -8
+            score += delta
+            factors.append({"factor": "Beta (1Y)", "impact": delta, "value": b})
+        except Exception:
+            missing.append("indicators.beta_1_year")
+
+    vol_range = None
+    if week_high is None:
+        missing.append("indicators.price_52_week_high")
+    if week_low is None:
+        missing.append("indicators.price_52_week_low")
+
+    try:
+        if week_high is not None and week_low is not None:
+            wh = float(week_high)
+            wl = float(week_low)
+            if wl > 0:
+                used_any = True
+                vol_range = ((wh - wl) / wl) * 100.0
+    except Exception:
+        pass
+
+    if vol_range is not None:
+        if vol_range >= 80:
+            delta = +25
+        elif vol_range >= 50:
+            delta = +15
+        elif vol_range >= 30:
+            delta = +5
+        else:
+            delta = -5
+        score += delta
+        factors.append({"factor": "52W Range Volatility %", "impact": delta, "value": round(vol_range, 1)})
+
+    if not used_any:
+        return {"score": 0, "signal": "Unavailable", "factors": [], "missing_fields": sorted(set(missing))}
+
+    s = _clamp_score(score)
+    return {"score": s, "signal": _risk_label_from_score(s), "factors": factors, "missing_fields": sorted(set(missing))}
+
+
+def technical_score(technical_result: Dict[str, Any], indicators_result: Dict[str, Any]) -> Dict[str, Any]:
+    missing: List[str] = []
+    factors: List[Dict[str, Any]] = []
+
+    tech_payload = _payload(technical_result) or {}
+    ind_payload = _payload(indicators_result) or {}
+
+    recommendation = None
+    if isinstance(tech_payload, dict):
+        recommendation = tech_payload.get("recommendation") or tech_payload.get("summary", {}).get("RECOMMENDATION")
+    if not recommendation:
+        missing.append("technical.recommendation")
+
+    rec_map = {
+        "STRONG_BUY": 85,
+        "BUY": 72,
+        "NEUTRAL": 50,
+        "SELL": 28,
+        "STRONG_SELL": 15,
+    }
+    score = None
+    if recommendation:
+        rec_norm = str(recommendation).upper().replace(" ", "_")
+        if rec_norm in rec_map:
+            score = float(rec_map[rec_norm])
+            factors.append({"factor": "TA Recommendation", "impact": 0, "value": rec_norm})
+        else:
+            # Unknown string from API; treat as missing rather than guessing.
+            missing.append("technical.recommendation")
+
+    # Optional RSI adjustment if available
+    rsi = None
+    if isinstance(ind_payload, dict):
+        rsi = ind_payload.get("RSI") or ind_payload.get("rsi")
+    if rsi is not None:
+        try:
+            r = float(rsi)
+            if score is None:
+                score = 50.0
+            # Overbought/oversold heuristic
+            if r >= 70:
+                score -= 8
+                factors.append({"factor": "RSI overbought", "impact": -8, "value": r})
+            elif r <= 30:
+                score += 8
+                factors.append({"factor": "RSI oversold", "impact": +8, "value": r})
+        except Exception:
+            missing.append("indicators.rsi")
+    else:
+        missing.append("indicators.rsi")
+
+    if score is None:
+        return {"score": 0, "signal": "Unavailable", "factors": [], "missing_fields": sorted(set(missing))}
+
+    s = _clamp_score(score)
+    return {"score": s, "signal": _signal_from_score(s), "factors": factors, "missing_fields": sorted(set(missing))}
+
+
+def sentiment_score(news_result: Dict[str, Any], community_result: Dict[str, Any]) -> Dict[str, Any]:
+    missing: List[str] = []
+    factors: List[Dict[str, Any]] = []
+
+    score = None
+
+    # News: keyword sentiment on titles (no inference beyond explicit text)
+    news_payload = _payload(news_result) or {}
+    articles = None
+    if isinstance(news_payload, list):
+        articles = news_payload
+    elif isinstance(news_payload, dict):
+        articles = news_payload.get("data") if isinstance(news_payload.get("data"), list) else news_payload.get("articles")
+    if not isinstance(articles, list):
+        missing.append("news.articles")
+    else:
+        bulls = 0
+        bears = 0
+        for a in articles[:50]:
+            if not isinstance(a, dict):
+                continue
+            title = (a.get("title") or a.get("headline") or "").lower()
+            if not title:
+                continue
+            if any(k in title for k in ["beats", "beat", "upgrade", "upgraded", "raises guidance", "record", "surge", "rally"]):
+                bulls += 1
+            if any(k in title for k in ["misses", "miss", "downgrade", "downgraded", "cuts guidance", "plunge", "lawsuit", "probe"]):
+                bears += 1
+
+        if bulls or bears:
+            score = 50.0 + (bulls - bears) * 6.0
+            factors.append({"factor": "News title balance", "impact": _clamp_score(score) - 50, "value": {"bull": bulls, "bear": bears}})
+
+    # Community sentiment (if available) as mild modifier
+    comm_payload = _payload(community_result) or {}
+    if not comm_payload:
+        missing.append("community.sentiment")
+    else:
+        # Unknown schema; only use if numeric signal exists.
+        possible = None
+        for key in ["sentiment", "score", "bullish", "bearish"]:
+            if key in comm_payload:
+                possible = comm_payload.get(key)
+                break
+        if possible is not None:
+            try:
+                val = float(possible)
+                if score is None:
+                    score = 50.0
+                # Normalize [-1..1] or [0..100]
+                if -1 <= val <= 1:
+                    delta = val * 10
+                else:
+                    delta = (val - 50) / 10
+                score += delta
+                factors.append({"factor": "Community signal", "impact": int(round(delta)), "value": val})
+            except Exception:
+                missing.append("community.sentiment")
+
+    if score is None:
+        return {"score": 0, "signal": "Unavailable", "factors": [], "missing_fields": sorted(set(missing))}
+
+    s = _clamp_score(score)
+    return {"score": s, "signal": _signal_from_score(s), "factors": factors, "missing_fields": sorted(set(missing))}
+
+
+def macro_score(gdp_result: Dict[str, Any], interest_rates_result: Dict[str, Any]) -> Dict[str, Any]:
+    missing: List[str] = []
+    factors: List[Dict[str, Any]] = []
+
+    score = None
+
+    def _first_numeric(obj) -> float | None:
+        if obj is None:
+            return None
+        if isinstance(obj, (int, float)):
+            return float(obj)
+        if isinstance(obj, str):
+            try:
+                return float(obj.replace("%", "").strip())
+            except Exception:
+                return None
+        if isinstance(obj, dict):
+            for k in ["value", "close", "c", "latest", "current"]:
+                if k in obj:
+                    v = _first_numeric(obj.get(k))
+                    if v is not None:
+                        return v
+            for v in obj.values():
+                v2 = _first_numeric(v)
+                if v2 is not None:
+                    return v2
+        if isinstance(obj, list):
+            for it in obj[:10]:
+                v = _first_numeric(it)
+                if v is not None:
+                    return v
+        return None
+
+    gdp_val = _first_numeric((gdp_result or {}).get("data"))
+    ir_val = _first_numeric((interest_rates_result or {}).get("data"))
+
+    if gdp_val is None:
+        missing.append("macro.gdp_growth")
+    if ir_val is None:
+        missing.append("macro.interest_rates")
+
+    if gdp_val is not None or ir_val is not None:
+        score = 50.0
+        if gdp_val is not None:
+            # Higher growth => better macro backdrop
+            delta = 0
+            if gdp_val >= 3.0:
+                delta = +12
+            elif gdp_val >= 1.5:
+                delta = +6
+            elif gdp_val >= 0:
+                delta = 0
+            else:
+                delta = -10
+            score += delta
+            factors.append({"factor": "GDP growth proxy", "impact": delta, "value": gdp_val})
+        if ir_val is not None:
+            # Higher rates => tighter conditions
+            delta = 0
+            if ir_val >= 6.0:
+                delta = -12
+            elif ir_val >= 4.0:
+                delta = -6
+            elif ir_val >= 2.0:
+                delta = 0
+            else:
+                delta = +4
+            score += delta
+            factors.append({"factor": "Interest rate proxy", "impact": delta, "value": ir_val})
+
+    if score is None:
+        return {"score": 0, "signal": "Unavailable", "factors": [], "missing_fields": sorted(set(missing))}
+
+    s = _clamp_score(score)
+    return {"score": s, "signal": _signal_from_score(s), "factors": factors, "missing_fields": sorted(set(missing))}
+
+
+def compute_intelligence_scores(
+    *,
+    market_data_result: Dict[str, Any],
+    technical_result: Dict[str, Any],
+    indicators_result: Dict[str, Any],
+    news_result: Dict[str, Any],
+    community_result: Dict[str, Any],
+    gdp_result: Dict[str, Any],
+    interest_rates_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    f = fundamental_score(market_data_result)
+    t = technical_score(technical_result, indicators_result)
+    v = valuation_score(market_data_result)
+    r = risk_score(market_data_result)
+    m = macro_score(gdp_result, interest_rates_result)
+    s = sentiment_score(news_result, community_result)
+
+    # Overall confidence is data/engine availability driven (no LLM confidence).
+    engines = [f, t, v, r, m, s]
+    available = sum(1 for e in engines if e.get("signal") != "Unavailable")
+    completeness = available / len(engines)
+    confidence = 0 if available == 0 else _clamp_score(40 + completeness * 60)
+
+    # Simple verdict from weighted average (risk penalizes)
+    weights = {
+        "fundamental": 0.20,
+        "technical": 0.25,
+        "valuation": 0.15,
+        "macro": 0.10,
+        "sentiment": 0.10,
+        "risk_penalty": 0.20,
+    }
+    base = 0.0
+    denom = 0.0
+    for key, eng in [("fundamental", f), ("technical", t), ("valuation", v), ("macro", m), ("sentiment", s)]:
+        if eng.get("signal") != "Unavailable":
+            base += eng["score"] * weights[key]
+            denom += weights[key]
+    if denom > 0:
+        base = base / denom
+    else:
+        base = 0.0
+
+    risk_pen = 0.0
+    if r.get("signal") != "Unavailable":
+        risk_pen = r["score"] * weights["risk_penalty"]  # higher risk => larger penalty
+
+    composite = _clamp_score(base - risk_pen / 100 * 30)
+
+    if available == 0:
+        composite = 0
+        verdict = "HOLD"
+    elif composite >= 67:
+        verdict = "BUY"
+    elif composite <= 33:
+        verdict = "SELL"
+    else:
+        verdict = "HOLD"
+
+    return {
+        "verdict": {"value": verdict, "score": composite},
+        "confidence": {
+            "score": confidence,
+            "note": "Computed from engine availability (data completeness proxy)."
+            if available > 0
+            else "Unavailable: no engines produced valid signals.",
+        },
+        "scores": {
+            "fundamental": f,
+            "technical": t,
+            "valuation": v,
+            "risk": r,
+            "macro": m,
+            "sentiment": s,
+        },
+    }
+
+
 class StockAnalysisAgent:
     """
     Agent for analyzing individual stocks and generating probability-based recommendations.
@@ -42,7 +584,7 @@ class StockAnalysisAgent:
     def __init__(self, user_id: str = None):
         """Initialize the stock analysis agent with Gemini AI."""
         api_key = os.getenv("GOOGLE_API_KEY")
-        if api_key:
+        if api_key and genai is not None:
             try:
                 genai.configure(api_key=api_key)
                 self.model = genai.GenerativeModel('gemini-2.5-flash')
@@ -50,6 +592,9 @@ class StockAnalysisAgent:
             except Exception as e:
                 print(f"Error initializing Gemini AI: {e}")
                 self.model = None
+        elif api_key and genai is None:
+            print("Warning: google-generativeai is not installed (cannot import google.generativeai).")
+            self.model = None
         else:
             print("Warning: GOOGLE_API_KEY not found")
             self.model = None
@@ -586,10 +1131,21 @@ class StockAnalysisAgent:
                 gainers_result, losers_result, active_result,
                 gdp_result, interest_rates_result, probability_analysis
             )
+
+            intelligence = compute_intelligence_scores(
+                market_data_result=market_data_result,
+                technical_result=technical_result,
+                indicators_result=indicators_result,
+                news_result=news_result,
+                community_result=community_result,
+                gdp_result=gdp_result,
+                interest_rates_result=interest_rates_result,
+            )
             
             return {
                 "status": "SUCCESS",
                 "symbol": symbol,
+                "intelligence": intelligence,
                 "report": report,
                 "execution_steps": execution_steps,
                 "total_time": f"{time.time() - start_time:.2f}s",
