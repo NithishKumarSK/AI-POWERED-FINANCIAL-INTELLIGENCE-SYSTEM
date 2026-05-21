@@ -8,6 +8,8 @@ import os
 import sys
 import time
 import warnings
+import json
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List
 from dotenv import load_dotenv
 
@@ -62,6 +64,199 @@ def _payload(result: Dict[str, Any]) -> Dict[str, Any] | None:
     if isinstance(data, dict) and data.get("success") and isinstance(data.get("data"), dict):
         return data.get("data")
     return None
+
+
+def _safe_float(x) -> float | None:
+    try:
+        if x is None:
+            return None
+        return float(x)
+    except Exception:
+        return None
+
+
+def _history_from_historical_result(historical_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    payload = _payload(historical_result) or {}
+    history = payload.get("history", [])
+    return history if isinstance(history, list) else []
+
+
+def _ts_from_date_str(date_str: str) -> int | None:
+    """
+    Accepts YYYY-MM-DD and returns unix timestamp (seconds) at 00:00 UTC.
+    """
+    if not date_str:
+        return None
+    try:
+        dt = datetime.strptime(date_str.strip(), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        return int(dt.timestamp())
+    except Exception:
+        return None
+
+
+def _close_at_or_before(history: List[Dict[str, Any]], ts: int) -> float | None:
+    best_t = None
+    best_close = None
+    for pt in history:
+        if not isinstance(pt, dict):
+            continue
+        t = pt.get("time", pt.get("t"))
+        c = pt.get("close", pt.get("c"))
+        try:
+            t_i = int(float(t))
+        except Exception:
+            continue
+        if t_i <= ts:
+            c_f = _safe_float(c)
+            if c_f is None:
+                continue
+            if best_t is None or t_i > best_t:
+                best_t = t_i
+                best_close = c_f
+    return best_close
+
+
+def _compute_rsi(closes: List[float], period: int = 14) -> float | None:
+    if len(closes) < period + 1:
+        return None
+    gains = 0.0
+    losses = 0.0
+    for i in range(-period, 0):
+        delta = closes[i] - closes[i - 1]
+        if delta >= 0:
+            gains += delta
+        else:
+            losses += -delta
+    if losses == 0:
+        return 100.0
+    rs = gains / losses
+    return 100.0 - (100.0 / (1.0 + rs))
+
+
+def _technical_score_from_history(history: List[Dict[str, Any]], cutoff_ts: int) -> Dict[str, Any]:
+    missing: List[str] = []
+    factors: List[Dict[str, Any]] = []
+
+    pts = [pt for pt in history if isinstance(pt, dict)]
+    pts_sorted = sorted(
+        [pt for pt in pts if _safe_float(pt.get("close", pt.get("c"))) is not None and _safe_float(pt.get("time", pt.get("t"))) is not None],
+        key=lambda x: int(float(x.get("time", x.get("t")))),
+    )
+    pts_sorted = [pt for pt in pts_sorted if int(float(pt.get("time", pt.get("t")))) <= cutoff_ts]
+    closes = [float(pt.get("close", pt.get("c"))) for pt in pts_sorted]
+
+    if len(closes) < 60:
+        missing.append("history.closes_60")
+        return {"score": 0, "signal": "Unavailable", "factors": [], "missing_fields": missing}
+
+    # Momentum via MA20 vs MA50
+    ma20 = sum(closes[-20:]) / 20
+    ma50 = sum(closes[-50:]) / 50
+    last = closes[-1]
+    score = 50.0
+
+    if ma20 > ma50:
+        score += 10
+        factors.append({"factor": "MA20 > MA50", "impact": +10, "value": {"ma20": round(ma20, 2), "ma50": round(ma50, 2)}})
+    else:
+        score -= 10
+        factors.append({"factor": "MA20 <= MA50", "impact": -10, "value": {"ma20": round(ma20, 2), "ma50": round(ma50, 2)}})
+
+    # Price vs MA50
+    if last > ma50:
+        score += 6
+        factors.append({"factor": "Price > MA50", "impact": +6, "value": {"price": round(last, 2), "ma50": round(ma50, 2)}})
+    else:
+        score -= 6
+        factors.append({"factor": "Price <= MA50", "impact": -6, "value": {"price": round(last, 2), "ma50": round(ma50, 2)}})
+
+    rsi = _compute_rsi(closes, period=14)
+    if rsi is None:
+        missing.append("history.rsi_14")
+    else:
+        if rsi >= 70:
+            score -= 8
+            factors.append({"factor": "RSI overbought", "impact": -8, "value": round(rsi, 1)})
+        elif rsi <= 30:
+            score += 8
+            factors.append({"factor": "RSI oversold", "impact": +8, "value": round(rsi, 1)})
+        else:
+            factors.append({"factor": "RSI neutral", "impact": 0, "value": round(rsi, 1)})
+
+    s = _clamp_score(score)
+    return {"score": s, "signal": _signal_from_score(s), "factors": factors, "missing_fields": sorted(set(missing))}
+
+
+def _risk_score_from_history(history: List[Dict[str, Any]], cutoff_ts: int) -> Dict[str, Any]:
+    missing: List[str] = []
+    factors: List[Dict[str, Any]] = []
+
+    pts = [pt for pt in history if isinstance(pt, dict)]
+    pts_sorted = sorted(
+        [pt for pt in pts if _safe_float(pt.get("close", pt.get("c"))) is not None and _safe_float(pt.get("time", pt.get("t"))) is not None],
+        key=lambda x: int(float(x.get("time", x.get("t")))),
+    )
+    pts_sorted = [pt for pt in pts_sorted if int(float(pt.get("time", pt.get("t")))) <= cutoff_ts]
+    closes = [float(pt.get("close", pt.get("c"))) for pt in pts_sorted]
+    if len(closes) < 40:
+        missing.append("history.closes_40")
+        return {"score": 0, "signal": "Unavailable", "factors": [], "missing_fields": missing}
+
+    # Daily returns volatility (simple)
+    rets = []
+    for i in range(1, len(closes)):
+        if closes[i - 1] <= 0:
+            continue
+        rets.append((closes[i] / closes[i - 1]) - 1.0)
+    if len(rets) < 20:
+        missing.append("history.returns_20")
+        return {"score": 0, "signal": "Unavailable", "factors": [], "missing_fields": missing}
+
+    mean = sum(rets[-20:]) / 20
+    var = sum((x - mean) ** 2 for x in rets[-20:]) / 19
+    vol = (var ** 0.5) * (252 ** 0.5)  # annualized
+
+    score = 50.0
+    # vol thresholds (annualized)
+    if vol >= 0.60:
+        score += 30
+        factors.append({"factor": "High volatility (ann.)", "impact": +30, "value": round(vol, 3)})
+    elif vol >= 0.40:
+        score += 18
+        factors.append({"factor": "Elevated volatility (ann.)", "impact": +18, "value": round(vol, 3)})
+    elif vol >= 0.25:
+        score += 8
+        factors.append({"factor": "Moderate volatility (ann.)", "impact": +8, "value": round(vol, 3)})
+    else:
+        score -= 6
+        factors.append({"factor": "Low volatility (ann.)", "impact": -6, "value": round(vol, 3)})
+
+    # Drawdown over last 60 days
+    window = closes[-60:] if len(closes) >= 60 else closes
+    peak = window[0]
+    max_dd = 0.0
+    for c in window:
+        if c > peak:
+            peak = c
+        dd = (peak - c) / peak if peak > 0 else 0
+        if dd > max_dd:
+            max_dd = dd
+    if max_dd >= 0.30:
+        score += 20
+        factors.append({"factor": "Large drawdown (60d)", "impact": +20, "value": round(max_dd * 100, 1)})
+    elif max_dd >= 0.15:
+        score += 10
+        factors.append({"factor": "Meaningful drawdown (60d)", "impact": +10, "value": round(max_dd * 100, 1)})
+    else:
+        factors.append({"factor": "Contained drawdown (60d)", "impact": 0, "value": round(max_dd * 100, 1)})
+
+    s = _clamp_score(score)
+    return {"score": s, "signal": _risk_label_from_score(s), "factors": factors, "missing_fields": sorted(set(missing))}
+
+
+def _write_jsonl(path: str, obj: Dict[str, Any]) -> None:
+    with open(path, "a", encoding="utf-8") as f_out:
+        f_out.write(json.dumps(obj, ensure_ascii=False) + "\n")
 
 
 def _signal_from_score(score: int) -> str:
@@ -515,11 +710,16 @@ def compute_intelligence_scores(
     m = macro_score(gdp_result, interest_rates_result)
     s = sentiment_score(news_result, community_result)
 
-    # Overall confidence is data/engine availability driven (no LLM confidence).
+    # Confidence engine (decision reliability, not "API availability").
+    # - penalize missing engines
+    # - penalize score disagreement
+    # - penalize explicit contradictions (bull vs bear signals)
+    # - penalize high risk regimes
+    # - optionally incorporate historical calibration when available
     engines = [f, t, v, r, m, s]
     available = sum(1 for e in engines if e.get("signal") != "Unavailable")
     completeness = available / len(engines)
-    confidence = 0 if available == 0 else _clamp_score(40 + completeness * 60)
+    completeness_score = 0 if available == 0 else _clamp_score(40 + completeness * 60)
 
     # Simple verdict from weighted average (risk penalizes)
     weights = {
@@ -530,16 +730,18 @@ def compute_intelligence_scores(
         "sentiment": 0.10,
         "risk_penalty": 0.20,
     }
-    base = 0.0
+
+    base_weighted_sum = 0.0
     denom = 0.0
+    per_engine_weighted = {}
     for key, eng in [("fundamental", f), ("technical", t), ("valuation", v), ("macro", m), ("sentiment", s)]:
         if eng.get("signal") != "Unavailable":
-            base += eng["score"] * weights[key]
-            denom += weights[key]
-    if denom > 0:
-        base = base / denom
-    else:
-        base = 0.0
+            w = float(weights[key])
+            val = float(eng.get("score", 0))
+            per_engine_weighted[key] = {"weight": w, "score": val, "weighted": val * w}
+            base_weighted_sum += val * w
+            denom += w
+    base = base_weighted_sum / denom if denom > 0 else 0.0
 
     risk_pen = 0.0
     if r.get("signal") != "Unavailable":
@@ -557,14 +759,344 @@ def compute_intelligence_scores(
     else:
         verdict = "HOLD"
 
+    # Decision trace & factor aggregation (auditable, computed from validated signals only).
+    def _impact_num(x) -> int | None:
+        try:
+            return int(round(float(x)))
+        except Exception:
+            return None
+
+    engine_map = {
+        "fundamental": f,
+        "technical": t,
+        "valuation": v,
+        "macro": m,
+        "sentiment": s,
+        "risk": r,
+    }
+
+    alpha_positive = []
+    alpha_negative = []
+    risk_contributors = []
+    for eng_name, eng in engine_map.items():
+        for fac in (eng.get("factors") or [])[:12]:
+            if not isinstance(fac, dict):
+                continue
+            impact = _impact_num(fac.get("impact"))
+            if impact is None or impact == 0:
+                continue
+            item = {
+                "engine": eng_name,
+                "factor": fac.get("factor"),
+                "impact": impact,
+                "value": fac.get("value"),
+            }
+            if eng_name == "risk":
+                # Risk factors are not alpha drivers. Always treat as risk contributors.
+                risk_contributors.append(item)
+                continue
+            if impact > 0:
+                alpha_positive.append(item)
+            else:
+                alpha_negative.append(item)
+
+    alpha_positive = sorted(alpha_positive, key=lambda x: x.get("impact", 0), reverse=True)[:8]
+    alpha_negative = sorted(alpha_negative, key=lambda x: x.get("impact", 0))[:8]
+    # For risk contributors, larger positive impact => more risk; show highest first.
+    risk_contributors = sorted(risk_contributors, key=lambda x: x.get("impact", 0), reverse=True)[:8]
+
+    missing_engines = [k for k, e in engine_map.items() if e.get("signal") == "Unavailable"]
+    confidence_penalties = []
+    missing_penalty = 0
+    if missing_engines:
+        # 10 points each, capped.
+        missing_penalty = min(50, 10 * len(missing_engines))
+        for eng in missing_engines:
+            confidence_penalties.append({"engine": eng, "penalty": 10, "reason": "Engine unavailable (missing/failed inputs)."})
+
+    # Disagreement penalty (dispersion among non-risk engines)
+    import math
+
+    agreement_penalty = 0
+    non_risk_scores = []
+    for k in ["fundamental", "technical", "valuation", "macro", "sentiment"]:
+        eng = engine_map.get(k) or {}
+        if eng.get("signal") != "Unavailable":
+            try:
+                non_risk_scores.append(float(eng.get("score", 0)))
+            except Exception:
+                pass
+    if len(non_risk_scores) >= 2:
+        mean = sum(non_risk_scores) / len(non_risk_scores)
+        var = sum((x - mean) ** 2 for x in non_risk_scores) / max(1, (len(non_risk_scores) - 1))
+        std = math.sqrt(var)
+        # std <= 12 => fine; std >= 28 => heavy penalty
+        if std > 12:
+            agreement_penalty = _clamp_score((std - 12) * 2.0)  # 0..100
+            agreement_penalty = min(35, agreement_penalty)
+
+    # Contradiction penalty (bullish vs bearish engine signals)
+    bullish = 0
+    bearish = 0
+    for k in ["fundamental", "technical", "valuation", "macro", "sentiment"]:
+        sig = (engine_map.get(k) or {}).get("signal")
+        if sig == "Bullish":
+            bullish += 1
+        elif sig == "Bearish":
+            bearish += 1
+    contradiction_penalty = 0
+    if bullish > 0 and bearish > 0:
+        # more mixed signals => less reliable
+        contradiction_penalty = min(25, 8 + 4 * min(bullish, bearish))
+
+    # Risk regime penalty (high risk reduces decision reliability)
+    risk_regime_penalty = 0
+    if r.get("signal") != "Unavailable":
+        try:
+            risk_regime_penalty = int(round(float(r.get("score", 0)) * 0.25))  # up to 25
+            risk_regime_penalty = min(25, max(0, risk_regime_penalty))
+        except Exception:
+            risk_regime_penalty = 0
+
+    # Historical calibration (optional; requires prior evaluated runs stored in a local JSONL)
+    calibration = {"available": False, "expected_accuracy": None, "note": "No evaluated history available yet."}
+    calibration_penalty = 0
+    try:
+        hist_path = os.path.join(os.path.dirname(__file__), "evaluation_runs.jsonl")
+        if os.path.exists(hist_path):
+            evaluated = []
+            with open(hist_path, "r", encoding="utf-8") as f_in:
+                for line in f_in:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        import json
+
+                        obj = json.loads(line)
+                    except Exception:
+                        continue
+                    if isinstance(obj, dict) and obj.get("evaluated") is True and "correct" in obj:
+                        evaluated.append(obj)
+            if len(evaluated) >= 20:
+                # bucket by confidence deciles and compute expected accuracy for current bucket
+                bucket = int(min(9, max(0, (completeness_score // 10))))
+                in_bucket = [x for x in evaluated if int(min(9, max(0, (int(x.get("confidence", 0)) // 10)))) == bucket]
+                if len(in_bucket) >= 10:
+                    acc = sum(1 for x in in_bucket if bool(x.get("correct")) is True) / len(in_bucket)
+                    calibration = {"available": True, "expected_accuracy": _clamp_score(acc * 100), "note": f"Bucket {bucket*10}-{bucket*10+9} accuracy from local evaluated runs."}
+                    # If history says this bucket is weak, reduce confidence.
+                    if calibration["expected_accuracy"] is not None:
+                        calibration_penalty = max(0, int(round((100 - calibration["expected_accuracy"]) * 0.20)))
+    except Exception:
+        pass
+
+    confidence_raw = 0 if available == 0 else _clamp_score(
+        100
+        - missing_penalty
+        - agreement_penalty
+        - contradiction_penalty
+        - risk_regime_penalty
+        - calibration_penalty
+    )
+    # Blend with completeness_score so confidence never exceeds data coverage by too much.
+    confidence = 0 if available == 0 else min(confidence_raw, completeness_score + 10)
+
+    # Source reliability (heuristic; used for transparency, not for overriding scores yet).
+    source_reliability = {
+        "fundamental": "High",
+        "valuation": "Medium",
+        "technical": "Medium",
+        "macro": "Medium",
+        "sentiment": "Low",
+        "risk": "Medium",
+    }
+
+    decision_trace = {
+        "base_components": [
+            {
+                "engine": k,
+                "score": int(round(v["score"])),
+                "weight": v["weight"],
+                "weighted": round(v["weighted"], 2),
+            }
+            for k, v in per_engine_weighted.items()
+        ],
+        "base_weighted_sum": round(base_weighted_sum, 2),
+        "base_weight_denominator": round(denom, 2),
+        "base_score": _clamp_score(base),
+        "risk_penalty_score": int(r.get("score", 0)) if r.get("signal") != "Unavailable" else 0,
+        "composite_score": composite,
+    }
+
+    # Structured multi-agent layer (deterministic; consumes only validated scores/signals/factors).
+    def _missing_inputs_for(keys: List[str]) -> List[str]:
+        missing_all = []
+        for k in keys:
+            eng = engine_map.get(k) or {}
+            missing_all.extend(list(eng.get("missing_fields") or []))
+        # Deduplicate while keeping it short
+        seen = set()
+        out = []
+        for m0 in missing_all:
+            if m0 in seen:
+                continue
+            seen.add(m0)
+            out.append(m0)
+            if len(out) >= 12:
+                break
+        return out
+
+    def _top_factor_names(eng_key: str, limit: int = 3) -> List[str]:
+        eng = engine_map.get(eng_key) or {}
+        out = []
+        for fac in (eng.get("factors") or [])[:limit]:
+            if isinstance(fac, dict) and fac.get("factor"):
+                imp = _impact_num(fac.get("impact"))
+                if imp is None:
+                    out.append(str(fac.get("factor")))
+                else:
+                    out.append(f"{fac.get('factor')} ({imp:+})")
+        return out
+
+    bull_thesis = []
+    if f.get("signal") == "Bullish":
+        bull_thesis.append("Fundamentals supportive (profitability/margins/EPS positive where available).")
+    if t.get("signal") == "Bullish":
+        bull_thesis.append("Technical posture bullish per TA/RSI signals available.")
+    if m.get("signal") == "Bullish":
+        bull_thesis.append("Macro backdrop supportive based on available proxies.")
+    bull_thesis = bull_thesis[:3]
+
+    bear_thesis = []
+    if v.get("signal") == "Bearish":
+        bear_thesis.append("Valuation expensive (elevated P/E proxy where available).")
+    if t.get("signal") == "Bearish":
+        bear_thesis.append("Technical posture bearish per TA/RSI signals available.")
+    if s.get("signal") == "Bearish":
+        bear_thesis.append("News/community sentiment skew negative based on explicit titles/signals only.")
+    bear_thesis = bear_thesis[:3]
+
+    # Risk agent (risk-only)
+    risk_drivers = _top_factor_names("risk", limit=3)
+    risk_agent_out = {
+        "agent": "risk",
+        "risk_level": r.get("signal", "Unavailable"),
+        "risk_score": r.get("score", 0),
+        "risk_drivers": risk_drivers,
+        "missing_inputs": _missing_inputs_for(["risk"]),
+    }
+
+    # Critic agent: identify contradictions & weak points from missing inputs (no freeform speculation).
+    contradictions = []
+    if f.get("signal") == "Bullish" and v.get("signal") == "Bearish":
+        contradictions.append("Strong fundamentals but valuation is expensive (quality vs price conflict).")
+    if t.get("signal") == "Bullish" and r.get("signal") == "High":
+        contradictions.append("Bullish technicals but risk regime is high (volatility/beta).")
+    if t.get("signal") == "Bearish" and f.get("signal") == "Bullish":
+        contradictions.append("Short-term technical weakness against strong fundamentals (time-horizon mismatch).")
+    contradictions = contradictions[:4]
+
+    critic_flags = []
+    if missing_engines:
+        critic_flags.append(f"Missing engines: {', '.join(missing_engines)}")
+    if agreement_penalty >= 20:
+        critic_flags.append("High score dispersion across engines (low agreement).")
+    if contradiction_penalty >= 12:
+        critic_flags.append("Mixed bullish/bearish signals detected.")
+    critic_flags = critic_flags[:4]
+
+    critic_agent_out = {
+        "agent": "critic",
+        "contradictions": contradictions,
+        "flags": critic_flags,
+        "missing_inputs": _missing_inputs_for(["fundamental", "technical", "valuation", "macro", "sentiment", "risk"]),
+    }
+
+    # Bull/Bear agents
+    bull_agent_out = {
+        "agent": "bull",
+        "verdict": "BUY" if composite >= 67 else "HOLD",
+        "confidence": confidence,
+        "thesis": bull_thesis if bull_thesis else ["Insufficient bullish signals from validated engines."],
+        "top_signals": _top_factor_names("fundamental", limit=2) + _top_factor_names("technical", limit=1),
+        "missing_inputs": _missing_inputs_for(["fundamental", "technical", "macro"]),
+    }
+
+    bear_agent_out = {
+        "agent": "bear",
+        "verdict": "SELL" if composite <= 33 else "HOLD",
+        "confidence": confidence,
+        "thesis": bear_thesis if bear_thesis else ["Insufficient bearish signals from validated engines."],
+        "top_signals": _top_factor_names("valuation", limit=2) + _top_factor_names("technical", limit=1),
+        "missing_inputs": _missing_inputs_for(["valuation", "technical", "sentiment"]),
+    }
+
+    # Final decision agent: adjudicate using composite + critic flags + risk regime.
+    overrides = []
+    if r.get("signal") == "High":
+        if verdict == "BUY" and confidence < 70:
+            overrides.append("High risk regime reduces conviction; consider position sizing discipline.")
+    final_agent_out = {
+        "agent": "final",
+        "verdict": verdict,
+        "composite_score": composite,
+        "confidence": confidence,
+        "overrides": overrides[:3],
+        "missing_inputs": _missing_inputs_for(["fundamental", "technical", "valuation", "macro", "sentiment", "risk"]),
+    }
+
+    agents = {
+        "bull": bull_agent_out,
+        "bear": bear_agent_out,
+        "risk": risk_agent_out,
+        "critic": critic_agent_out,
+        "final": final_agent_out,
+    }
+
+    # Simple probability view (bounded, derived from composite + risk + contradiction penalties).
+    # This is not a predictive probability; it's a structured "confidence-weighted inclination" score.
+    bull_raw = max(0.0, composite - 40.0)
+    bear_raw = max(0.0, 60.0 - composite)
+    hold_raw = 10.0 + contradiction_penalty + agreement_penalty
+    # risk pushes toward HOLD rather than BUY/SELL
+    if r.get("signal") != "Unavailable":
+        hold_raw += float(r.get("score", 0)) * 0.10
+    total = bull_raw + bear_raw + hold_raw
+    if total <= 0:
+        probs = {"buy": 0, "hold": 100, "sell": 0, "note": "Insufficient signals; default HOLD."}
+    else:
+        probs = {
+            "buy": _clamp_score((bull_raw / total) * 100),
+            "hold": _clamp_score((hold_raw / total) * 100),
+            "sell": _clamp_score((bear_raw / total) * 100),
+            "note": "Derived from composite score + penalties (not a predictive probability).",
+        }
+
     return {
         "verdict": {"value": verdict, "score": composite},
         "confidence": {
             "score": confidence,
-            "note": "Computed from engine availability (data completeness proxy)."
+            "note": "Computed from completeness + agreement + contradictions + risk regime (+ optional calibration)."
             if available > 0
             else "Unavailable: no engines produced valid signals.",
+            "penalties": confidence_penalties,
+            "breakdown": {
+                "completeness_score": completeness_score,
+                "missing_penalty": missing_penalty,
+                "agreement_penalty": agreement_penalty,
+                "contradiction_penalty": contradiction_penalty,
+                "risk_regime_penalty": risk_regime_penalty,
+                "calibration": calibration,
+            },
         },
+        "decision_trace": decision_trace,
+        "source_reliability": source_reliability,
+        "alpha_positive_drivers": alpha_positive,
+        "alpha_negative_drivers": alpha_negative,
+        "risk_contributors": risk_contributors,
+        "agents": agents,
+        "probabilities": probs,
         "scores": {
             "fundamental": f,
             "technical": t,
@@ -1612,19 +2144,140 @@ ECONOMIC CONTEXT (Next 30 Days):
             full_prompt = data_summary + "\n" + prompt
             
             response = self.model.generate_content(full_prompt)
-            
+            analysis_text = response.text
+
+            # Lightweight policy enforcement: flag forbidden speculative tokens.
+            violations = []
+            lowered = (analysis_text or "").lower()
+            for token in ["(inferred", "inferred", "assumed", "likely", "probably"]:
+                if token in lowered:
+                    violations.append(token)
+            if violations:
+                analysis_text = (
+                    "MODEL OUTPUT WARNING: speculative language detected "
+                    f"{sorted(set(violations))}. Treat those lines as non-auditable.\n\n"
+                    + (analysis_text or "")
+                )
+
             return {
                 "status": "SUCCESS",
-                "analysis": response.text,
+                "analysis": analysis_text,
                 "timeframe": "1-month",
                 "focus": "price prediction with historical patterns"
             }
-            
         except Exception as e:
             return {
                 "status": "ERROR",
                 "message": f"Error generating prediction: {str(e)}"
             }
+
+    def evaluate_price_only_cutoff(self, symbol: str, *, as_of_date: str, horizon_days: int = 30) -> Dict[str, Any]:
+        """
+        Evaluation Lab runner (price-only, leakage-safe):
+        - Uses only historical prices <= as_of_date to compute Technical + Risk engines.
+        - Fundamental/Valuation/Macro/Sentiment are marked Unavailable to avoid leaking current APIs.
+        - Computes realized return over (as_of_date, as_of_date+horizon] when available.
+        - Logs runs to evaluation_runs.jsonl for calibration dashboards.
+        """
+        start_time = time.time()
+        cutoff_ts = _ts_from_date_str(as_of_date)
+        if cutoff_ts is None:
+            return {"status": "ERROR", "message": "Invalid as_of_date. Use YYYY-MM-DD."}
+
+        hist = get_year_historical_data(symbol)
+        history = _history_from_historical_result(hist)
+        if hist.get("status") != "SUCCESS" or not history:
+            return {"status": "ERROR", "message": "Historical data unavailable for evaluation.", "historical_result": hist}
+
+        tech = _technical_score_from_history(history, cutoff_ts)
+        risk = _risk_score_from_history(history, cutoff_ts)
+
+        def _stub(name: str) -> Dict[str, Any]:
+            return {"score": 0, "signal": "Unavailable", "factors": [], "missing_fields": [f"{name}.unavailable_in_price_only_mode"]}
+
+        f0 = _stub("fundamental")
+        v0 = _stub("valuation")
+        m0 = _stub("macro")
+        s0 = _stub("sentiment")
+
+        base_intel = compute_intelligence_scores(
+            market_data_result={"status": "ERROR"},
+            technical_result={"status": "ERROR"},
+            indicators_result={"status": "ERROR"},
+            news_result={"status": "ERROR"},
+            community_result={"status": "ERROR"},
+            gdp_result={"status": "ERROR"},
+            interest_rates_result={"status": "ERROR"},
+        )
+        base_intel["scores"]["technical"] = tech
+        base_intel["scores"]["risk"] = risk
+        base_intel["scores"]["fundamental"] = f0
+        base_intel["scores"]["valuation"] = v0
+        base_intel["scores"]["macro"] = m0
+        base_intel["scores"]["sentiment"] = s0
+
+        if tech.get("signal") == "Unavailable" and risk.get("signal") == "Unavailable":
+            composite = 0
+            verdict = "HOLD"
+        else:
+            comp = float(tech.get("score", 0) or 0)
+            pen = float(risk.get("score", 0) or 0) * 0.30
+            composite = _clamp_score(comp - pen)
+            verdict = "BUY" if composite >= 67 else ("SELL" if composite <= 33 else "HOLD")
+
+        base_intel["verdict"] = {"value": verdict, "score": composite}
+        base_intel["confidence"] = {
+            "score": _clamp_score(70 - (risk.get("score", 0) or 0) * 0.20),
+            "note": "Price-only cutoff mode: confidence derived from risk regime + limited signal coverage.",
+            "penalties": [{"engine": "fundamental/valuation/macro/sentiment", "penalty": 10, "reason": "Unavailable in price-only cutoff mode."}],
+            "breakdown": {"mode": "price_only_cutoff"},
+        }
+
+        horizon_ts = cutoff_ts + int(horizon_days) * 86400
+        px0 = _close_at_or_before(history, cutoff_ts)
+        px1 = _close_at_or_before(history, horizon_ts)
+        evaluated = False
+        actual_return = None
+        correct = None
+        if px0 is not None and px1 is not None and px0 > 0:
+            evaluated = True
+            actual_return = (px1 / px0) - 1.0
+            if verdict == "BUY":
+                correct = actual_return > 0
+            elif verdict == "SELL":
+                correct = actual_return < 0
+            else:
+                correct = abs(actual_return) < 0.01
+
+        run_obj = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "symbol": symbol,
+            "mode": "price_only_cutoff",
+            "as_of_date": as_of_date,
+            "horizon_days": horizon_days,
+            "verdict": verdict,
+            "confidence": base_intel.get("confidence", {}).get("score"),
+            "composite_score": composite,
+            "evaluated": evaluated,
+            "actual_return": actual_return,
+            "correct": correct,
+        }
+        try:
+            path = os.path.join(os.path.dirname(__file__), "evaluation_runs.jsonl")
+            _write_jsonl(path, run_obj)
+        except Exception:
+            pass
+
+        return {
+            "status": "SUCCESS",
+            "symbol": symbol,
+            "mode": "price_only_cutoff",
+            "as_of_date": as_of_date,
+            "horizon_days": horizon_days,
+            "intelligence": base_intel,
+            "outcome": {"evaluated": evaluated, "actual_return": actual_return, "correct": correct, "px0": px0, "px1": px1},
+            "total_time": f"{time.time() - start_time:.2f}s",
+        }
 
     def _compile_one_month_report(self, symbol: str, price_result: Dict,
                                   market_data_result: Dict, historical_result: Dict,
@@ -1728,6 +2381,12 @@ TOOLS USED: 8 (Price, Market Data, Historical Patterns, Technical Analysis,
             # Prepare comprehensive data summary for AI with actual data from ALL sources
             data_summary = f"""
 COMPREHENSIVE STOCK ANALYSIS FOR: {symbol}
+
+GROUNDING & RELIABILITY RULES (MANDATORY):
+- Do NOT infer missing data. If a data source is unavailable, say "Unavailable" and move on.
+- Do NOT use words like "inferred", "assumed", "likely" for missing analyst/news/sentiment fields.
+- Keep outputs compact and structured; avoid long essay paragraphs.
+- If you cannot support a claim from the provided snapshot, omit the claim.
 
 """
             

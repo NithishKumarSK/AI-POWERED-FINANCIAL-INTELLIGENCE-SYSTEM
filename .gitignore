@@ -55,3 +55,6 @@ service-account-key.json
 # Logs
 logs/
 *.log
+
+# Evaluation artifacts (local only)
+evaluation_runs.jsonl

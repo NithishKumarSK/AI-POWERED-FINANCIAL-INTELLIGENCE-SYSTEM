@@ -282,6 +282,8 @@ def render_stock_intelligence(result: dict, *, filename_prefix: str):
     confidence = intelligence.get("confidence") or {}
     conf_score = confidence.get("score")
     conf_note = confidence.get("note") or "Computed from engine availability (data completeness proxy)."
+    conf_penalties = confidence.get("penalties") or []
+    conf_breakdown = confidence.get("breakdown") or {}
 
     risk = scores.get("risk") or {}
     risk_score = risk.get("score")
@@ -362,6 +364,122 @@ def render_stock_intelligence(result: dict, *, filename_prefix: str):
 
     st.dataframe(rows, use_container_width=True, hide_index=True)
 
+    # Decision trace + factor attribution (compact, auditable)
+    top_pos = intelligence.get("alpha_positive_drivers") or []
+    top_neg = intelligence.get("alpha_negative_drivers") or []
+    risk_contrib = intelligence.get("risk_contributors") or []
+    decision_trace = intelligence.get("decision_trace") or {}
+    source_rel = intelligence.get("source_reliability") or {}
+    agents = intelligence.get("agents") or {}
+
+    with st.expander("Decision Trace & Attribution"):
+        left, right = st.columns([1, 1])
+        with left:
+            st.markdown("**Decision Trace**")
+            base_score = decision_trace.get("base_score")
+            comp_score = decision_trace.get("composite_score")
+            risk_pen = decision_trace.get("risk_penalty_score")
+            st.write(f"- Base score: {base_score if base_score is not None else '-'}")
+            st.write(f"- Risk score: {risk_pen if risk_pen is not None else '-'}")
+            st.write(f"- Composite: {comp_score if comp_score is not None else '-'}")
+
+            comps = decision_trace.get("base_components") or []
+            if comps:
+                st.markdown("**Engine contributions (weighted)**")
+                st.dataframe(
+                    [
+                        {
+                            "Engine": c.get("engine"),
+                            "Score": c.get("score"),
+                            "Weight": c.get("weight"),
+                            "Weighted": c.get("weighted"),
+                        }
+                        for c in comps
+                    ],
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+        with right:
+            st.markdown("**Positive Alpha Drivers**")
+            if top_pos:
+                for item in top_pos[:6]:
+                    st.write(f"- {item.get('engine')}: {item.get('factor')} ({item.get('impact'):+})")
+            else:
+                st.caption("No positive drivers available.")
+
+            st.markdown("**Negative Drivers**")
+            if top_neg:
+                for item in top_neg[:6]:
+                    st.write(f"- {item.get('engine')}: {item.get('factor')} ({item.get('impact'):+})")
+            else:
+                st.caption("No negative drivers available.")
+
+            st.markdown("**Risk Contributors**")
+            if risk_contrib:
+                for item in risk_contrib[:6]:
+                    st.write(f"- {item.get('factor')} ({item.get('impact'):+})")
+            else:
+                st.caption("No risk contributors available.")
+
+        if conf_penalties:
+            st.markdown("**Confidence penalties (missing engines)**")
+            for p in conf_penalties[:12]:
+                st.write(f"- {p.get('engine')}: -{p.get('penalty')} ({p.get('reason')})")
+
+        if conf_breakdown:
+            with st.expander("Confidence breakdown"):
+                st.write(f"- Completeness score: {conf_breakdown.get('completeness_score', '-')}")
+                st.write(f"- Agreement penalty: {conf_breakdown.get('agreement_penalty', '-')}")
+                st.write(f"- Contradiction penalty: {conf_breakdown.get('contradiction_penalty', '-')}")
+                st.write(f"- Risk regime penalty: {conf_breakdown.get('risk_regime_penalty', '-')}")
+                cal = conf_breakdown.get("calibration") or {}
+                if isinstance(cal, dict) and cal.get("available"):
+                    st.write(f"- Calibration expected accuracy: {cal.get('expected_accuracy', '-')}/100")
+                    st.caption(str(cal.get("note") or ""))
+                else:
+                    st.caption(str((cal or {}).get("note") or "Calibration unavailable (no evaluated history yet)."))
+
+        if source_rel:
+            st.markdown("**Source reliability (heuristic)**")
+            st.dataframe(
+                [{"Engine": k, "Reliability": v} for k, v in source_rel.items()],
+                use_container_width=True,
+                hide_index=True,
+            )
+
+    if agents:
+        with st.expander("Agent Consensus"):
+            def _agent_row(name: str, obj: dict) -> dict:
+                if not isinstance(obj, dict):
+                    return {"Agent": name, "Verdict": "-", "Confidence": "-", "Notes": "-"}
+                return {
+                    "Agent": name,
+                    "Verdict": obj.get("verdict") or obj.get("risk_level") or obj.get("verdict") or "-",
+                    "Confidence": obj.get("confidence", "-"),
+                    "Notes": "; ".join((obj.get("thesis") or obj.get("flags") or obj.get("overrides") or [])[:3]) if isinstance((obj.get("thesis") or obj.get("flags") or obj.get("overrides") or []), list) else "-",
+                }
+
+            table = []
+            for key in ["bull", "bear", "risk", "critic", "final"]:
+                table.append(_agent_row(key, agents.get(key) or {}))
+            st.dataframe(table, use_container_width=True, hide_index=True)
+
+            # Detail panes
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("**Bull Agent**")
+                st.write(agents.get("bull") or {})
+                st.markdown("**Bear Agent**")
+                st.write(agents.get("bear") or {})
+            with c2:
+                st.markdown("**Risk Agent**")
+                st.write(agents.get("risk") or {})
+                st.markdown("**Critic Agent**")
+                st.write(agents.get("critic") or {})
+                st.markdown("**Final Agent**")
+                st.write(agents.get("final") or {})
+
     if (result or {}).get("execution_steps"):
         with st.expander("AI Pipeline Monitor"):
             for step in (result.get("execution_steps") or []):
@@ -407,6 +525,95 @@ def render_stock_intelligence(result: dict, *, filename_prefix: str):
             mime="text/plain",
             use_container_width=True,
         )
+
+    # Visual intelligence layer (compact, institutional)
+    with st.expander("Visual Intelligence"):
+        try:
+            import plotly.graph_objects as go
+
+            f_sc = (scores.get("fundamental") or {}).get("score", 0)
+            t_sc = (scores.get("technical") or {}).get("score", 0)
+            v_sc = (scores.get("valuation") or {}).get("score", 0)
+            m_sc = (scores.get("macro") or {}).get("score", 0)
+            s_sc = (scores.get("sentiment") or {}).get("score", 0)
+            r_sc = (scores.get("risk") or {}).get("score", 0)
+            risk_good = 0 if not isinstance(r_sc, (int, float)) else max(0, min(100, 100 - int(r_sc)))
+
+            categories = ["Fundamental", "Technical", "Valuation", "Macro", "Sentiment", "Risk (low=good)"]
+            values = [f_sc, t_sc, v_sc, m_sc, s_sc, risk_good]
+            fig = go.Figure()
+            fig.add_trace(
+                go.Scatterpolar(r=values + [values[0]], theta=categories + [categories[0]], fill="toself", name="Scores")
+            )
+            fig.update_layout(
+                height=360,
+                margin=dict(l=10, r=10, t=40, b=10),
+                title="Score Radar",
+                polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+                showlegend=False,
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Attribution bars (alpha drivers + risk contributors)
+            bars = []
+            for it in (intelligence.get("alpha_positive_drivers") or [])[:6]:
+                bars.append({"label": f"{it.get('engine')}:{it.get('factor')}", "impact": int(it.get("impact", 0))})
+            for it in (intelligence.get("alpha_negative_drivers") or [])[:6]:
+                bars.append({"label": f"{it.get('engine')}:{it.get('factor')}", "impact": int(it.get("impact", 0))})
+            for it in (intelligence.get("risk_contributors") or [])[:6]:
+                # risk contributors shown as negative contribution to decision quality
+                bars.append({"label": f"risk:{it.get('factor')}", "impact": -abs(int(it.get("impact", 0)))})
+            if bars:
+                bars = sorted(bars, key=lambda x: x["impact"])
+                fig2 = go.Figure(
+                    data=[
+                        go.Bar(
+                            x=[b["impact"] for b in bars],
+                            y=[b["label"] for b in bars],
+                            orientation="h",
+                        )
+                    ]
+                )
+                fig2.update_layout(
+                    height=360,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    title="Attribution (impact)",
+                    xaxis_title="Impact",
+                    yaxis_title="",
+                )
+                st.plotly_chart(fig2, use_container_width=True)
+
+            # Confidence gauge
+            if isinstance(conf_score, (int, float)):
+                fig3 = go.Figure(
+                    go.Indicator(
+                        mode="gauge+number",
+                        value=float(conf_score),
+                        title={"text": "Decision Confidence"},
+                        gauge={"axis": {"range": [0, 100]}},
+                    )
+                )
+                fig3.update_layout(height=260, margin=dict(l=10, r=10, t=40, b=10))
+                st.plotly_chart(fig3, use_container_width=True)
+
+            # Bull vs Bear vs Hold inclination
+            probs = intelligence.get("probabilities") or {}
+            if probs:
+                fig4 = go.Figure(
+                    data=[
+                        go.Bar(
+                            x=["BUY", "HOLD", "SELL"],
+                            y=[probs.get("buy", 0), probs.get("hold", 0), probs.get("sell", 0)],
+                        )
+                    ]
+                )
+                fig4.update_layout(height=260, margin=dict(l=10, r=10, t=40, b=10), title="Inclination (derived, not predictive)")
+                st.plotly_chart(fig4, use_container_width=True)
+                if probs.get("note"):
+                    st.caption(str(probs.get("note")))
+
+        except Exception as e:
+            st.caption(f"Visuals unavailable: {e}")
 
 
 def _extract_between(report_text: str, start_header: str, end_header: str) -> str:
@@ -563,6 +770,86 @@ def render_portfolio_compact(
         st.metric("Holdings", holdings_n or "-")
     with c3:
         st.metric("Module", "Portfolio", "analysis")
+
+    # Portfolio intelligence (deterministic, based on allocation log)
+    alloc = []
+    if conversion_log:
+        for log in conversion_log:
+            if isinstance(log, dict) and "ticker" in log and "amount" in log:
+                try:
+                    alloc.append({"ticker": str(log["ticker"]).upper(), "amount": float(log["amount"])})
+                except Exception:
+                    continue
+
+    if alloc:
+        total_amt = sum(x["amount"] for x in alloc if x["amount"] > 0)
+        weights = []
+        if total_amt > 0:
+            weights = [{"ticker": x["ticker"], "weight": x["amount"] / total_amt, "amount": x["amount"]} for x in alloc]
+
+        if weights:
+            top = sorted(weights, key=lambda x: x["weight"], reverse=True)[0]
+            hhi = sum(x["weight"] ** 2 for x in weights)
+            diversification = max(0, min(100, int(round((1.0 - hhi) * 140))))  # heuristic
+            concentration = int(round(top["weight"] * 100))
+
+            cA, cB, cC = st.columns(3)
+            with cA:
+                st.metric("Diversification Score", f"{diversification}/100")
+            with cB:
+                st.metric("Top Holding", top["ticker"], f"{concentration}%")
+            with cC:
+                st.metric("Concentration (HHI)", f"{hhi:.3f}")
+
+            st.markdown("**Allocation table**")
+            st.dataframe(
+                [{"Ticker": x["ticker"], "Weight %": round(x["weight"] * 100, 2), "Amount": round(x["amount"], 2)} for x in sorted(weights, key=lambda x: x["weight"], reverse=True)],
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            # Optional correlation + stress test (explicit opt-in due to extra API calls)
+            with st.expander("Portfolio Risk Lab (optional)"):
+                st.caption("Computes correlations using 1Y price history. May trigger extra API calls; keep holdings small.")
+                do_corr = st.checkbox("Compute correlation matrix (last ~90 points)", value=False, key=f"corr_{filename_prefix}")
+                if do_corr:
+                    try:
+                        import numpy as np
+                        import pandas as pd
+                        from stock_historical_data import get_year_historical_data
+
+                        series = {}
+                        for x in sorted(weights, key=lambda z: z["weight"], reverse=True)[:12]:
+                            hr = get_year_historical_data(x["ticker"])
+                            hist_payload = hr.get("data", {}).get("data", {})
+                            history = hist_payload.get("history", []) or []
+                            closes = []
+                            for pt in history[-120:]:
+                                if isinstance(pt, dict):
+                                    c = pt.get("close", pt.get("c"))
+                                    try:
+                                        closes.append(float(c))
+                                    except Exception:
+                                        pass
+                            if len(closes) >= 90:
+                                rets = np.diff(np.array(closes)) / np.array(closes[:-1])
+                                series[x["ticker"]] = rets[-90:]
+
+                        if len(series) >= 2:
+                            df = pd.DataFrame(series)
+                            corr = df.corr()
+                            st.markdown("**Correlation matrix (returns)**")
+                            st.dataframe(corr.round(2), use_container_width=True)
+
+                            # Simple stress test: market down X% and correlate weights with avg corr
+                            shock = st.slider("Market shock (%)", min_value=1, max_value=25, value=8)
+                            avg_corr = float(corr.mean().mean())
+                            est_dd = -abs(shock) / 100.0 * (0.8 + 0.4 * min(1.0, max(0.0, avg_corr)))
+                            st.metric("Estimated drawdown (rough)", f"{est_dd*100:.1f}%")
+                        else:
+                            st.info("Not enough history series to compute correlation (need >=2 tickers with >=90 points).")
+                    except Exception as e:
+                        st.error(f"Correlation/stress computation failed: {e}")
 
     if conversion_log:
         try:
@@ -1093,7 +1380,7 @@ def main():
         [
             "Portfolio Analysis",
             "Stock Research",
-            "Backtesting",
+            "Evaluation Lab",
             "Market Sentiment",
             "AI Recommendation",
             "Risk Intelligence",
@@ -1105,19 +1392,131 @@ def main():
         stock_analysis_interface()
     elif page == "Portfolio Analysis":
         portfolio_analysis_interface()
-    elif page == "Backtesting":
-        st.subheader("Backtesting")
-        st.info("Coming Soon: historical cutoff testing + evaluation scoring (the core differentiator).")
+    elif page == "Evaluation Lab":
+        st.subheader("Evaluation Lab")
+        st.caption("Evaluation-first infrastructure: temporal cutoff testing + stored runs + calibration.")
 
-        st.subheader("Historical Prediction Validation")
-        st.write(
-            """
-Prediction Date: Jan 2025  
-Predicted Trend: Bullish  
-Actual Outcome: +18.2%  
-Prediction Accuracy: SUCCESS
-            """.strip()
+        st.info(
+            "Cutoff mode currently uses **price-only** engines (Technical + Risk) to avoid future leakage. "
+            "Other engines are marked Unavailable in this mode."
         )
+
+        tickers_raw = st.text_input("Tickers (comma separated)", value="AAPL,MSFT,TSLA")
+        as_of_date = st.text_input("As-of date (YYYY-MM-DD)", value=datetime.now().strftime("%Y-%m-%d"))
+        horizon_days = st.number_input("Horizon days", min_value=1, max_value=365, value=30)
+
+        run_btn = st.button("Run Cutoff Backtest (price-only)", type="primary", use_container_width=True)
+
+        results = []
+        if run_btn:
+            tickers = [t.strip().upper() for t in (tickers_raw or "").split(",") if t.strip()]
+            if not tickers:
+                st.warning("Enter at least one ticker.")
+            else:
+                with st.spinner("Running cutoff evaluations (price-only)…"):
+                    for t in tickers[:25]:
+                        out = st.session_state.agent.evaluate_price_only_cutoff(t, as_of_date=as_of_date, horizon_days=int(horizon_days))
+                        if out.get("status") != "SUCCESS":
+                            results.append(
+                                {
+                                    "Ticker": t,
+                                    "Status": "ERROR",
+                                    "Message": out.get("message", "Unknown error"),
+                                }
+                            )
+                            continue
+                        intel = out.get("intelligence") or {}
+                        verdict = (intel.get("verdict") or {}).get("value")
+                        comp = (intel.get("verdict") or {}).get("score")
+                        conf = (intel.get("confidence") or {}).get("score")
+                        outcome = out.get("outcome") or {}
+                        results.append(
+                            {
+                                "Ticker": t,
+                                "Status": "OK",
+                                "Verdict": verdict,
+                                "Composite": comp,
+                                "Confidence": conf,
+                                "Evaluated": bool(outcome.get("evaluated")),
+                                "Actual Return": outcome.get("actual_return"),
+                                "Correct": outcome.get("correct"),
+                            }
+                        )
+
+        if results:
+            st.markdown("### Run Results")
+            st.dataframe(results, use_container_width=True, hide_index=True)
+
+            evaluated = [r for r in results if r.get("Evaluated") is True and isinstance(r.get("Correct"), bool)]
+            if evaluated:
+                win_rate = sum(1 for r in evaluated if r.get("Correct") is True) / len(evaluated)
+                st.metric("Win Rate", f"{win_rate*100:.1f}%", f"{len(evaluated)} evaluated")
+
+                # Simple bar chart of returns
+                try:
+                    import plotly.express as px
+
+                    chart_rows = [r for r in evaluated if isinstance(r.get("Actual Return"), (int, float))]
+                    if chart_rows:
+                        fig = px.bar(
+                            chart_rows,
+                            x="Ticker",
+                            y="Actual Return",
+                            title="Realized Return (cutoff → horizon)",
+                        )
+                        fig.update_layout(height=320, margin=dict(l=10, r=10, t=40, b=10))
+                        st.plotly_chart(fig, use_container_width=True)
+                except Exception:
+                    pass
+
+        # Historical stored runs (local)
+        st.divider()
+        st.markdown("### Stored Evaluation Runs (local)")
+        runs_path = os.path.join(os.path.dirname(__file__), "evaluation_runs.jsonl")
+        if os.path.exists(runs_path):
+            loaded = []
+            try:
+                import json
+
+                with open(runs_path, "r", encoding="utf-8") as f_in:
+                    for line in f_in:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            loaded.append(json.loads(line))
+                        except Exception:
+                            continue
+            except Exception:
+                loaded = []
+
+            if loaded:
+                # Show recent
+                recent = list(reversed(loaded[-200:]))
+                st.dataframe(recent, use_container_width=True, hide_index=True)
+
+                evaluated2 = [x for x in loaded if x.get("evaluated") is True and isinstance(x.get("correct"), bool)]
+                if len(evaluated2) >= 20:
+                    # Calibration table
+                    buckets = {b: [] for b in range(0, 10)}
+                    for x in evaluated2:
+                        try:
+                            b = int(min(9, max(0, int(x.get("confidence", 0)) // 10)))
+                        except Exception:
+                            continue
+                        buckets[b].append(x)
+                    cal_rows = []
+                    for b, xs in buckets.items():
+                        if not xs:
+                            continue
+                        acc = sum(1 for it in xs if bool(it.get("correct")) is True) / len(xs)
+                        cal_rows.append({"Confidence Bucket": f"{b*10}-{b*10+9}", "N": len(xs), "Accuracy": round(acc * 100, 1)})
+                    st.markdown("**Confidence Calibration (from evaluated runs)**")
+                    st.dataframe(cal_rows, use_container_width=True, hide_index=True)
+            else:
+                st.caption("No runs parsed from file yet.")
+        else:
+            st.caption("No local evaluation file yet. Run at least one evaluation above to create it.")
     else:
         st.subheader(page)
         st.info("Coming Soon.")
