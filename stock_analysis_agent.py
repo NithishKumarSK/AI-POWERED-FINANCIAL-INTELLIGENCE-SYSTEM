@@ -876,8 +876,22 @@ def compute_intelligence_scores(
                         obj = json.loads(line)
                     except Exception:
                         continue
-                    if isinstance(obj, dict) and obj.get("evaluated") is True and "correct" in obj:
-                        evaluated.append(obj)
+                    if not isinstance(obj, dict):
+                        continue
+                    if obj.get("evaluated") is True and "correct" in obj:
+                        evaluated.append(
+                            {
+                                "confidence": obj.get("confidence", 0),
+                                "correct": bool(obj.get("correct")),
+                            }
+                        )
+                    elif obj.get("valid") is True and obj.get("outcome") in {"WIN", "LOSS"}:
+                        evaluated.append(
+                            {
+                                "confidence": obj.get("confidence", 0),
+                                "correct": obj.get("outcome") == "WIN",
+                            }
+                        )
             if len(evaluated) >= 20:
                 # bucket by confidence deciles and compute expected accuracy for current bucket
                 bucket = int(min(9, max(0, (completeness_score // 10))))

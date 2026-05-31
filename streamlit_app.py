@@ -168,7 +168,7 @@ def render_hero():
         status = "OK" if (api_status["google_ok"] and api_status["rapidapi_ok"]) else "Needs keys"
         st.metric("API Status", status, "paid APIs")
     with col4:
-        st.metric("Evaluation", "Backtesting", "coming soon")
+        st.metric("Evaluation", "Backtesting", "operational")
 
     with st.expander("Active AI Agents"):
         st.markdown(
@@ -323,6 +323,8 @@ def render_stock_intelligence(result: dict, *, filename_prefix: str):
             """,
             unsafe_allow_html=True,
         )
+
+    st.caption("Decision source of truth: deterministic scoring engine. LLM narrative is audit-only and cannot override BUY/HOLD/SELL.")
 
     st.markdown("### Intelligence Snapshot")
 
@@ -515,8 +517,8 @@ def render_stock_intelligence(result: dict, *, filename_prefix: str):
             st.divider()
 
     report_text = (result or {}).get("report") or ""
-    with st.expander("Debug: Raw LLM report (audit only)"):
-        st.caption("Primary UI is computed scores/signals. Use this only for audit/debug.")
+    with st.expander("Audit only: Raw LLM narrative (not a decision source)"):
+        st.caption("Primary UI uses computed scores/signals. This narrative is not allowed to override deterministic decisions.")
         st.code(report_text, language="text")
         st.download_button(
             "Download report (.txt)",
@@ -910,7 +912,7 @@ def initialize_agent():
     if 'agent' not in st.session_state:
         # Get or create user ID
         if 'user_id' not in st.session_state:
-            st.session_state.user_id = "default_user"
+            st.session_state.user_id = ""
 
         with st.spinner("Initializing Stock Analysis Agent..."):
             st.session_state.agent = StockAnalysisAgent(user_id=st.session_state.user_id)
@@ -925,14 +927,14 @@ def initialize_agent():
 def stock_analysis_interface():
     """Main stock analysis interface"""
     st.subheader("Stock Research")
-    st.caption("Start with 1 stock to control cost. Example tickers: `AAPL`, `TSLA`, `MSFT`.")
+    st.caption("Start with one ticker to control cost.")
     
     # Stock symbol input
     col1, col2 = st.columns([3, 1])
     with col1:
         stock_symbol = st.text_input(
             "Enter Stock Symbol",
-            placeholder="e.g., AAPL, TSLA, MSFT",
+            placeholder="Enter ticker symbol",
             key="stock_symbol_input"
         ).upper()
     
@@ -940,6 +942,27 @@ def stock_analysis_interface():
         analyze_button = st.button("Analyze Stock", type="primary", use_container_width=True)
     
     if analyze_button and stock_symbol:
+        try:
+            from portfolio_parser import parse_portfolio_input
+
+            parsed_portfolio = parse_portfolio_input(stock_symbol)
+            parsed_holdings = parsed_portfolio.get("holdings", []) if parsed_portfolio.get("status") == "SUCCESS" else []
+            has_portfolio_syntax = len(parsed_holdings) > 1 or any(ch in stock_symbol for ch in "%:=,\n")
+            if has_portfolio_syntax and len(parsed_holdings) > 1:
+                st.warning("Portfolio-style input detected. Routing to portfolio intelligence instead of treating it as one ticker.")
+                st.dataframe(parsed_holdings, use_container_width=True, hide_index=True)
+                try:
+                    from evaluation_engine import build_portfolio_intelligence, load_dataset
+
+                    dataset = load_dataset()
+                    portfolio_intel = build_portfolio_intelligence(parsed_holdings, dataset=dataset)
+                    render_portfolio_intelligence_summary(portfolio_intel)
+                except Exception as e:
+                    st.error(f"Portfolio intelligence route failed: {e}")
+                return
+        except Exception:
+            pass
+
         # Perform analysis
         with st.spinner("AI Agents Analyzing Market Data..."):
             result = st.session_state.agent.analyze_stock(stock_symbol)
@@ -1120,26 +1143,23 @@ def portfolio_analysis_interface():
     # Input format selection
     input_format = st.radio(
         "Input Format",
-        ["Paste as Text (easiest)", "Dollar Amounts (table)", "Shares & Avg Cost"],
+        ["Paste as Text (easiest)", "Weighted Tickers (dataset intelligence)", "Dollar Amounts (table)", "Shares & Avg Cost"],
         help="Choose how you want to enter your holdings"
     )
 
     # Portfolio input
     st.subheader("Enter Your Holdings")
+    holdings = []
+    holdings_shares = []
+    weighted_holdings = []
 
     if input_format == "Paste as Text (easiest)":
-        st.info("Paste one holding per line in the format `Name - Amount`.")
-        st.code("""
-Apple - 22000
-Microsoft - 477700
-Google - 264960
-Tesla - 50000
-        """)
+        st.info("Paste one holding per line using company/ticker and amount.")
 
         text_input = st.text_area(
             "Paste your portfolio here",
             height=200,
-            placeholder="Apple - 22000\nMicrosoft - 477700\nGoogle - 264960\n...",
+            placeholder="Enter holdings: Company/Ticker - Amount",
             help="One stock per line: Name - Amount"
         )
 
@@ -1171,23 +1191,46 @@ Tesla - 50000
 
                     holdings = edited_holdings
                 else:
-                    st.warning("Could not parse holdings. Check the format (e.g., `Apple - 22000`).")
+                    st.warning("Could not parse holdings. Check the company/ticker and amount format.")
             except Exception as e:
                 st.error(f"Error parsing portfolio: {str(e)}")
+
+    elif input_format == "Weighted Tickers (dataset intelligence)":
+        st.info("Enter weighted tickers using text, JSON, comma-separated, or newline-separated formats.")
+        weighted_raw = st.text_area(
+            "Weighted portfolio",
+            value="",
+            placeholder="Enter portfolio weights: AAPL 40%, MSFT 30%",
+            height=140,
+        )
+        try:
+            from portfolio_parser import parse_portfolio_input
+
+            parsed = parse_portfolio_input(weighted_raw)
+            if parsed.get("status") == "SUCCESS":
+                weighted_holdings = parsed.get("holdings", [])
+                st.success(f"Parsed {len(weighted_holdings)} weighted holdings")
+                st.dataframe(weighted_holdings, use_container_width=True, hide_index=True)
+                for issue in parsed.get("issues", []):
+                    st.caption(f"Parser note: {issue}")
+            else:
+                st.error("; ".join(parsed.get("issues") or ["Could not parse weighted portfolio."]))
+        except Exception as e:
+            st.error(f"Portfolio parser unavailable: {e}")
 
     elif input_format == "Dollar Amounts (table)":
         st.info("Enter company name or ticker and the dollar amount invested")
 
         # Dynamic input for holdings
         holdings = []
-        num_holdings = st.number_input("Number of holdings", min_value=1, max_value=50, value=3)
+        num_holdings = st.number_input("Number of holdings", min_value=1, max_value=50, value=1)
 
         for i in range(num_holdings):
             col1, col2 = st.columns([2, 1])
             with col1:
-                name = st.text_input(f"Stock {i+1} Name/Ticker", placeholder="e.g., Apple or AAPL", key=f"name_{i}")
+                name = st.text_input(f"Stock {i+1} Name/Ticker", placeholder="Enter company or ticker", key=f"name_{i}")
             with col2:
-                amount = st.number_input(f"Amount ${i+1}", min_value=0.0, value=10000.0, key=f"amount_{i}")
+                amount = st.number_input(f"Amount ${i+1}", min_value=0.0, value=0.0, key=f"amount_{i}")
 
             if name and amount > 0:
                 holdings.append({"name": name, "amount": amount})
@@ -1195,17 +1238,16 @@ Tesla - 50000
     else:  # Shares & Avg Cost
         st.info("Enter company name, number of shares, and average cost per share")
 
-        holdings_shares = []
-        num_holdings = st.number_input("Number of holdings", min_value=1, max_value=50, value=3)
+        num_holdings = st.number_input("Number of holdings", min_value=1, max_value=50, value=1)
 
         for i in range(num_holdings):
             col1, col2, col3 = st.columns([2, 1, 1])
             with col1:
-                symbol = st.text_input(f"Stock {i+1} Symbol", placeholder="e.g., AAPL", key=f"symbol_{i}")
+                symbol = st.text_input(f"Stock {i+1} Symbol", placeholder="Enter ticker symbol", key=f"symbol_{i}")
             with col2:
-                shares = st.number_input(f"Shares {i+1}", min_value=0.0, value=100.0, key=f"shares_{i}")
+                shares = st.number_input(f"Shares {i+1}", min_value=0.0, value=0.0, key=f"shares_{i}")
             with col3:
-                avg_cost = st.number_input(f"Avg Cost ${i+1}", min_value=0.0, value=150.0, key=f"cost_{i}")
+                avg_cost = st.number_input(f"Avg Cost ${i+1}", min_value=0.0, value=0.0, key=f"cost_{i}")
 
             if symbol and shares > 0 and avg_cost > 0:
                 holdings_shares.append({
@@ -1238,7 +1280,23 @@ Tesla - 50000
     analyze_button = st.button("Analyze Portfolio", type="primary", use_container_width=True)
 
     if analyze_button:
-        if input_format == "Paste as Text (easiest)" and holdings:
+        if input_format == "Weighted Tickers (dataset intelligence)" and weighted_holdings:
+            with st.spinner("Computing portfolio intelligence from historical dataset..."):
+                try:
+                    from evaluation_engine import build_portfolio_intelligence, load_dataset
+
+                    dataset = load_dataset()
+                    output = build_portfolio_intelligence(weighted_holdings, dataset=dataset)
+                    render_portfolio_intelligence_summary(output)
+                    st.session_state.portfolio_history.append({
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "result": {"status": output.get("status"), "final_report": "Dataset portfolio intelligence run"},
+                        "holdings_count": len(weighted_holdings)
+                    })
+                except Exception as e:
+                    st.error(f"Portfolio intelligence failed: {e}")
+
+        elif input_format == "Paste as Text (easiest)" and holdings:
             # Estimate time
             est_time = len(holdings) * (16 if actual_type == "one_month" else 40 if actual_type == "scenario" else 45)
             st.info(f"⏱️ Estimated time: ~{est_time} seconds ({est_time/60:.1f} minutes) for {len(holdings)} stocks")
@@ -1368,6 +1426,1071 @@ Tesla - 50000
 
 
 
+def _pct(value, digits: int = 1) -> str:
+    try:
+        if value is None:
+            return "-"
+        return f"{float(value) * 100:.{digits}f}%"
+    except Exception:
+        return "-"
+
+
+def _num(value, digits: int = 2) -> str:
+    try:
+        if value is None:
+            return "-"
+        return f"{float(value):.{digits}f}"
+    except Exception:
+        return "-"
+
+
+def render_portfolio_intelligence_summary(output: dict):
+    portfolio = output.get("portfolio", {}) or {}
+    st.markdown("### Portfolio Intelligence")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+        st.metric("Decision", portfolio.get("decision", "-"), f"{portfolio.get('composite_score', '-')}/100")
+    with c2:
+        st.metric("Confidence", f"{portfolio.get('confidence', '-')}/100")
+    with c3:
+        st.metric("Risk", f"{portfolio.get('risk_score', '-')}/100", portfolio.get("concentration_risk", "-"))
+    with c4:
+        st.metric("Diversification", f"{portfolio.get('diversification_score', '-')}/100")
+    with c5:
+        st.metric("Sharpe", f"{float(portfolio.get('sharpe_ratio', 0) or 0):.2f}")
+    c6, c7, c8 = st.columns(3)
+    with c6:
+        st.metric("Portfolio Beta", f"{float(portfolio.get('portfolio_beta', 0) or 0):.2f}")
+    with c7:
+        st.metric("VaR 95%", _pct(portfolio.get("value_at_risk_95"), 2))
+    with c8:
+        st.metric("Max Drawdown", _pct(portfolio.get("max_drawdown"), 2))
+
+    try:
+        import pandas as pd
+        import plotly.express as px
+
+        stocks = output.get("stocks") or []
+        if stocks:
+            st.markdown("**Stock-Level Intelligence**")
+            st.dataframe(
+                pd.DataFrame(stocks)[["ticker", "weight", "sector", "decision", "composite", "confidence", "risk", "regime"]],
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        left, right = st.columns(2)
+        with left:
+            sector_rows = output.get("sector_exposure") or []
+            if sector_rows:
+                fig = px.bar(sector_rows, x="sector", y="weight", title="Sector Exposure")
+                fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10), yaxis_tickformat=".0%")
+                st.plotly_chart(fig, use_container_width=True)
+        with right:
+            stress = output.get("stress_tests") or []
+            if stress:
+                fig = px.bar(stress, x="scenario", y="estimated_impact", title="Stress Test Impact")
+                fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10), yaxis_tickformat=".0%")
+                st.plotly_chart(fig, use_container_width=True)
+
+        corr = output.get("correlation_matrix") or []
+        if corr:
+            st.markdown("**Correlation Matrix**")
+            st.dataframe(corr, use_container_width=True, hide_index=True)
+
+        industry_rows = output.get("industry_exposure") or []
+        if industry_rows:
+            with st.expander("Industry Exposure"):
+                st.dataframe(industry_rows, use_container_width=True, hide_index=True)
+
+        allocator = output.get("allocator") or {}
+        suggestions = allocator.get("suggestions") or []
+        if suggestions:
+            st.markdown("**Portfolio Allocator Agent**")
+            for suggestion in suggestions:
+                st.write(f"- {suggestion}")
+
+        if output.get("errors"):
+            with st.expander("Portfolio Failure Transparency"):
+                st.dataframe(output.get("errors"), use_container_width=True, hide_index=True)
+    except Exception as e:
+        st.error(f"Could not render portfolio intelligence: {e}")
+
+
+def render_institutional_backtest(output: dict):
+    metrics = output.get("metrics", {}) or {}
+    decision_metrics = output.get("decision_metrics", {}) or {}
+    config = output.get("config", {}) or {}
+
+    st.markdown("### Institutional Backtest Results")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+        st.metric("Final Value", f"${float(metrics.get('final_value', 0) or 0):,.0f}", _pct(metrics.get("total_return"), 2))
+    with c2:
+        st.metric("CAGR", _pct(metrics.get("cagr"), 2))
+    with c3:
+        st.metric("Sharpe", f"{float(metrics.get('sharpe_ratio', 0) or 0):.2f}")
+    with c4:
+        st.metric("Max Drawdown", _pct(metrics.get("max_drawdown"), 2))
+    with c5:
+        st.metric("Win Rate", _pct(decision_metrics.get("win_rate")))
+
+    c6, c7, c8, c9, c10 = st.columns(5)
+    with c6:
+        st.metric("Alpha", _pct(metrics.get("alpha"), 2))
+    with c7:
+        st.metric("Beta", _num(metrics.get("beta")))
+    with c8:
+        st.metric("Sortino", f"{float(metrics.get('sortino_ratio', 0) or 0):.2f}")
+    with c9:
+        st.metric("Info Ratio", _num(metrics.get("information_ratio")))
+    with c10:
+        st.metric("Trades", len(output.get("trade_log") or []))
+    readiness = output.get("institutional_readiness") or {}
+    if readiness:
+        st.metric("Institutional Readiness", f"{readiness.get('score', '-')}/100", "audited result")
+        with st.expander("Institutional Readiness Breakdown"):
+            st.dataframe([readiness.get("components", {})], use_container_width=True, hide_index=True)
+
+    try:
+        import pandas as pd
+        import plotly.express as px
+
+        pipeline = output.get("pipeline") or []
+        if pipeline:
+            with st.expander("Execution Pipeline", expanded=True):
+                st.dataframe(pipeline, use_container_width=True, hide_index=True)
+
+        equity = pd.DataFrame(output.get("equity_curve") or [])
+        if not equity.empty:
+            equity["date"] = pd.to_datetime(equity["date"])
+            for col in ["portfolio_value", "benchmark_value", "daily_return"]:
+                if col in equity.columns:
+                    equity[col] = pd.to_numeric(equity[col], errors="coerce")
+            try:
+                curve_cols = [col for col in ["portfolio_value", "benchmark_value"] if col in equity.columns and equity[col].notna().any()]
+                curve_df = equity[["date"] + curve_cols].melt("date", var_name="series", value_name="value").dropna(subset=["value"])
+                if curve_df.empty:
+                    st.warning("Chart diagnostics: equity curve has no numeric portfolio/benchmark values.")
+                else:
+                    fig = px.line(curve_df, x="date", y="value", color="series", title="Portfolio Value vs Benchmark")
+                    fig.update_layout(height=360, margin=dict(l=10, r=10, t=40, b=10))
+                    st.plotly_chart(fig, use_container_width=True)
+            except Exception as chart_error:
+                st.warning(f"Chart diagnostics: equity curve render failed — {chart_error}")
+
+            equity["peak"] = equity["portfolio_value"].cummax()
+            equity["drawdown"] = (equity["peak"] - equity["portfolio_value"]) / equity["peak"]
+            try:
+                fig_dd = px.area(equity.dropna(subset=["drawdown"]), x="date", y="drawdown", title="Drawdown")
+                fig_dd.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10), yaxis_tickformat=".0%")
+                st.plotly_chart(fig_dd, use_container_width=True)
+            except Exception as chart_error:
+                st.warning(f"Chart diagnostics: drawdown render failed — {chart_error}")
+
+            equity["rolling_volatility"] = equity["daily_return"].rolling(21, min_periods=5).std() * (252 ** 0.5)
+            try:
+                fig_vol = px.line(equity.dropna(subset=["rolling_volatility"]), x="date", y="rolling_volatility", title="Rolling Volatility")
+                fig_vol.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10), yaxis_tickformat=".0%")
+                st.plotly_chart(fig_vol, use_container_width=True)
+            except Exception as chart_error:
+                st.warning(f"Chart diagnostics: rolling volatility render failed — {chart_error}")
+
+        audit = output.get("win_rate_audit") or {}
+        if audit:
+            st.markdown("**Win Rate Audit**")
+            st.dataframe(pd.DataFrame([audit]), use_container_width=True, hide_index=True)
+
+        beta_audit = output.get("beta_alpha_audit") or metrics.get("beta_alpha_audit") or {}
+        if beta_audit:
+            st.markdown("**Beta / Alpha Audit**")
+            beta_cols = [
+                "benchmark_observations",
+                "portfolio_observations",
+                "covariance",
+                "benchmark_variance",
+                "computed_beta",
+                "computed_alpha",
+                "status",
+                "issues",
+            ]
+            st.dataframe(pd.DataFrame([{k: beta_audit.get(k) for k in beta_cols}]), use_container_width=True, hide_index=True)
+            with st.expander("Beta / Alpha Formulas"):
+                st.write(beta_audit.get("beta_formula"))
+                st.write(beta_audit.get("alpha_formula"))
+
+        consistency = output.get("consistency_audit") or {}
+        if consistency:
+            st.markdown("**Consistency Audit**")
+            st.dataframe(pd.DataFrame([consistency]), use_container_width=True, hide_index=True)
+
+        decisions = pd.DataFrame(output.get("decision_log") or [])
+        if not decisions.empty:
+            left, right = st.columns(2)
+            with left:
+                dist = decisions["decision"].value_counts().reset_index()
+                dist.columns = ["decision", "count"]
+                fig_dist = px.bar(dist, x="decision", y="count", title="Decision Distribution")
+                fig_dist.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10))
+                st.plotly_chart(fig_dist, use_container_width=True)
+            with right:
+                regime_perf = decision_metrics.get("regime_performance") or {}
+                if regime_perf:
+                    regime_df = pd.DataFrame([{"regime": k, **v} for k, v in regime_perf.items()])
+                    fig_regime = px.bar(regime_df, x="regime", y="win_rate", title="Regime-Segmented Accuracy")
+                    fig_regime.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10), yaxis_tickformat=".0%")
+                    st.plotly_chart(fig_regime, use_container_width=True)
+
+            calibration = pd.DataFrame(decision_metrics.get("calibration") or [])
+            if not calibration.empty:
+                if "accuracy" in calibration.columns and "bucket" in calibration.columns:
+                    calibration["expected_accuracy"] = calibration["bucket"].astype(str).str.split("-").apply(
+                        lambda parts: ((float(parts[0]) + float(parts[-1])) / 2.0) / 100.0 if len(parts) >= 2 else None
+                    )
+                    calibration["calibration_gap"] = calibration["expected_accuracy"] - pd.to_numeric(calibration["accuracy"], errors="coerce")
+                st.markdown("**Calibration Validation**")
+                cc1, cc2, cc3, cc4 = st.columns(4)
+                with cc1:
+                    st.metric("Brier Score", _num(decision_metrics.get("brier_score"), 4))
+                with cc2:
+                    st.metric("ECE", _num(decision_metrics.get("expected_calibration_error"), 4))
+                with cc3:
+                    st.metric("Overconfidence", _num(decision_metrics.get("overconfidence"), 4))
+                with cc4:
+                    st.metric("Underconfidence", _num(decision_metrics.get("underconfidence"), 4))
+                st.dataframe(calibration, use_container_width=True, hide_index=True)
+                chart_df = calibration.dropna(subset=["accuracy"]) if "accuracy" in calibration.columns else calibration
+                if not chart_df.empty:
+                    try:
+                        plot_cols = ["accuracy"] + (["expected_accuracy"] if "expected_accuracy" in chart_df.columns else [])
+                        cal_plot = chart_df[["bucket"] + plot_cols].melt("bucket", var_name="series", value_name="value").dropna(subset=["value"])
+                        fig_cal = px.line(cal_plot, x="bucket", y="value", color="series", markers=True, title="Confidence Reliability Diagram")
+                        fig_cal.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10), yaxis_tickformat=".0%")
+                        st.plotly_chart(fig_cal, use_container_width=True)
+                    except Exception as chart_error:
+                        st.warning(f"Chart diagnostics: calibration render failed — {chart_error}")
+
+            validation = pd.DataFrame(output.get("decision_validation") or [])
+            st.markdown("**Decision Validation Report**")
+            if not validation.empty:
+                visible_validation = [
+                    "date",
+                    "ticker",
+                    "decision",
+                    "engine_decision",
+                    "confidence",
+                    "price_at_decision",
+                    "return_7d",
+                    "return_30d",
+                    "return_60d",
+                    "return_90d",
+                    "return_180d",
+                    "return_365d",
+                    "max_gain_30d",
+                    "max_loss_30d",
+                    "risk_adjusted_outcome_30d",
+                    "outcome",
+                    "correct",
+                    "top_positive_contributors",
+                    "top_negative_contributors",
+                    "top_risk_contributors",
+                ]
+                st.dataframe(validation[[c for c in visible_validation if c in validation.columns]], use_container_width=True, hide_index=True)
+                with st.expander("Decision Attribution Detail"):
+                    attribution_cols = ["date", "ticker", "decision", "decision_attribution"]
+                    st.dataframe(validation[[c for c in attribution_cols if c in validation.columns]], use_container_width=True, hide_index=True)
+            else:
+                st.warning("Decision validation report unavailable for this run.")
+
+            with st.expander("Raw Decision Log"):
+                visible_cols = ["as_of_date", "ticker", "decision", "confidence", "target_weight", "future_return", "outcome", "regime"]
+                st.dataframe(decisions[[c for c in visible_cols if c in decisions.columns]], use_container_width=True, hide_index=True)
+
+        trades = pd.DataFrame(output.get("trade_log") or [])
+        if not trades.empty:
+            with st.expander("Trade Log"):
+                st.dataframe(trades, use_container_width=True, hide_index=True)
+
+        lifecycle = pd.DataFrame(output.get("trade_lifecycle") or [])
+        if not lifecycle.empty:
+            st.markdown("**Trade Validation Report**")
+            lifecycle_cols = [
+                "entry_date",
+                "exit_date",
+                "ticker",
+                "entry_price",
+                "exit_price",
+                "position_size",
+                "gross_exposure",
+                "net_exposure",
+                "transaction_cost",
+                "slippage",
+                "pnl",
+                "return_pct",
+                "holding_period_days",
+                "outcome",
+            ]
+            st.dataframe(lifecycle[[c for c in lifecycle_cols if c in lifecycle.columns]], use_container_width=True, hide_index=True)
+
+        portfolio_intel = output.get("portfolio_intelligence") or {}
+        if portfolio_intel:
+            with st.expander("Terminal Portfolio Intelligence Snapshot"):
+                render_portfolio_intelligence_summary(portfolio_intel)
+
+        with st.expander("Backtest Configuration"):
+            st.json(config)
+        report = output.get("institutional_report") or {}
+        if report:
+            with st.expander("Institutional Report"):
+                sections = [
+                    ("Executive Summary", "executive_summary"),
+                    ("Performance Summary", "unified_evaluation_object"),
+                    ("Risk Summary", "risk_analysis"),
+                    ("Benchmark Comparison", "benchmark_comparison"),
+                    ("Calibration Analysis", "calibration_analysis"),
+                    ("Decision Analysis", "decision_summary"),
+                    ("Trade Analysis", "trade_summary"),
+                    ("Learning Summary", "learning_summary"),
+                    ("Data Quality / Leakage", "data_quality_analysis"),
+                    ("Consistency Audit", "consistency_audit"),
+                    ("Institutional Readiness", "institutional_readiness"),
+                ]
+                for title, key in sections:
+                    payload = report.get(key)
+                    if payload:
+                        st.markdown(f"**{title}**")
+                        if isinstance(payload, dict):
+                            st.dataframe(pd.DataFrame([payload]), use_container_width=True, hide_index=True)
+                        else:
+                            st.write(payload)
+                if report.get("weaknesses"):
+                    st.markdown("**Weaknesses**")
+                    for item in report.get("weaknesses", []):
+                        st.write(f"- {item}")
+                if report.get("limitations"):
+                    st.markdown("**Limitations**")
+                    for item in report.get("limitations", []):
+                        st.write(f"- {item}")
+                if report.get("recommendations"):
+                    st.markdown("**Recommendations**")
+                    for item in report.get("recommendations", []):
+                        st.write(f"- {item}")
+        data_quality = output.get("data_quality_audit") or {}
+        if data_quality:
+            with st.expander("Data Quality / Leakage Audit"):
+                st.json(data_quality)
+    except Exception as e:
+        st.error(f"Could not render institutional backtest: {e}")
+
+
+def institutional_backtesting_interface():
+    st.subheader("Institutional Backtesting")
+    st.caption("Capital simulation, deterministic decisions, benchmark comparison, trade logs, calibration, and regime-segmented evaluation.")
+
+    try:
+        from evaluation_engine import load_dataset, run_institutional_backtest
+        from portfolio_parser import parse_portfolio_input
+
+        dataset = load_dataset()
+        min_date = dataset["Date"].min().date()
+        max_date = dataset["Date"].max().date()
+    except Exception as e:
+        st.error(f"Institutional backtesting unavailable: {e}")
+        return
+
+    st.markdown("#### Backtest Configuration Panel")
+    portfolio_raw = st.text_area(
+        "Ticker(s) / Portfolio Weights",
+        value="",
+        placeholder="Enter portfolio weights: AAPL 40%, MSFT 30%",
+        height=90,
+        help="Supports weighted text, comma/newline formats, and JSON.",
+    )
+    parsed = parse_portfolio_input(portfolio_raw)
+    if portfolio_raw and parsed.get("status") == "SUCCESS":
+        st.dataframe(parsed.get("holdings", []), use_container_width=True, hide_index=True)
+        for issue in parsed.get("issues", []):
+            st.caption(f"Parser note: {issue}")
+    elif portfolio_raw:
+        st.warning("; ".join(parsed.get("issues") or ["Portfolio input not parsed."]))
+    else:
+        st.info("No backtest executed. Awaiting portfolio configuration.")
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        start_date_raw = st.text_input("Start Date", value="", placeholder="YYYY-MM-DD", key="inst_start")
+    with c2:
+        end_date_raw = st.text_input("End Date", value="", placeholder="YYYY-MM-DD", key="inst_end")
+    with c3:
+        initial_capital_raw = st.text_input("Initial Capital", value="", placeholder="Enter starting capital")
+    with c4:
+        horizon = st.selectbox("Decision Horizon", ["", 7, 30, 60, 90, 180, 365], index=0, placeholder="Select horizon")
+
+    c5, c6, c7, c8 = st.columns(4)
+    with c5:
+        rebalance = st.selectbox("Rebalance Frequency", ["", "daily", "weekly", "monthly", "quarterly"], index=0, placeholder="Select rebalance")
+    with c6:
+        benchmark = st.selectbox("Benchmark", ["", "SPY", "QQQ"], index=0, placeholder="Select benchmark")
+    with c7:
+        strategy = st.selectbox("Strategy Selection", ["", "Composite Agent Strategy", "Risk-Off Composite", "Buy & Hold Benchmark Portfolio"], index=0, placeholder="Select strategy")
+    with c8:
+        sizing = st.selectbox("Position Sizing Logic", ["", "Confidence Weighted", "Risk Adjusted", "Equal Weight"], index=0, placeholder="Select sizing")
+
+    c9, c10, c11, c12 = st.columns(4)
+    with c9:
+        transaction_cost_raw = st.text_input("Transaction Cost (bps)", value="", placeholder="Enter bps")
+    with c10:
+        slippage_raw = st.text_input("Slippage (bps)", value="", placeholder="Enter bps")
+    with c11:
+        max_position_raw = st.text_input("Max Position", value="", placeholder="0.40 = 40%")
+    with c12:
+        max_exposure_raw = st.text_input("Max Gross Exposure", value="", placeholder="1.00 = 100%")
+
+    run_button = st.button("RUN INSTITUTIONAL BACKTEST", type="primary", use_container_width=True)
+    if run_button:
+        if not portfolio_raw or parsed.get("status") != "SUCCESS":
+            st.error("Fix portfolio input before running backtest.")
+            return
+        required = {
+            "start date": start_date_raw,
+            "end date": end_date_raw,
+            "initial capital": initial_capital_raw,
+            "decision horizon": horizon,
+            "rebalance frequency": rebalance,
+            "strategy": strategy,
+            "position sizing": sizing,
+            "transaction cost": transaction_cost_raw,
+            "slippage": slippage_raw,
+            "max position": max_position_raw,
+            "max gross exposure": max_exposure_raw,
+        }
+        missing = [name for name, value in required.items() if value in ("", None)]
+        if missing:
+            st.error("Complete required configuration fields: " + ", ".join(missing))
+            return
+        try:
+            start_date = datetime.strptime(start_date_raw, "%Y-%m-%d").date()
+            end_date = datetime.strptime(end_date_raw, "%Y-%m-%d").date()
+            initial_capital = float(initial_capital_raw)
+            transaction_cost = float(transaction_cost_raw)
+            slippage = float(slippage_raw)
+            max_position = float(max_position_raw)
+            max_exposure = float(max_exposure_raw)
+        except Exception as e:
+            st.error(f"Invalid configuration value: {e}")
+            return
+        if not (min_date <= start_date <= max_date and min_date <= end_date <= max_date):
+            st.error(f"Dates must be within dataset range: {min_date} to {max_date}.")
+            return
+
+        stages = [
+            "Loading historical data",
+            "Computing indicators",
+            "Computing regime state",
+            "Running rolling simulation",
+            "Executing strategy logic",
+            "Evaluating outcomes",
+            "Calculating metrics",
+            "Generating calibration curves",
+            "Benchmark comparison",
+            "Finalizing report",
+        ]
+        progress = st.progress(0)
+        status_box = st.empty()
+        for idx, stage in enumerate(stages[:3], 1):
+            status_box.info(f"{stage}...")
+            progress.progress(idx / len(stages))
+
+        try:
+            with st.spinner("Institutional backtest running..."):
+                output = run_institutional_backtest(
+                    parsed.get("holdings", []),
+                    start_date,
+                    end_date,
+                    initial_capital=float(initial_capital),
+                    rebalance_frequency=rebalance,
+                    benchmark=benchmark,
+                    transaction_cost_bps=float(transaction_cost),
+                    slippage_bps=float(slippage),
+                    horizon_days=int(horizon),
+                    strategy=strategy,
+                    position_sizing=sizing,
+                    max_position=float(max_position),
+                    max_gross_exposure=float(max_exposure),
+                    dataset=dataset,
+                )
+                st.session_state["last_institutional_backtest"] = output
+            progress.progress(1.0)
+            status_box.success("Institutional backtest complete.")
+        except Exception as e:
+            status_box.error(f"Backtest failed: {e}")
+
+    if st.session_state.get("last_institutional_backtest"):
+        render_institutional_backtest(st.session_state["last_institutional_backtest"])
+    else:
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.info("No backtest executed")
+        with c2:
+            st.info("Awaiting portfolio configuration")
+        with c3:
+            st.info("Configure strategy and run evaluation")
+
+
+def _render_backtest_outputs(output: dict, *, label: str):
+    metrics = output.get("metrics", {}) or {}
+    results = output.get("results") or output.get("portfolio_results") or []
+    errors = output.get("errors") or []
+
+    st.markdown(f"### {label} Results")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+        st.metric("Win Rate", _pct(metrics.get("win_rate")))
+    with c2:
+        st.metric("Avg Return", _pct(metrics.get("average_return"), 2))
+    with c3:
+        st.metric("Total Runs", metrics.get("total_runs", 0))
+    with c4:
+        st.metric("Coverage", _pct(metrics.get("coverage")))
+    with c5:
+        try:
+            st.metric("Avg Confidence", f"{float(metrics.get('average_confidence', 0)):.1f}/100")
+        except Exception:
+            st.metric("Avg Confidence", "-")
+
+    c6, c7, c8, c9 = st.columns(4)
+    with c6:
+        st.metric("Median Return", _pct(metrics.get("median_return"), 2))
+    with c7:
+        st.metric("Sharpe", f"{float(metrics.get('sharpe_ratio', 0) or 0):.2f}")
+    with c8:
+        st.metric("Volatility", _pct(metrics.get("volatility"), 2))
+    with c9:
+        st.metric("Max Drawdown", _pct(metrics.get("max_drawdown"), 2))
+
+    c10, c11, c12, c13 = st.columns(4)
+    with c10:
+        st.metric("CAGR", _pct(metrics.get("cagr"), 2))
+    with c11:
+        st.metric("Sortino", f"{float(metrics.get('sortino_ratio', 0) or 0):.2f}")
+    with c12:
+        st.metric("Alpha", _pct(metrics.get("alpha"), 2))
+    with c13:
+        st.metric("Beta", _num(metrics.get("beta")))
+
+    try:
+        import pandas as pd
+        import plotly.express as px
+        from evaluation_engine import compute_returns
+
+        result_df = pd.DataFrame(results)
+        if not result_df.empty:
+            display_cols = ["as_of_date", "decision", "confidence", "future_return", "strategy_return", "outcome", "valid"]
+            visible = [c for c in display_cols if c in result_df.columns]
+            st.markdown("**Backtest Table**")
+            st.dataframe(result_df[visible], use_container_width=True, hide_index=True)
+
+            returns_df = compute_returns(results)
+            if not returns_df.empty:
+                try:
+                    fig = px.line(returns_df, x="as_of_date", y="cumulative_return", title="Cumulative Strategy Return")
+                    fig.update_layout(height=320, margin=dict(l=10, r=10, t=40, b=10))
+                    st.plotly_chart(fig, use_container_width=True)
+                except Exception as chart_error:
+                    st.warning(f"Chart diagnostics: cumulative return render failed — {chart_error}")
+
+                returns_df = returns_df.copy()
+                returns_df["rolling_return"] = returns_df["strategy_return"].rolling(20, min_periods=5).mean()
+                try:
+                    fig_roll = px.line(returns_df, x="as_of_date", y="rolling_return", title="Rolling Performance (20-run average)")
+                    fig_roll.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10))
+                    st.plotly_chart(fig_roll, use_container_width=True)
+                except Exception as chart_error:
+                    st.warning(f"Chart diagnostics: rolling return render failed — {chart_error}")
+
+                equity = returns_df.copy()
+                equity["equity"] = 1.0 + equity["cumulative_return"]
+                equity["peak"] = equity["equity"].cummax()
+                equity["drawdown"] = (equity["peak"] - equity["equity"]) / equity["peak"]
+                try:
+                    fig_dd = px.area(equity, x="as_of_date", y="drawdown", title="Drawdown Curve")
+                    fig_dd.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10), yaxis_tickformat=".0%")
+                    st.plotly_chart(fig_dd, use_container_width=True)
+                except Exception as chart_error:
+                    st.warning(f"Chart diagnostics: drawdown render failed — {chart_error}")
+
+            if "outcome" in result_df.columns:
+                dist = result_df["outcome"].value_counts().reset_index()
+                dist.columns = ["Outcome", "Count"]
+                fig_dist = px.bar(dist, x="Outcome", y="Count", title="Win/Loss Distribution")
+                fig_dist.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10))
+                st.plotly_chart(fig_dist, use_container_width=True)
+
+            rolling = metrics.get("rolling_metrics") or []
+            if rolling:
+                roll_df = pd.DataFrame(rolling)
+                left, right = st.columns(2)
+                with left:
+                    fig_wr = px.line(roll_df, x="as_of_date", y="rolling_win_rate", title="Rolling Win Rate")
+                    fig_wr.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10), yaxis_tickformat=".0%")
+                    st.plotly_chart(fig_wr, use_container_width=True)
+                with right:
+                    fig_sh = px.line(roll_df, x="as_of_date", y="rolling_sharpe", title="Rolling Sharpe")
+                    fig_sh.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10))
+                    st.plotly_chart(fig_sh, use_container_width=True)
+
+            sector_accuracy = metrics.get("sector_accuracy") or {}
+            if sector_accuracy:
+                sector_df = pd.DataFrame([{"sector": k, **v} for k, v in sector_accuracy.items()])
+                fig_sector = px.density_heatmap(sector_df, x="sector", y="accuracy", z="count", title="Sector Accuracy Heatmap")
+                fig_sector.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10))
+                st.plotly_chart(fig_sector, use_container_width=True)
+
+        calibration = metrics.get("calibration") or []
+        if calibration:
+            cal_df = pd.DataFrame(calibration)
+            st.markdown("**Confidence Calibration**")
+            st.dataframe(cal_df, use_container_width=True, hide_index=True)
+            chart_df = cal_df.dropna(subset=["accuracy"]) if "accuracy" in cal_df.columns else cal_df
+            if not chart_df.empty:
+                fig_cal = px.bar(chart_df, x="bucket", y="accuracy", title="Confidence Bucket vs Actual Accuracy")
+                fig_cal.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10), yaxis_tickformat=".0%")
+                st.plotly_chart(fig_cal, use_container_width=True)
+
+        if errors:
+            with st.expander("Failure Transparency"):
+                st.dataframe(pd.DataFrame(errors), use_container_width=True, hide_index=True)
+
+        if results:
+            with st.expander("Missing Fields Audit"):
+                audit_rows = []
+                for row in results[:300]:
+                    audit_rows.append(
+                        {
+                            "date": row.get("as_of_date"),
+                            "missing_engines": ", ".join(row.get("missing_engines") or []),
+                            "missing_fields": ", ".join((row.get("missing_fields") or [])[:8]),
+                        }
+                    )
+                st.dataframe(pd.DataFrame(audit_rows), use_container_width=True, hide_index=True)
+    except Exception as e:
+        st.error(f"Could not render backtest outputs: {e}")
+
+
+def evaluation_lab_interface():
+    st.subheader("Evaluation Lab")
+    st.caption("Leakage-safe historical backtesting using data/stock_prices_daily.csv as the source of truth.")
+
+    try:
+        from evaluation_engine import (
+            build_portfolio_intelligence,
+            load_dataset,
+            load_evaluation_runs,
+            run_backtest,
+            run_historical_replay,
+            run_multi_horizon_backtest,
+            run_factor_research,
+            run_portfolio_backtest,
+            run_strategy_backtest,
+            run_strategy_comparison,
+        )
+
+        dataset = load_dataset()
+        tickers = sorted(dataset["Ticker"].dropna().unique().tolist())
+        min_date = dataset["Date"].min().date()
+        max_date = dataset["Date"].max().date()
+    except Exception as e:
+        st.error(f"Evaluation engine unavailable: {e}")
+        return
+
+    st.info(
+        "Indicators are computed dynamically from rows where Date <= cutoff. "
+        "Dataset-unsupported engines are marked unavailable instead of inferred."
+    )
+
+    tab_stock, tab_portfolio, tab_replay, tab_strategy, tab_factor, tab_calibration, tab_stored = st.tabs(
+        ["Stock Backtest", "Portfolio Backtest", "Historical Replay", "Strategy Lab", "Factor Research Lab", "Calibration Center", "Stored Runs"]
+    )
+
+    with tab_stock:
+        c1, c2, c3, c4 = st.columns([1.2, 1, 1, 0.8])
+        with c1:
+            ticker = st.selectbox("Ticker", [""] + tickers, index=0, placeholder="Select ticker")
+        with c2:
+            start_date_raw = st.text_input("Start Date", value="", placeholder="YYYY-MM-DD", key="eval_stock_start")
+        with c3:
+            end_date_raw = st.text_input("End Date", value="", placeholder="YYYY-MM-DD", key="eval_stock_end")
+        with c4:
+            horizon_days = st.selectbox("Horizon", ["", 7, 30, 60, 90, 180, 365], index=0, placeholder="Select horizon")
+        c5, c6 = st.columns([1, 1])
+        with c5:
+            step = st.selectbox("Rolling Frequency", ["", "daily", "weekly", "monthly"], index=0, placeholder="Select frequency")
+        with c6:
+            benchmark = st.selectbox("Benchmark", ["", "SPY", "QQQ", "None"], index=0, placeholder="Select benchmark")
+
+        if st.button("Run Stock Backtest", type="primary", use_container_width=True):
+            if not all([ticker, start_date_raw, end_date_raw, horizon_days, step]):
+                st.error("Complete ticker, dates, horizon, and rolling frequency before running.")
+                return
+            try:
+                start_date = datetime.strptime(start_date_raw, "%Y-%m-%d").date()
+                end_date = datetime.strptime(end_date_raw, "%Y-%m-%d").date()
+            except Exception as e:
+                st.error(f"Invalid date format: {e}")
+                return
+            with st.spinner("Running leakage-safe rolling backtest..."):
+                try:
+                    st.session_state["last_stock_backtest"] = run_backtest(
+                        ticker,
+                        start_date,
+                        end_date,
+                        int(horizon_days),
+                        step=step,
+                        benchmark="" if benchmark == "None" else benchmark,
+                        dataset=dataset,
+                        log_results=True,
+                    )
+                except Exception as e:
+                    st.error(f"Backtest failed: {e}")
+
+        if st.session_state.get("last_stock_backtest"):
+            last = st.session_state["last_stock_backtest"]
+            _render_backtest_outputs(last, label=last.get("ticker", "Stock"))
+
+        if st.button("Run Multi-Horizon Scan (7/30/60/90/180)", use_container_width=True):
+            if not all([ticker, start_date_raw, end_date_raw, step]):
+                st.error("Complete ticker, dates, and rolling frequency before running.")
+                return
+            try:
+                start_date = datetime.strptime(start_date_raw, "%Y-%m-%d").date()
+                end_date = datetime.strptime(end_date_raw, "%Y-%m-%d").date()
+            except Exception as e:
+                st.error(f"Invalid date format: {e}")
+                return
+            with st.spinner("Running multi-horizon evaluation scan..."):
+                try:
+                    st.session_state["last_multi_horizon"] = run_multi_horizon_backtest(
+                        ticker,
+                        start_date,
+                        end_date,
+                        step=step,
+                        benchmark="" if benchmark == "None" else benchmark,
+                        dataset=dataset,
+                    )
+                except Exception as e:
+                    st.error(f"Multi-horizon scan failed: {e}")
+        if st.session_state.get("last_multi_horizon"):
+            import pandas as pd
+            import plotly.express as px
+
+            mh = st.session_state["last_multi_horizon"]
+            summary_df = pd.DataFrame(mh.get("summary") or [])
+            if not summary_df.empty:
+                st.markdown("**Multi-Horizon Summary**")
+                st.dataframe(summary_df, use_container_width=True, hide_index=True)
+                fig_mh = px.line(summary_df, x="horizon", y=["win_rate", "sharpe", "cagr"], markers=True, title="Multi-Horizon Evaluation")
+                fig_mh.update_layout(height=320, margin=dict(l=10, r=10, t=40, b=10))
+                st.plotly_chart(fig_mh, use_container_width=True)
+
+    with tab_portfolio:
+        raw = st.text_input("Portfolio Input", value="", placeholder="Enter portfolio weights: AAPL 40%, MSFT 30%")
+        parsed_holdings = []
+        if raw:
+            try:
+                from portfolio_parser import parse_portfolio_input
+
+                parsed = parse_portfolio_input(raw)
+                if parsed.get("status") == "SUCCESS":
+                    parsed_holdings = parsed.get("holdings", [])
+                    st.dataframe(parsed_holdings, use_container_width=True, hide_index=True)
+                    for issue in parsed.get("issues", []):
+                        st.caption(f"Parser note: {issue}")
+                else:
+                    st.warning("; ".join(parsed.get("issues") or ["Could not parse portfolio."]))
+            except Exception as e:
+                st.warning(f"Portfolio parser unavailable: {e}")
+        else:
+            st.info("No portfolio backtest executed. Awaiting portfolio configuration.")
+        c1, c2, c3 = st.columns([1, 1, 0.8])
+        with c1:
+            p_start_raw = st.text_input("Portfolio Start", value="", placeholder="YYYY-MM-DD")
+        with c2:
+            p_end_raw = st.text_input("Portfolio End", value="", placeholder="YYYY-MM-DD")
+        with c3:
+            p_horizon = st.selectbox("Portfolio Horizon", ["", 7, 30, 60, 90, 180, 365], index=0, placeholder="Select horizon")
+
+        if st.button("Run Portfolio Backtest", type="primary", use_container_width=True):
+            if not all([raw, p_start_raw, p_end_raw, p_horizon]):
+                st.error("Complete portfolio, dates, and horizon before running.")
+                return
+            try:
+                p_start = datetime.strptime(p_start_raw, "%Y-%m-%d").date()
+                p_end = datetime.strptime(p_end_raw, "%Y-%m-%d").date()
+            except Exception as e:
+                st.error(f"Invalid date format: {e}")
+                return
+            with st.spinner("Running equal-weight portfolio backtest..."):
+                try:
+                    st.session_state["last_portfolio_backtest"] = run_portfolio_backtest(
+                        parsed_holdings or raw,
+                        p_start,
+                        p_end,
+                        int(p_horizon),
+                        dataset=dataset,
+                    )
+                except Exception as e:
+                    st.error(f"Portfolio backtest failed: {e}")
+
+        if st.session_state.get("last_portfolio_backtest"):
+            output = st.session_state["last_portfolio_backtest"]
+            _render_backtest_outputs(output, label="Equal-Weight Portfolio")
+            div = output.get("diversification", {})
+            if div:
+                st.markdown("**Diversification Tracking**")
+                st.dataframe(div.get("components", []), use_container_width=True, hide_index=True)
+            try:
+                portfolio_intel = build_portfolio_intelligence(output.get("holdings", parsed_holdings), dataset=dataset)
+                render_portfolio_intelligence_summary(portfolio_intel)
+            except Exception:
+                pass
+
+    with tab_replay:
+        st.caption("Replay a decision as if the system were standing on a past date. No future rows are visible to the engines.")
+        c1, c2, c3 = st.columns([1.2, 1, 0.8])
+        with c1:
+            replay_ticker = st.selectbox("Replay Ticker", [""] + tickers, index=0, key="replay_ticker", placeholder="Select ticker")
+        with c2:
+            replay_date_raw = st.text_input("Replay Date", value="", placeholder="YYYY-MM-DD")
+        with c3:
+            replay_horizon = st.selectbox("Replay Horizon", ["", 7, 30, 60, 90, 180, 365], index=0, placeholder="Select horizon")
+        if st.button("Run Historical Replay", type="primary", use_container_width=True):
+            if not all([replay_ticker, replay_date_raw, replay_horizon]):
+                st.error("Complete ticker, replay date, and horizon before running.")
+                return
+            try:
+                replay_date = datetime.strptime(replay_date_raw, "%Y-%m-%d").date()
+            except Exception as e:
+                st.error(f"Invalid date format: {e}")
+                return
+            with st.spinner("Replaying historical decision..."):
+                try:
+                    st.session_state["last_replay"] = run_historical_replay(replay_ticker, replay_date, int(replay_horizon), dataset=dataset)
+                except Exception as e:
+                    st.error(f"Historical replay failed: {e}")
+        if st.session_state.get("last_replay"):
+            replay = st.session_state["last_replay"]
+            intel = replay.get("intelligence", {}) or {}
+            verdict = intel.get("verdict", {}) or {}
+            confidence = intel.get("confidence", {}) or {}
+            outcome = replay.get("outcome", {}) or {}
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                st.metric("Decision", verdict.get("value", "-"), f"{verdict.get('score', '-')}/100")
+            with c2:
+                st.metric("Confidence", f"{confidence.get('score', '-')}/100")
+            with c3:
+                st.metric("Future Return", _pct(outcome.get("future_return"), 2))
+            with c4:
+                st.metric("Outcome", outcome.get("outcome", "Pending"))
+            leakage = replay.get("no_leakage_audit") or {}
+            if leakage:
+                st.markdown("**No-Leakage Audit**")
+                st.dataframe([leakage], use_container_width=True, hide_index=True)
+            outcomes = replay.get("outcomes_by_horizon") or {}
+            if outcomes:
+                st.markdown("**Future Outcome Validation**")
+                rows = [{"horizon_days": key, **value} for key, value in outcomes.items()]
+                st.dataframe(rows, use_container_width=True, hide_index=True)
+            render_stock_intelligence({"status": "SUCCESS", "intelligence": intel, "report": ""}, filename_prefix="historical_replay")
+
+    with tab_strategy:
+        st.caption("Compare deterministic rules against the same future-return evaluator used by the AI engine.")
+        c1, c2, c3, c4 = st.columns([1.2, 1, 1, 0.8])
+        with c1:
+            strategy_ticker = st.selectbox("Strategy Ticker", [""] + tickers, index=0, key="strategy_ticker", placeholder="Select ticker")
+        with c2:
+            strategy_name = st.selectbox("Strategy", ["", "RSI", "MA_Crossover", "Volatility_Filter", "Custom_Score"], index=0, placeholder="Select strategy")
+        with c3:
+            strategy_start_raw = st.text_input("Strategy Start", value="", placeholder="YYYY-MM-DD")
+        with c4:
+            strategy_horizon = st.selectbox("Strategy Horizon", ["", 7, 30, 60, 90, 180, 365], index=0, placeholder="Select horizon")
+        strategy_end_raw = st.text_input("Strategy End", value="", placeholder="YYYY-MM-DD")
+        if st.button("Run Strategy Test", type="primary", use_container_width=True):
+            if not all([strategy_ticker, strategy_name, strategy_start_raw, strategy_end_raw, strategy_horizon]):
+                st.error("Complete ticker, strategy, dates, and horizon before running.")
+                return
+            try:
+                strategy_start = datetime.strptime(strategy_start_raw, "%Y-%m-%d").date()
+                strategy_end = datetime.strptime(strategy_end_raw, "%Y-%m-%d").date()
+            except Exception as e:
+                st.error(f"Invalid date format: {e}")
+                return
+            with st.spinner("Running strategy lab evaluation..."):
+                try:
+                    st.session_state["last_strategy_backtest"] = run_strategy_backtest(
+                        strategy_ticker,
+                        strategy_start,
+                        strategy_end,
+                        int(strategy_horizon),
+                        strategy=strategy_name,
+                        dataset=dataset,
+                    )
+                except Exception as e:
+                    st.error(f"Strategy test failed: {e}")
+        if st.session_state.get("last_strategy_backtest"):
+            out = st.session_state["last_strategy_backtest"]
+            _render_backtest_outputs(out, label=f"{out.get('ticker')} {out.get('strategy')} Strategy")
+        if st.button("Compare Core Strategies", use_container_width=True):
+            if not all([strategy_ticker, strategy_start_raw, strategy_end_raw, strategy_horizon]):
+                st.error("Complete ticker, dates, and horizon before comparing strategies.")
+                return
+            try:
+                strategy_start = datetime.strptime(strategy_start_raw, "%Y-%m-%d").date()
+                strategy_end = datetime.strptime(strategy_end_raw, "%Y-%m-%d").date()
+                st.session_state["last_strategy_comparison"] = run_strategy_comparison(
+                    strategy_ticker,
+                    strategy_start,
+                    strategy_end,
+                    int(strategy_horizon),
+                    dataset=dataset,
+                )
+            except Exception as e:
+                st.error(f"Strategy comparison failed: {e}")
+        if st.session_state.get("last_strategy_comparison"):
+            comparison = st.session_state["last_strategy_comparison"]
+            rows = comparison.get("summary") or []
+            if rows:
+                st.markdown("**Strategy Comparison Framework**")
+                st.dataframe(rows, use_container_width=True, hide_index=True)
+
+    with tab_factor:
+        st.caption("Evaluate whether a deterministic factor had historical forward-return signal quality.")
+        c1, c2, c3, c4 = st.columns([1.2, 1.2, 1, 0.8])
+        with c1:
+            factor_ticker = st.selectbox("Factor Ticker", [""] + tickers, index=0, key="factor_ticker", placeholder="Select ticker")
+        with c2:
+            factor_name = st.selectbox(
+                "Factor",
+                ["", "rsi_14", "rsi_percentile", "momentum_20d", "momentum_60d", "trend_persistence_60d", "volatility_20d", "downside_deviation_60d", "tail_risk_252d", "volume_anomaly_60d"],
+                index=0,
+                placeholder="Select factor",
+            )
+        with c3:
+            factor_start_raw = st.text_input("Factor Start", value="", placeholder="YYYY-MM-DD")
+        with c4:
+            factor_horizon = st.selectbox("Factor Horizon", ["", 7, 30, 60, 90, 180, 365], index=0, placeholder="Select horizon")
+        factor_end_raw = st.text_input("Factor End", value="", placeholder="YYYY-MM-DD")
+        if st.button("Run Factor Research", type="primary", use_container_width=True):
+            if not all([factor_ticker, factor_name, factor_start_raw, factor_end_raw, factor_horizon]):
+                st.error("Complete ticker, factor, dates, and horizon before running.")
+                return
+            try:
+                factor_start = datetime.strptime(factor_start_raw, "%Y-%m-%d").date()
+                factor_end = datetime.strptime(factor_end_raw, "%Y-%m-%d").date()
+                st.session_state["last_factor_research"] = run_factor_research(
+                    factor_ticker,
+                    factor_name,
+                    factor_start,
+                    factor_end,
+                    int(factor_horizon),
+                    dataset=dataset,
+                )
+            except Exception as e:
+                st.error(f"Factor research failed: {e}")
+        if st.session_state.get("last_factor_research"):
+            import pandas as pd
+            import plotly.express as px
+
+            fr = st.session_state["last_factor_research"]
+            if fr.get("status") != "SUCCESS":
+                st.warning(fr.get("message", "Factor research unavailable."))
+            else:
+                c1, c2, c3, c4, c5 = st.columns(5)
+                with c1:
+                    st.metric("Observations", fr.get("observations", 0))
+                with c2:
+                    st.metric("IC", f"{float(fr.get('ic', fr.get('predictive_correlation', 0)) or 0):.3f}")
+                with c3:
+                    st.metric("Rank IC", f"{float(fr.get('rank_ic', 0) or 0):.3f}")
+                with c4:
+                    st.metric("Hit Rate", _pct(fr.get("hit_rate")))
+                with c5:
+                    st.metric("Avg Return", _pct(fr.get("average_return"), 2))
+                st.markdown("**Factor Evidence Summary**")
+                st.dataframe(
+                    pd.DataFrame(
+                        [
+                            {
+                                "factor": fr.get("factor"),
+                                "observations": fr.get("observations"),
+                                "correlation": fr.get("predictive_correlation"),
+                                "ic": fr.get("ic"),
+                                "rank_ic": fr.get("rank_ic"),
+                                "predictive_power": fr.get("predictive_power"),
+                                "hit_rate": fr.get("hit_rate"),
+                                "average_return": fr.get("average_return"),
+                                "median_return": fr.get("median_return"),
+                                "best_return": fr.get("best_return"),
+                                "worst_return": fr.get("worst_return"),
+                                "best_decile": fr.get("best_decile"),
+                                "worst_decile": fr.get("worst_decile"),
+                            }
+                        ]
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+                summary = pd.DataFrame(fr.get("bucket_analysis") or fr.get("decile_summary") or [])
+                if not summary.empty:
+                    st.dataframe(summary, use_container_width=True, hide_index=True)
+                    try:
+                        fig = px.bar(summary, x="bucket", y="average_return", title="Forward Return by Factor Bucket")
+                        fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10), yaxis_tickformat=".2%")
+                        st.plotly_chart(fig, use_container_width=True)
+                    except Exception as chart_error:
+                        st.warning(f"Chart diagnostics: factor bucket render failed — {chart_error}")
+
+    with tab_calibration:
+        runs = load_evaluation_runs(limit=5000)
+        if not runs:
+            st.caption("No stored runs yet. Run backtests to build calibration history.")
+        else:
+            import pandas as pd
+            import plotly.express as px
+            from evaluation_engine import compute_calibration, compute_metrics
+
+            stored_metrics = compute_metrics(runs, [])
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                st.metric("Stored Runs", stored_metrics.get("total_runs", 0))
+            with c2:
+                st.metric("Stored Win Rate", _pct(stored_metrics.get("win_rate")))
+            with c3:
+                st.metric("Stored Sharpe", f"{stored_metrics.get('sharpe_ratio', 0):.2f}")
+            with c4:
+                st.metric("Stored Coverage", _pct(stored_metrics.get("coverage")))
+            cal = pd.DataFrame(compute_calibration(runs))
+            st.dataframe(cal, use_container_width=True, hide_index=True)
+            chart_df = cal.dropna(subset=["accuracy"]) if "accuracy" in cal.columns else cal
+            if not chart_df.empty:
+                fig = px.line(chart_df, x="bucket", y="accuracy", markers=True, title="Confidence Calibration Curve")
+                fig.update_layout(height=320, margin=dict(l=10, r=10, t=40, b=10), yaxis_tickformat=".0%")
+                st.plotly_chart(fig, use_container_width=True)
+
+    with tab_stored:
+        runs = load_evaluation_runs(limit=500)
+        if not runs:
+            st.caption("No stored evaluation runs yet.")
+        else:
+            try:
+                import pandas as pd
+
+                df = pd.DataFrame(runs)
+                st.dataframe(df.tail(300).iloc[::-1], use_container_width=True, hide_index=True)
+            except Exception as e:
+                st.error(f"Could not load stored runs: {e}")
+
+
 def main():
     """Main application"""
     # Initialize agent
@@ -1378,21 +2501,36 @@ def main():
     page = st.sidebar.radio(
         "Select Module",
         [
+            "Institutional Backtesting",
             "Portfolio Analysis",
             "Stock Research",
             "Evaluation Lab",
+            "Strategy Lab",
+            "Factor Research Lab",
+            "Calibration Center",
+            "Historical Replay",
+            "Agent Debate Center",
             "Market Sentiment",
             "AI Recommendation",
             "Risk Intelligence",
         ],
-        index=1,
+        index=0,
     )
 
-    if page == "Stock Research":
+    if page == "Institutional Backtesting":
+        institutional_backtesting_interface()
+    elif page == "Stock Research":
         stock_analysis_interface()
     elif page == "Portfolio Analysis":
         portfolio_analysis_interface()
     elif page == "Evaluation Lab":
+        evaluation_lab_interface()
+    elif page in {"Strategy Lab", "Calibration Center", "Historical Replay", "Factor Research Lab"}:
+        evaluation_lab_interface()
+    elif page == "Agent Debate Center":
+        st.subheader("Agent Debate Center")
+        st.info("Run Stock Research or Historical Replay to view Bull, Bear, Risk, Macro, Technical, Critic, and Final agents with validated signals.")
+    elif page == "Legacy Evaluation Lab":
         st.subheader("Evaluation Lab")
         st.caption("Evaluation-first infrastructure: temporal cutoff testing + stored runs + calibration.")
 
@@ -1401,9 +2539,9 @@ def main():
             "Other engines are marked Unavailable in this mode."
         )
 
-        tickers_raw = st.text_input("Tickers (comma separated)", value="AAPL,MSFT,TSLA")
-        as_of_date = st.text_input("As-of date (YYYY-MM-DD)", value=datetime.now().strftime("%Y-%m-%d"))
-        horizon_days = st.number_input("Horizon days", min_value=1, max_value=365, value=30)
+        tickers_raw = st.text_input("Tickers (comma separated)", value="", placeholder="Enter ticker symbols")
+        as_of_date = st.text_input("As-of date (YYYY-MM-DD)", value="", placeholder="YYYY-MM-DD")
+        horizon_days = st.number_input("Horizon days", min_value=1, max_value=365, value=1)
 
         run_btn = st.button("Run Cutoff Backtest (price-only)", type="primary", use_container_width=True)
 
@@ -1519,7 +2657,7 @@ def main():
             st.caption("No local evaluation file yet. Run at least one evaluation above to create it.")
     else:
         st.subheader(page)
-        st.info("Coming Soon.")
+        st.info("Evaluation Engine — Operational")
 
     # Sidebar
     with st.sidebar:
@@ -1528,8 +2666,8 @@ def main():
         st.subheader("User Session")
 
         # User ID input for session logging
-        user_id = st.text_input("User ID", value=st.session_state.get('user_id', 'default_user'), help="Enter your user ID for session logging")
-        if user_id != st.session_state.get('user_id', 'default_user'):
+        user_id = st.text_input("User ID", value=st.session_state.get('user_id', ''), placeholder="Enter user ID", help="Enter your user ID for session logging")
+        if user_id and user_id != st.session_state.get('user_id', ''):
             st.session_state.user_id = user_id
             # Reinitialize agents with new user ID
             if 'agent' in st.session_state:

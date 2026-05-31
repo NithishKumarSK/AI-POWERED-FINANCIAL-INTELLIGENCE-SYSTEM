@@ -58,3 +58,5 @@ logs/
 
 # Evaluation artifacts (local only)
 evaluation_runs.jsonl
+institutional_runs.jsonl
+decision_memory.jsonl
