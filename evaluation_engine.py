@@ -13,11 +13,14 @@ from __future__ import annotations
 import json
 import math
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
 import pandas as pd
+
+from recommendation_accuracy_engine import evaluate_feature_versions, evaluate_recommendation_accuracy
 
 
 DATASET_PATH = os.path.join(os.path.dirname(__file__), "data", "stock_prices_daily.csv")
@@ -37,7 +40,7 @@ REQUIRED_COLUMNS = [
 
 _DATASET_CACHE: Optional[pd.DataFrame] = None
 _TICKER_CACHE: Dict[str, pd.DataFrame] = {}
-_BENCHMARK_PROXY_CACHE: Dict[str, pd.Series] = {}
+_BENCHMARK_PROXY_CACHE: Dict[str, Dict[str, Any]] = {}
 
 
 @dataclass(frozen=True)
@@ -111,8 +114,7 @@ def store_decision_memory(decision_rows: List[Dict[str, Any]], *, run_id: str, r
         _append_jsonl(DECISION_MEMORY_PATH, memory)
 
 
-def compute_learning_profile(*, as_of_date: Optional[Any] = None, limit: Optional[int] = 10000) -> Dict[str, Any]:
-    rows = load_decision_memory(limit=limit, as_of_date=as_of_date)
+def _compute_learning_profile_from_rows(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     evaluated = [row for row in rows if row.get("outcome") in {"WIN", "LOSS"}]
 
     def grouped_accuracy(key_fn) -> Dict[str, Dict[str, Any]]:
@@ -153,6 +155,11 @@ def compute_learning_profile(*, as_of_date: Optional[Any] = None, limit: Optiona
         "confidence_accuracy": compute_calibration(confidence_rows) if confidence_rows else [],
         "overall_accuracy": sum(1 for row in evaluated if row.get("outcome") == "WIN") / len(evaluated) if evaluated else None,
     }
+
+
+def compute_learning_profile(*, as_of_date: Optional[Any] = None, limit: Optional[int] = 10000) -> Dict[str, Any]:
+    rows = load_decision_memory(limit=limit, as_of_date=as_of_date)
+    return _compute_learning_profile_from_rows(rows)
 
 
 def _clamp_score(value: float) -> int:
@@ -313,6 +320,144 @@ def get_data_until(
             f"{len(sliced)} rows, need at least {min_window}."
         )
     return sliced
+
+
+def _slice_ticker_until(data: pd.DataFrame, cutoff_date: Any, *, min_window: int = 60) -> pd.DataFrame:
+    """Fast no-leakage ticker slice using an already-filtered chronological ticker frame."""
+    cutoff = _parse_date(cutoff_date)
+    if data.empty or "Date" not in data.columns:
+        raise ValueError("Ticker history is unavailable.")
+    end_pos = int(data["Date"].searchsorted(cutoff, side="right"))
+    sliced = data.iloc[:end_pos].copy()
+    if len(sliced) < min_window:
+        ticker = str(data["Ticker"].iloc[0]) if "Ticker" in data.columns and not data.empty else "ticker"
+        raise ValueError(
+            f"Insufficient history for {ticker} at cutoff {cutoff.date()}: "
+            f"{len(sliced)} rows, need at least {min_window}."
+        )
+    return sliced
+
+
+def _forward_return_from_frame(data: pd.DataFrame, cutoff_date: Any, horizon_days: int) -> Optional[float]:
+    """Fast forward return lookup on one ticker frame; used only for outcome evaluation."""
+    if data.empty:
+        return None
+    cutoff = _parse_date(cutoff_date)
+    current_pos = int(data["Date"].searchsorted(cutoff, side="right")) - 1
+    future_pos = current_pos + int(horizon_days)
+    if current_pos < 0 or future_pos >= len(data):
+        return None
+    current_close = _safe_float(data.iloc[current_pos]["Close"])
+    future_close = _safe_float(data.iloc[future_pos]["Close"])
+    if current_close <= 0:
+        return None
+    return (future_close / current_close) - 1.0
+
+
+def _precompute_forward_outcome_store(data: pd.DataFrame, horizons: List[int]) -> Dict[str, Dict[str, List[Any]]]:
+    close = pd.to_numeric(data["Close"], errors="coerce").tolist()
+    high = pd.to_numeric(data["High"], errors="coerce").tolist()
+    low = pd.to_numeric(data["Low"], errors="coerce").tolist()
+    store: Dict[str, Dict[str, List[Any]]] = {}
+    n = len(data)
+    for horizon in horizons:
+        returns: List[Optional[float]] = [None] * n
+        max_gains: List[Optional[float]] = [None] * n
+        max_losses: List[Optional[float]] = [None] * n
+        for idx in range(n):
+            future_idx = idx + int(horizon)
+            entry = close[idx] if idx < n else None
+            if future_idx >= n or entry is None or pd.isna(entry) or entry <= 0:
+                continue
+            future_close = close[future_idx]
+            if future_close is not None and not pd.isna(future_close):
+                returns[idx] = float(future_close / entry - 1.0)
+            future_high = [value for value in high[idx + 1 : future_idx + 1] if value is not None and not pd.isna(value)]
+            future_low = [value for value in low[idx + 1 : future_idx + 1] if value is not None and not pd.isna(value)]
+            max_gains[idx] = float(max(future_high) / entry - 1.0) if future_high else None
+            max_losses[idx] = float(min(future_low) / entry - 1.0) if future_low else None
+        store[str(horizon)] = {"return": returns, "max_gain": max_gains, "max_loss": max_losses}
+    return store
+
+
+def _forward_outcome_from_store(store: Dict[str, Dict[str, List[Any]]], idx: int, horizon: int, decision: str) -> Dict[str, Any]:
+    horizon_store = store.get(str(horizon), {})
+    returns = horizon_store.get("return") or []
+    max_gains = horizon_store.get("max_gain") or []
+    max_losses = horizon_store.get("max_loss") or []
+    future_return = returns[idx] if idx < len(returns) else None
+    return {
+        "future_return": future_return,
+        "max_gain": max_gains[idx] if idx < len(max_gains) else None,
+        "max_loss": max_losses[idx] if idx < len(max_losses) else None,
+        "risk_adjusted_outcome": _evaluate_decision(decision, future_return) if future_return is not None else "INVALID",
+    }
+
+
+def _precompute_prediction_distribution_store(
+    forward_store: Dict[str, Dict[str, List[Any]]],
+    horizon_days: int,
+    *,
+    lookback: int = 252,
+) -> Dict[str, pd.Series]:
+    """Past-only prediction distribution cache.
+
+    At row i, only forward outcomes whose exit date is <= i are visible.
+    A return starting at j and ending at j+h becomes usable at i >= j+h,
+    implemented by shifting the forward-return series by h rows.
+    """
+    horizon_key = str(int(horizon_days))
+    horizon_store = forward_store.get(horizon_key, {})
+    returns = pd.Series(horizon_store.get("return") or [], dtype="float64")
+    max_gains = pd.Series(horizon_store.get("max_gain") or [], dtype="float64")
+    max_losses = pd.Series(horizon_store.get("max_loss") or [], dtype="float64")
+    known_returns = returns.shift(int(horizon_days))
+    known_gains = max_gains.shift(int(horizon_days))
+    known_losses = max_losses.shift(int(horizon_days))
+    rolling_returns = known_returns.rolling(lookback, min_periods=20)
+    rolling_losses = known_losses.rolling(lookback, min_periods=20)
+    bull = rolling_returns.apply(lambda values: float((values > 0.05).mean()), raw=False)
+    bear = rolling_returns.apply(lambda values: float((values < -0.05).mean()), raw=False)
+    return {
+        "count": rolling_returns.count(),
+        "expected_return": rolling_returns.mean(),
+        "expected_drawdown": rolling_losses.quantile(0.10).abs(),
+        "best_case": rolling_returns.quantile(0.90),
+        "base_case": rolling_returns.quantile(0.50),
+        "worst_case": rolling_returns.quantile(0.10),
+        "bull": bull,
+        "bear": bear,
+        "base": (1.0 - bull - bear).clip(lower=0.0),
+    }
+
+
+def _prediction_distribution_from_store(store: Dict[str, pd.Series], idx: int, horizon_days: int) -> Dict[str, Any]:
+    count_series = store.get("count")
+    if count_series is None or idx >= len(count_series) or float(count_series.iloc[idx] or 0) < 20:
+        return {"status": "UNAVAILABLE", "reason": "Fewer than 20 historical comparable return windows."}
+
+    def value_at(key: str) -> Optional[float]:
+        series = store.get(key)
+        if series is None or idx >= len(series):
+            return None
+        value = series.iloc[idx]
+        return None if pd.isna(value) else float(value)
+
+    bull = value_at("bull") or 0.0
+    bear = value_at("bear") or 0.0
+    base = value_at("base")
+    return {
+        "status": "SUCCESS",
+        "horizon_days": int(horizon_days),
+        "observations": int(float(count_series.iloc[idx])),
+        "expected_return": value_at("expected_return"),
+        "expected_drawdown": value_at("expected_drawdown"),
+        "best_case": value_at("best_case"),
+        "base_case": value_at("base_case"),
+        "worst_case": value_at("worst_case"),
+        "probability_distribution": {"bull": bull, "base": base if base is not None else max(0.0, 1.0 - bull - bear), "bear": bear},
+        "method": "cached past-only rolling forward-return distribution",
+    }
 
 
 def compute_sma(series: pd.Series, window: int) -> Optional[float]:
@@ -521,6 +666,10 @@ def compute_indicator_snapshot(history: pd.DataFrame) -> Dict[str, Any]:
 def classify_market_regime(history: pd.DataFrame) -> Dict[str, Any]:
     """Classify market regime using only the supplied historical slice."""
     snapshot = compute_indicator_snapshot(history)
+    return _classify_market_regime_from_snapshot(snapshot)
+
+
+def _classify_market_regime_from_snapshot(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     close = _safe_float(snapshot.get("last_close"))
     sma_50 = snapshot.get("sma_50")
     sma_200 = snapshot.get("sma_200")
@@ -562,6 +711,95 @@ def classify_market_regime(history: pd.DataFrame) -> Dict[str, Any]:
         "volatility_60d": volatility,
         "momentum_60d": momentum_60,
         "missing_fields": missing,
+    }
+
+
+def _precompute_indicator_store(data: pd.DataFrame) -> Dict[str, Any]:
+    close = pd.to_numeric(data["Close"], errors="coerce")
+    high = pd.to_numeric(data["High"], errors="coerce")
+    low = pd.to_numeric(data["Low"], errors="coerce")
+    returns = close.pct_change(fill_method=None)
+    ema12 = close.ewm(span=12, adjust=False, min_periods=12).mean()
+    ema26 = close.ewm(span=26, adjust=False, min_periods=26).mean()
+    rolling_mean_60 = close.rolling(60, min_periods=30).mean()
+    rolling_std_60 = close.rolling(60, min_periods=30).std()
+    rolling_mean_200 = close.rolling(200, min_periods=60).mean()
+    rolling_std_200 = close.rolling(200, min_periods=60).std()
+    rolling_high_60 = high.rolling(60, min_periods=60).max()
+    rolling_low_60 = low.rolling(60, min_periods=60).min()
+    rolling_high_252 = high.rolling(252, min_periods=60).max()
+    rolling_low_252 = low.rolling(252, min_periods=60).min()
+    return {
+        "last_close": close,
+        "sma_20": _vectorized_factor_values(data, "sma_20"),
+        "sma_50": _vectorized_factor_values(data, "sma_50"),
+        "sma_200": _vectorized_factor_values(data, "sma_200"),
+        "rsi_14": _vectorized_factor_values(data, "rsi_14"),
+        "rsi_percentile": _vectorized_factor_values(data, "rsi_percentile"),
+        "price_zscore_60d": (close - rolling_mean_60) / rolling_std_60.replace(0, math.nan),
+        "price_zscore_200d": (close - rolling_mean_200) / rolling_std_200.replace(0, math.nan),
+        "volatility_20d": _vectorized_factor_values(data, "volatility_20d"),
+        "volatility_60d": _vectorized_factor_values(data, "volatility_60d"),
+        "downside_deviation_60d": _vectorized_factor_values(data, "downside_deviation_60d"),
+        "tail_risk_252d": _vectorized_factor_values(data, "tail_risk_252d"),
+        "drawdown_60d": ((rolling_high_60 - close) / rolling_high_60).clip(lower=0),
+        "range_52w": (rolling_high_252 - rolling_low_252) / rolling_low_252.replace(0, math.nan),
+        "beta_approx": pd.Series(index=data.index, dtype=float),
+        "momentum_20d": _vectorized_factor_values(data, "momentum_20d"),
+        "momentum_60d": _vectorized_factor_values(data, "momentum_60d"),
+        "trend_persistence_60d": _vectorized_factor_values(data, "trend_persistence_60d"),
+        "volume_anomaly_60d": _vectorized_factor_values(data, "volume_anomaly_60d"),
+        "breakout_60d": close / rolling_high_60 - 1.0,
+        "breakdown_60d": close / rolling_low_60 - 1.0,
+        "macd": ema12 - ema26,
+        "dates": data["Date"].reset_index(drop=True),
+    }
+
+
+def _snapshot_from_indicator_store(store: Dict[str, Any], idx: int) -> Dict[str, Any]:
+    snapshot: Dict[str, Any] = {}
+    for key, series in store.items():
+        if key == "dates":
+            continue
+        try:
+            value = series.iloc[idx]
+            snapshot[key] = None if pd.isna(value) else float(value)
+        except Exception:
+            snapshot[key] = None
+    return snapshot
+
+
+def build_intelligence_from_snapshot(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    regime = _classify_market_regime_from_snapshot(snapshot)
+    scores = {
+        "fundamental": _unavailable_engine("fundamental"),
+        "technical": _score_technical(snapshot),
+        "valuation": _unavailable_engine("valuation"),
+        "risk": _score_risk(snapshot),
+        "macro": _unavailable_engine("macro"),
+        "sentiment": _unavailable_engine("sentiment"),
+    }
+    missing_engines = [k for k, v in scores.items() if v.get("signal") == "Unavailable"]
+    decision = _make_decision(scores)
+    confidence = _confidence_from_scores(scores["technical"], scores["risk"], missing_engines)
+    split = _factor_split(scores)
+    return {
+        "verdict": decision,
+        "confidence": confidence,
+        "decision_trace": _decision_trace(scores, decision),
+        "source_reliability": {
+            "technical": "Medium",
+            "risk": "Medium",
+            "fundamental": "Unavailable",
+            "valuation": "Unavailable",
+            "macro": "Unavailable",
+            "sentiment": "Unavailable",
+        },
+        "regime": regime,
+        "agents": _build_agents(scores, decision, confidence),
+        "scores": scores,
+        "probabilities": _decision_probabilities(decision, scores),
+        **split,
     }
 
 
@@ -816,6 +1054,75 @@ def _confidence_from_scores(technical: Dict[str, Any], risk: Dict[str, Any], mis
             "calibration": {"available": False, "note": "Calibration comes from stored evaluated runs."},
         },
     }
+
+
+def _vectorized_factor_values(data: pd.DataFrame, factor: str) -> pd.Series:
+    close = pd.to_numeric(data["Close"], errors="coerce")
+    high = pd.to_numeric(data["High"], errors="coerce") if "High" in data.columns else close
+    low = pd.to_numeric(data["Low"], errors="coerce") if "Low" in data.columns else close
+    volume = pd.to_numeric(data["Volume"], errors="coerce") if "Volume" in data.columns else pd.Series(index=data.index, dtype=float)
+    returns = close.pct_change(fill_method=None)
+    factor_norm = str(factor)
+    if factor_norm == "sma_20":
+        return close.rolling(20, min_periods=20).mean()
+    if factor_norm == "sma_50":
+        return close.rolling(50, min_periods=50).mean()
+    if factor_norm == "sma_200":
+        return close.rolling(200, min_periods=200).mean()
+    if factor_norm == "momentum_20d":
+        return close.pct_change(20, fill_method=None)
+    if factor_norm == "momentum_60d":
+        return close.pct_change(60, fill_method=None)
+    if factor_norm == "volatility_20d":
+        return returns.rolling(20, min_periods=20).std() * (252 ** 0.5)
+    if factor_norm == "volatility_60d":
+        return returns.rolling(60, min_periods=60).std() * (252 ** 0.5)
+    if factor_norm == "downside_deviation_60d":
+        downside = returns.where(returns < 0, 0.0)
+        return downside.rolling(60, min_periods=30).std() * (252 ** 0.5)
+    if factor_norm == "tail_risk_252d":
+        return returns.rolling(252, min_periods=60).quantile(0.05).abs()
+    if factor_norm == "trend_persistence_60d":
+        return (returns > 0).rolling(60, min_periods=60).mean()
+    if factor_norm == "volume_anomaly_60d":
+        avg_volume = volume.shift(1).rolling(59, min_periods=30).mean()
+        return volume / avg_volume
+    if factor_norm == "breakout_60d":
+        rolling_high = high.rolling(60, min_periods=60).max()
+        return close / rolling_high - 1.0
+    if factor_norm == "breakdown_60d":
+        rolling_low = low.rolling(60, min_periods=60).min()
+        return close / rolling_low - 1.0
+    if factor_norm in {"rsi_14", "rsi_percentile"}:
+        delta = close.diff()
+        gain = delta.clip(lower=0).rolling(14, min_periods=14).mean()
+        loss = (-delta.clip(upper=0)).rolling(14, min_periods=14).mean()
+        rs = gain / loss.replace(0, math.nan)
+        rsi = 100 - (100 / (1 + rs))
+        if factor_norm == "rsi_14":
+            return rsi
+        return rsi.rolling(252, min_periods=60).apply(lambda values: float((values <= values[-1]).mean()), raw=True)
+    return pd.Series(index=data.index, dtype=float)
+
+
+def _regime_label_from_vectors(close: pd.Series, idx: int) -> str:
+    if idx < 60:
+        return "UNAVAILABLE"
+    window = pd.to_numeric(close.iloc[max(0, idx - 60): idx + 1], errors="coerce")
+    returns = window.pct_change(fill_method=None).dropna()
+    if returns.empty:
+        return "UNAVAILABLE"
+    momentum = float(window.iloc[-1] / window.iloc[0] - 1.0) if window.iloc[0] else 0.0
+    vol = float(returns.std() * (252 ** 0.5))
+    if vol >= 0.45 and momentum < -0.08:
+        return "Panic"
+    if momentum >= 0.10:
+        return "Bull Market"
+    if momentum <= -0.10:
+        return "Bear Market"
+    if vol >= 0.35:
+        return "High Volatility"
+    return "Sideways"
 
 
 def _confidence_v2(
@@ -1088,37 +1395,7 @@ def _factor_split(scores: Dict[str, Dict[str, Any]]) -> Dict[str, List[Dict[str,
 
 def build_intelligence_from_history(history: pd.DataFrame) -> Dict[str, Any]:
     snapshot = compute_indicator_snapshot(history)
-    regime = classify_market_regime(history)
-    scores = {
-        "fundamental": _unavailable_engine("fundamental"),
-        "technical": _score_technical(snapshot),
-        "valuation": _unavailable_engine("valuation"),
-        "risk": _score_risk(snapshot),
-        "macro": _unavailable_engine("macro"),
-        "sentiment": _unavailable_engine("sentiment"),
-    }
-    missing_engines = [k for k, v in scores.items() if v.get("signal") == "Unavailable"]
-    decision = _make_decision(scores)
-    confidence = _confidence_from_scores(scores["technical"], scores["risk"], missing_engines)
-    split = _factor_split(scores)
-    return {
-        "verdict": decision,
-        "confidence": confidence,
-        "decision_trace": _decision_trace(scores, decision),
-        "source_reliability": {
-            "technical": "Medium",
-            "risk": "Medium",
-            "fundamental": "Unavailable",
-            "valuation": "Unavailable",
-            "macro": "Unavailable",
-            "sentiment": "Unavailable",
-        },
-        "regime": regime,
-        "agents": _build_agents(scores, decision, confidence),
-        "scores": scores,
-        "probabilities": _decision_probabilities(decision, scores),
-        **split,
-    }
+    return build_intelligence_from_snapshot(snapshot)
 
 
 def _decision_probabilities(decision: Dict[str, Any], scores: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
@@ -1509,6 +1786,9 @@ def run_strategy_comparison(
 ) -> Dict[str, Any]:
     """Compare deterministic strategies on identical dates and horizons."""
     df = dataset if dataset is not None else load_dataset()
+    data = get_ticker_data(ticker, min_rows=60 + horizon_days + 1, dataset=df)
+    start_ts = _parse_date(start_date)
+    end_ts = _parse_date(end_date)
     strategies = [
         ("Momentum", "Momentum"),
         ("Fundamental", None),
@@ -1521,7 +1801,78 @@ def run_strategy_comparison(
         ("Mean Reversion", "Mean_Reversion"),
     ]
     rows = []
-    runs = {}
+    runs: Dict[str, Dict[str, Any]] = {}
+    executable = [(label, name) for label, name in strategies if name is not None]
+    strategy_results: Dict[str, List[Dict[str, Any]]] = {label: [] for label, _ in executable}
+    errors: Dict[str, List[Dict[str, Any]]] = {label: [] for label, _ in executable}
+    factor_cache = {
+        name: _vectorized_factor_values(data, name)
+        for name in [
+            "sma_20",
+            "sma_50",
+            "sma_200",
+            "rsi_14",
+            "rsi_percentile",
+            "volatility_20d",
+            "volatility_60d",
+            "downside_deviation_60d",
+            "tail_risk_252d",
+            "momentum_20d",
+            "momentum_60d",
+            "trend_persistence_60d",
+            "volume_anomaly_60d",
+            "breakout_60d",
+            "breakdown_60d",
+        ]
+    }
+    close_series = pd.to_numeric(data["Close"], errors="coerce")
+    for idx in range(len(data)):
+        row = data.iloc[idx]
+        date = row["Date"]
+        if date < start_ts or date > end_ts:
+            continue
+        try:
+            if idx + 1 < 60:
+                raise ValueError("Minimum history not met.")
+            future = _future_row(data, idx, horizon_days)
+            if future is None:
+                raise ValueError("Future horizon not available.")
+            snapshot = {
+                factor_name: (None if pd.isna(series.iloc[idx]) else float(series.iloc[idx]))
+                for factor_name, series in factor_cache.items()
+            }
+            snapshot["last_close"] = float(row["Close"])
+            snapshot["price_zscore_60d"] = None
+            snapshot["price_zscore_200d"] = None
+            snapshot["drawdown_60d"] = None
+            snapshot["range_52w"] = None
+            snapshot["beta_approx"] = None
+            snapshot["macd"] = None
+            regime = _regime_label_from_vectors(close_series, idx)
+            future_return = (float(future["Close"]) / float(row["Close"])) - 1.0
+            for label, strategy_name in executable:
+                decision = _strategy_decision(snapshot, strategy_name)
+                strategy_results[label].append(
+                    {
+                        "ticker": str(ticker).upper(),
+                        "as_of_date": date.date().isoformat(),
+                        "future_date": future["Date"].date().isoformat(),
+                        "strategy": strategy_name,
+                        "decision": decision,
+                        "confidence": 50,
+                        "future_return": future_return,
+                        "strategy_return": _strategy_return(decision, future_return),
+                        "outcome": _evaluate_decision(decision, future_return),
+                        "valid": True,
+                        "regime": regime,
+                        "sector": row.get("Sector") if "Sector" in data.columns else None,
+                        "missing_engines": [],
+                        "missing_fields": [],
+                    }
+                )
+        except Exception as exc:
+            for label, _ in executable:
+                errors[label].append({"ticker": str(ticker).upper(), "as_of_date": date.date().isoformat(), "valid": False, "error": str(exc)})
     for label, strategy_name in strategies:
         if strategy_name is None:
             rows.append(
@@ -1532,15 +1883,14 @@ def run_strategy_comparison(
                 }
             )
             continue
-        run = run_strategy_backtest(
-            ticker,
-            start_date,
-            end_date,
-            horizon_days,
-            strategy=strategy_name,
-            log_results=False,
-            dataset=df,
-        )
+        run = {
+            "status": "SUCCESS",
+            "ticker": str(ticker).upper(),
+            "strategy": strategy_name,
+            "results": strategy_results.get(label, []),
+            "errors": errors.get(label, []),
+            "metrics": compute_metrics(strategy_results.get(label, []), errors.get(label, [])),
+        }
         metrics = run.get("metrics", {}) or {}
         rows.append(
             {
@@ -1559,6 +1909,18 @@ def run_strategy_comparison(
             }
         )
         runs[label] = run
+    available_rows = [row for row in rows if row.get("status") == "SUCCESS"]
+    ranked = []
+    for row in available_rows:
+        score = (
+            _clamp_score((float(row.get("cagr") or 0.0) + 0.05) * 400) * 0.25
+            + _clamp_score(float(row.get("sharpe") or 0.0) * 35) * 0.25
+            + _clamp_score(float(row.get("sortino") or 0.0) * 25) * 0.15
+            + _clamp_score(100 - float(row.get("max_drawdown") or 0.0) * 250) * 0.20
+            + _clamp_score(float(row.get("win_rate") or 0.0) * 100) * 0.15
+        )
+        ranked.append({**row, "competition_score": round(score, 2)})
+    ranked = sorted(ranked, key=lambda item: item.get("competition_score", 0), reverse=True)
     return {
         "status": "SUCCESS",
         "ticker": str(ticker).upper(),
@@ -1566,6 +1928,13 @@ def run_strategy_comparison(
         "end_date": _parse_date(end_date).date().isoformat(),
         "horizon_days": int(horizon_days),
         "summary": rows,
+        "competition": {
+            "champion_strategy": ranked[0] if ranked else None,
+            "runner_up_strategy": ranked[1] if len(ranked) > 1 else None,
+            "worst_strategy": ranked[-1] if ranked else None,
+            "ranking": ranked,
+            "scoring_rule": "Composite of CAGR, Sharpe, Sortino, drawdown control, and win rate on identical date ranges.",
+        },
         "runs": runs,
     }
 
@@ -2000,6 +2369,7 @@ def build_portfolio_intelligence(
     sharpe = 0.0
     value_at_risk_95 = 0.0
     portfolio_beta = 0.0
+    expected_return = None
     weighted_returns = pd.Series(dtype=float)
     if not returns_df.empty:
         tickers = [item["ticker"] for item in normalized if item["ticker"] in returns_df.columns]
@@ -2012,6 +2382,7 @@ def build_portfolio_intelligence(
         weight_map = {item["ticker"]: float(item["weight"]) for item in normalized}
         weighted_returns = sum(returns_df[ticker] * weight_map.get(ticker, 0.0) for ticker in tickers)
         if len(weighted_returns) > 1:
+            expected_return = float(weighted_returns.mean() * 252)
             portfolio_volatility = float(weighted_returns.std() * (252 ** 0.5))
             value_at_risk_95 = float(abs(weighted_returns.quantile(0.05)))
             if float(weighted_returns.std()) != 0:
@@ -2064,6 +2435,7 @@ def build_portfolio_intelligence(
             "hhi": _hhi(weights),
             "concentration": concentration,
             "portfolio_volatility": portfolio_volatility,
+            "expected_return": expected_return,
             "max_drawdown": max_drawdown,
             "sharpe_ratio": sharpe,
             "portfolio_beta": portfolio_beta,
@@ -2186,14 +2558,23 @@ def _price_series_by_ticker(df: pd.DataFrame, tickers: List[str]) -> Dict[str, p
 
 
 def _price_at(series: pd.Series, date: pd.Timestamp) -> Optional[float]:
-    eligible = series[series.index <= date]
-    if eligible.empty:
+    if series is None or series.empty:
         return None
-    price = _safe_float(eligible.iloc[-1], default=0.0)
+    try:
+        price = _safe_float(series.asof(date), default=0.0)
+    except Exception:
+        eligible = series[series.index <= date]
+        if eligible.empty:
+            return None
+        price = _safe_float(eligible.iloc[-1], default=0.0)
     return price if price > 0 else None
 
 
 def _dataset_equal_weight_benchmark(df: pd.DataFrame, dates: List[pd.Timestamp], requested: str) -> Dict[str, Any]:
+    cache_key = f"{requested}:{min(dates).date().isoformat() if dates else 'none'}:{max(dates).date().isoformat() if dates else 'none'}:{len(dates)}"
+    if cache_key in _BENCHMARK_PROXY_CACHE:
+        cached = _BENCHMARK_PROXY_CACHE[cache_key]
+        return {"series": cached["series"].copy(), "audit": dict(cached["audit"])}
     window = df[df["Date"].isin(dates)].copy()
     if window.empty:
         raise ValueError("Dataset benchmark proxy unavailable for selected dates.")
@@ -2205,7 +2586,7 @@ def _dataset_equal_weight_benchmark(df: pd.DataFrame, dates: List[pd.Timestamp],
         first_date = min(dates)
         benchmark_index.loc[first_date] = 100.0
         benchmark_index = benchmark_index.sort_index()
-    return {
+    result = {
         "series": benchmark_index,
         "audit": {
             "requested_benchmark": requested,
@@ -2217,6 +2598,8 @@ def _dataset_equal_weight_benchmark(df: pd.DataFrame, dates: List[pd.Timestamp],
             "status": "PROXY_USED",
         },
     }
+    _BENCHMARK_PROXY_CACHE[cache_key] = {"series": benchmark_index.copy(), "audit": dict(result["audit"])}
+    return result
 
 
 def _resolve_benchmark_series(df: pd.DataFrame, benchmark: str, dates: List[pd.Timestamp]) -> Dict[str, Any]:
@@ -2249,18 +2632,7 @@ def _resolve_benchmark_series(df: pd.DataFrame, benchmark: str, dates: List[pd.T
 
 
 def _forward_return_for_ticker(data: pd.DataFrame, date: pd.Timestamp, horizon_days: int) -> Optional[float]:
-    eligible = data[data["Date"] <= date]
-    if eligible.empty:
-        return None
-    current_idx = int(eligible.index[-1])
-    future_idx = current_idx + int(horizon_days)
-    if future_idx >= len(data):
-        return None
-    current_close = _safe_float(data.iloc[current_idx]["Close"])
-    future_close = _safe_float(data.iloc[future_idx]["Close"])
-    if current_close <= 0:
-        return None
-    return (future_close / current_close) - 1.0
+    return _forward_return_from_frame(data, date, horizon_days)
 
 
 def _prediction_distribution_from_history(data: pd.DataFrame, date: pd.Timestamp, horizon_days: int = 30, lookback: int = 252) -> Dict[str, Any]:
@@ -2635,7 +3007,41 @@ def _decision_validation_rows(decision_rows: List[Dict[str, Any]]) -> List[Dict[
             "decision_attribution": row.get("decision_attribution"),
             "prediction": row.get("prediction"),
             "builder_critic_judge": row.get("builder_critic_judge"),
+            "confidence_decomposition": row.get("confidence_v2"),
         }
+        prediction = row.get("prediction") or {}
+        if prediction.get("status") == "SUCCESS":
+            actual = row.get("future_return")
+            expected = prediction.get("expected_return")
+            validation.update(
+                {
+                    "expected_return": expected,
+                    "expected_drawdown": prediction.get("expected_drawdown"),
+                    "expected_volatility": prediction.get("expected_volatility", "UNAVAILABLE"),
+                    "expected_risk": prediction.get("expected_drawdown"),
+                    "expected_regime": row.get("regime"),
+                    "actual_return": actual,
+                    "prediction_error": (float(actual) - float(expected)) if actual is not None and expected is not None else None,
+                    "direction_accuracy": (
+                        (float(actual) >= 0 and float(expected) >= 0) or (float(actual) < 0 and float(expected) < 0)
+                    )
+                    if actual is not None and expected is not None
+                    else None,
+                }
+            )
+        else:
+            validation.update(
+                {
+                    "expected_return": "UNAVAILABLE",
+                    "expected_drawdown": "UNAVAILABLE",
+                    "expected_volatility": "UNAVAILABLE",
+                    "expected_risk": "UNAVAILABLE",
+                    "expected_regime": row.get("regime") or "UNAVAILABLE",
+                    "actual_return": row.get("future_return"),
+                    "prediction_error": "UNAVAILABLE",
+                    "direction_accuracy": "UNAVAILABLE",
+                }
+            )
         returns_by_horizon = row.get("returns_by_horizon") or {}
         outcomes_by_horizon = row.get("outcomes_by_horizon") or {}
         future_window_outcomes = row.get("future_window_outcomes") or {}
@@ -2649,6 +3055,85 @@ def _decision_validation_rows(decision_rows: List[Dict[str, Any]]) -> List[Dict[
                 validation[f"risk_adjusted_outcome_{horizon}d"] = future_window_outcomes[key].get("risk_adjusted_outcome")
         rows.append(validation)
     return rows
+
+
+def _prediction_quality_report(validation_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    valid = [
+        row for row in validation_rows
+        if isinstance(row.get("expected_return"), (int, float)) and isinstance(row.get("actual_return"), (int, float))
+    ]
+    if not valid:
+        return {
+            "status": "UNAVAILABLE",
+            "reason": "No decisions had both expected and actual returns.",
+            "evaluated_predictions": 0,
+        }
+    errors = [float(row["actual_return"]) - float(row["expected_return"]) for row in valid]
+    direction_hits = [bool(row.get("direction_accuracy")) for row in valid if isinstance(row.get("direction_accuracy"), bool)]
+    return {
+        "status": "SUCCESS",
+        "evaluated_predictions": len(valid),
+        "direction_accuracy": sum(direction_hits) / len(direction_hits) if direction_hits else None,
+        "mean_prediction_error": float(pd.Series(errors).mean()),
+        "mean_absolute_error": float(pd.Series(errors).abs().mean()),
+        "median_absolute_error": float(pd.Series(errors).abs().median()),
+        "interpretation": "Prediction validation compares deterministic expected return distributions against realized forward returns.",
+    }
+
+
+def _agent_scoreboard(decision_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = []
+    builder_total = builder_wins = critic_total = critic_wins = judge_total = judge_wins = 0
+    for row in decision_rows:
+        actual = row.get("future_return")
+        outcome = row.get("outcome")
+        bcj = row.get("builder_critic_judge") or {}
+        builder = bcj.get("builder_prediction") or {}
+        expected = builder.get("expected_return")
+        critic_objections = bcj.get("critic_objections") or []
+        material_critic = bool([item for item in critic_objections if "No material" not in str(item)])
+        builder_correct = None
+        if isinstance(expected, (int, float)) and isinstance(actual, (int, float)):
+            builder_total += 1
+            builder_correct = (float(expected) >= 0 and float(actual) >= 0) or (float(expected) < 0 and float(actual) < 0)
+            builder_wins += 1 if builder_correct else 0
+        critic_correct = None
+        if outcome in {"WIN", "LOSS"}:
+            critic_total += 1
+            critic_correct = (material_critic and outcome == "LOSS") or (not material_critic and outcome == "WIN")
+            critic_wins += 1 if critic_correct else 0
+            judge_total += 1
+            judge_correct = outcome == "WIN"
+            judge_wins += 1 if judge_correct else 0
+        else:
+            judge_correct = None
+        rows.append(
+            {
+                "date": row.get("as_of_date"),
+                "ticker": row.get("ticker"),
+                "decision": row.get("decision"),
+                "builder_expected_return": expected,
+                "actual_return": actual,
+                "builder_correct": builder_correct,
+                "critic_material_objection": material_critic,
+                "critic_correct": critic_correct,
+                "judge_resolution": bcj.get("judge_resolution"),
+                "judge_correct": judge_correct,
+            }
+        )
+    return {
+        "status": "SUCCESS" if rows else "UNAVAILABLE",
+        "summary": {
+            "builder_accuracy": builder_wins / builder_total if builder_total else None,
+            "critic_accuracy": critic_wins / critic_total if critic_total else None,
+            "judge_accuracy": judge_wins / judge_total if judge_total else None,
+            "builder_evaluated": builder_total,
+            "critic_evaluated": critic_total,
+            "judge_evaluated": judge_total,
+        },
+        "rows": rows,
+        "interpretation": "Builder is scored on expected-return direction, critic on whether objections anticipated failures, judge on final decision outcome.",
+    }
 
 
 def _confidence_reconciliation(decision_rows: List[Dict[str, Any]], calibration: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -2750,21 +3235,37 @@ def _institutional_readiness_score(
         "leakage_protection": 100,
     }
     weights = {
-        "historical_accuracy": 0.25,
-        "calibration_quality": 0.20,
-        "risk_control": 0.15,
-        "evaluation_reliability": 0.10,
-        "regime_robustness": 0.10,
-        "benchmark_outperformance": 0.10,
+        "historical_accuracy": 0.35,
+        "calibration_quality": 0.25,
+        "risk_control": 0.10,
+        "evaluation_reliability": 0.08,
+        "regime_robustness": 0.07,
+        "benchmark_outperformance": 0.08,
         "data_integrity": 0.05,
-        "leakage_protection": 0.05,
+        "leakage_protection": 0.02,
     }
     score = int(round(sum(components[key] * weights[key] for key in weights))) if components else 0
+    caps = []
+    historical_accuracy = float(decision_metrics.get("win_rate") or 0.0)
+    ece = float(decision_metrics.get("expected_calibration_error") or 0.0)
+    if evaluated < 20:
+        caps.append({"cap": 60, "reason": "Fewer than 20 evaluated decisions."})
+    if historical_accuracy < 0.25:
+        caps.append({"cap": 45, "reason": "Historical decision accuracy below 25%."})
+    elif historical_accuracy < 0.40:
+        caps.append({"cap": 60, "reason": "Historical decision accuracy below 40%."})
+    if ece > 0.30:
+        caps.append({"cap": 55, "reason": "Expected calibration error above 0.30."})
+    elif ece > 0.20:
+        caps.append({"cap": 65, "reason": "Expected calibration error above 0.20."})
+    if caps:
+        score = min(score, min(item["cap"] for item in caps))
     return {
         "score": score,
         "components": components,
         "weights": weights,
-        "explanation": "Evidence-weighted readiness. Poor historical accuracy and poor calibration materially reduce the score.",
+        "caps_applied": caps,
+        "explanation": "Harsh evidence-weighted readiness. Poor historical accuracy and poor calibration cap the headline score even when returns look strong.",
         "benchmark_audit_status": beta_alpha_audit.get("status"),
     }
 
@@ -2938,6 +3439,37 @@ def _consistency_audit(result: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _hard_failure_audit(result: Dict[str, Any]) -> Dict[str, Any]:
+    metrics = result.get("metrics", {}) or {}
+    decision_metrics = result.get("decision_metrics", {}) or {}
+    failures = []
+    if not result.get("decision_validation"):
+        failures.append("Prediction validation unavailable.")
+    if metrics.get("alpha") is None or metrics.get("beta") is None or metrics.get("information_ratio") is None:
+        failures.append("Benchmark-relative alpha/beta/information ratio unavailable.")
+    if decision_metrics.get("expected_calibration_error") is None:
+        failures.append("Calibration unavailable.")
+    if (result.get("consistency_audit") or {}).get("status") == "REVIEW":
+        failures.append("Consistency audit requires review.")
+    return {
+        "status": "PASSED" if not failures else "REVIEW",
+        "failures": failures,
+        "rule": "The engine does not claim institutional readiness when prediction validation, benchmark metrics, calibration, or consistency checks fail.",
+    }
+
+
+def _metric_decision_value_audit() -> List[Dict[str, str]]:
+    return [
+        {"metric": "CAGR / total return", "decision_value": "Measures absolute capital growth; used in portfolio intelligence and readiness."},
+        {"metric": "Sharpe / Sortino", "decision_value": "Measures risk-adjusted return quality; used in strategy competition and portfolio score."},
+        {"metric": "Max drawdown / VaR", "decision_value": "Measures downside risk; penalizes readiness and risk score."},
+        {"metric": "Alpha / beta / information ratio", "decision_value": "Measures benchmark-relative skill; used in readiness and benchmark audit."},
+        {"metric": "Decision accuracy", "decision_value": "Measures whether BUY/HOLD/SELL signals were historically correct; heavily drives readiness."},
+        {"metric": "Calibration / ECE / Brier", "decision_value": "Measures whether confidence is earned; caps readiness when unreliable."},
+        {"metric": "Agent scoreboard", "decision_value": "Measures builder, critic, and judge contribution to decision trust."},
+    ]
+
+
 def run_multi_asset_robustness(
     tickers: Optional[List[str]] = None,
     start_date: Any = "2023-01-03",
@@ -2969,6 +3501,7 @@ def run_multi_asset_robustness(
                 max_position=1.0,
                 max_gross_exposure=1.0,
                 dataset=df,
+                persist=False,
             )
             metrics = run.get("metrics", {}) or {}
             decision_metrics = run.get("decision_metrics", {}) or {}
@@ -2980,6 +3513,7 @@ def run_multi_asset_robustness(
                     "sortino": metrics.get("sortino_ratio"),
                     "alpha": metrics.get("alpha"),
                     "beta": metrics.get("beta"),
+                    "max_drawdown": metrics.get("max_drawdown"),
                     "decision_accuracy": decision_metrics.get("win_rate"),
                     "ece": decision_metrics.get("expected_calibration_error"),
                     "readiness": (run.get("institutional_readiness") or {}).get("score"),
@@ -2988,6 +3522,23 @@ def run_multi_asset_robustness(
             )
         except Exception as exc:
             errors.append({"ticker": ticker, "error": str(exc)})
+    rows_df = pd.DataFrame(rows)
+    avg_accuracy = float(rows_df["decision_accuracy"].dropna().mean()) if rows else None
+    avg_ece = float(rows_df["ece"].dropna().mean()) if rows else None
+    avg_cagr = float(rows_df["cagr"].dropna().mean()) if rows else None
+    avg_drawdown = float(rows_df["max_drawdown"].dropna().mean()) if rows and "max_drawdown" in rows_df else None
+    if rows:
+        # Robustness consumes only already-computed outputs; unavailable fields remain explicit.
+        avg_readiness = float(rows_df["readiness"].dropna().mean()) if "readiness" in rows_df else None
+    else:
+        avg_readiness = None
+    robustness_score = _clamp_score(
+        (float(avg_accuracy or 0.0) * 100) * 0.35
+        + max(0.0, 100 - float(avg_ece or 1.0) * 100) * 0.25
+        + _clamp_score((float(avg_cagr or 0.0) + 0.05) * 400) * 0.20
+        + _clamp_score(100 - float(avg_drawdown or 0.0) * 250) * 0.10
+        + float(avg_readiness or 0.0) * 0.10
+    )
     return {
         "status": "SUCCESS" if rows else "ERROR",
         "start_date": _parse_date(start_date).date().isoformat(),
@@ -2998,9 +3549,13 @@ def run_multi_asset_robustness(
         "errors": errors,
         "summary": {
             "assets_tested": len(rows),
-            "avg_decision_accuracy": float(pd.DataFrame(rows)["decision_accuracy"].dropna().mean()) if rows else None,
-            "avg_ece": float(pd.DataFrame(rows)["ece"].dropna().mean()) if rows else None,
-            "avg_readiness": float(pd.DataFrame(rows)["readiness"].dropna().mean()) if rows else None,
+            "avg_decision_accuracy": avg_accuracy,
+            "avg_ece": avg_ece,
+            "avg_cagr": avg_cagr,
+            "avg_drawdown": avg_drawdown,
+            "avg_readiness": avg_readiness,
+            "robustness_score": robustness_score,
+            "interpretation": "Robustness is harshly weighted toward decision accuracy and calibration before performance.",
         },
     }
 
@@ -3021,14 +3576,47 @@ def run_institutional_backtest(
     max_position: float = 0.40,
     max_gross_exposure: float = 1.0,
     dataset: Optional[pd.DataFrame] = None,
+    persist: bool = True,
 ) -> Dict[str, Any]:
     """Capital-based, leakage-safe institutional backtest workflow."""
+    runtime_start = time.perf_counter()
+    started_at = datetime.now(timezone.utc).isoformat()
+    stage_timings: List[Dict[str, Any]] = []
+    loop_timings: Dict[str, float] = {
+        "price_lookup": 0.0,
+        "feature_snapshot": 0.0,
+        "decision_engine": 0.0,
+        "confidence_engine_v2": 0.0,
+        "decision_validation": 0.0,
+        "prediction_engine": 0.0,
+        "builder_critic_judge": 0.0,
+        "trade_simulation": 0.0,
+        "equity_marking": 0.0,
+    }
+
+    def add_loop_time(name: str, started: float) -> None:
+        loop_timings[name] = loop_timings.get(name, 0.0) + (time.perf_counter() - started)
+
+    def mark_stage(stage_name: str, stage_start: float, detail: str = "") -> None:
+        stage_timings.append(
+            {
+                "stage": stage_name,
+                "seconds": round(time.perf_counter() - stage_start, 4),
+                "detail": detail,
+            }
+        )
+
+    stage_start = time.perf_counter()
     df = dataset if dataset is not None else load_dataset()
     holdings = _normalize_portfolio_holdings(portfolio_input)
     tickers = [item["ticker"] for item in holdings]
     base_weights = {item["ticker"]: float(item["weight"]) for item in holdings}
     price_series = _price_series_by_ticker(df, tickers)
     ticker_frames = {ticker: get_ticker_data(ticker, min_rows=60 + int(horizon_days) + 1, dataset=df) for ticker in tickers}
+    indicator_stores = {ticker: _precompute_indicator_store(ticker_frames[ticker]) for ticker in tickers}
+    horizons = [7, 30, 60, 90, 180, 365]
+    forward_outcome_stores = {ticker: _precompute_forward_outcome_store(ticker_frames[ticker], horizons) for ticker in tickers}
+    mark_stage("data_loading_and_ticker_cache", stage_start, f"{len(tickers)} tickers")
 
     start_ts = _parse_date(start_date)
     end_ts = _parse_date(end_date)
@@ -3056,19 +3644,50 @@ def run_institutional_backtest(
     pipeline = []
     previous_value = float(initial_capital)
 
+    stage_start = time.perf_counter()
     benchmark_series = None
     benchmark_start = None
     benchmark_resolution = _resolve_benchmark_series(df, benchmark, all_dates)
     if benchmark:
         benchmark_series = benchmark_resolution.get("series")
         benchmark_start = benchmark_resolution.get("start") or (_price_at(benchmark_series, all_dates[0]) if benchmark_series is not None else None)
+    mark_stage("benchmark_resolution", stage_start, (benchmark_resolution.get("audit") or {}).get("status", "UNKNOWN"))
+
+    stage_start = time.perf_counter()
+    learning_memory_rows = load_decision_memory(limit=5000)
+    parsed_learning_rows: List[Dict[str, Any]] = []
+    for memory_row in learning_memory_rows:
+        decision_date = memory_row.get("decision_date") or memory_row.get("date")
+        try:
+            memory_copy = dict(memory_row)
+            memory_copy["_decision_ts"] = _parse_date(decision_date) if decision_date else None
+            parsed_learning_rows.append(memory_copy)
+        except Exception:
+            continue
+    learning_profile_cache: Dict[str, Dict[str, Any]] = {}
+
+    def learning_profile_at(cutoff: pd.Timestamp) -> Dict[str, Any]:
+        key = cutoff.date().isoformat()
+        if key not in learning_profile_cache:
+            rows_until_cutoff = [
+                {k: v for k, v in row.items() if k != "_decision_ts"}
+                for row in parsed_learning_rows
+                if row.get("_decision_ts") is not None and row["_decision_ts"] < cutoff
+            ]
+            learning_profile_cache[key] = _compute_learning_profile_from_rows(rows_until_cutoff)
+        return learning_profile_cache[key]
+
+    mark_stage("decision_memory_preload", stage_start, f"{len(parsed_learning_rows)} historical decisions cached")
 
     pipeline.append({"stage": "Loading historical data", "status": "SUCCESS", "detail": f"{len(all_dates)} trading dates"})
-    pipeline.append({"stage": "Computing indicators", "status": "SUCCESS", "detail": "Indicators recomputed at each rebalance cutoff"})
-    pipeline.append({"stage": "Computing regime state", "status": "SUCCESS", "detail": "Regime classified from past-only history"})
+    pipeline.append({"stage": "Computing indicators", "status": "SUCCESS", "detail": "Indicators precomputed once per ticker and read by cutoff index"})
+    pipeline.append({"stage": "Computing regime state", "status": "SUCCESS", "detail": "Regime derived from precomputed past-only snapshots"})
 
+    stage_start = time.perf_counter()
     for date_index, date in enumerate(all_dates):
+        loop_started = time.perf_counter()
         prices = {ticker: _price_at(price_series[ticker], date) for ticker in tickers}
+        add_loop_time("price_lookup", loop_started)
         position_value = sum((positions[ticker] * (prices[ticker] or 0.0)) for ticker in tickers)
         portfolio_value = cash + position_value
 
@@ -3080,8 +3699,16 @@ def run_institutional_backtest(
                 if price is None:
                     continue
                 try:
-                    history = get_data_until(ticker, date, min_window=60, dataset=df)
-                    intelligence = build_intelligence_from_history(history)
+                    frame = ticker_frames[ticker]
+                    cutoff_pos = int(frame["Date"].searchsorted(date, side="right")) - 1
+                    if cutoff_pos + 1 < 60:
+                        raise ValueError("Minimum history not met.")
+                    loop_started = time.perf_counter()
+                    snapshot = _snapshot_from_indicator_store(indicator_stores[ticker], cutoff_pos)
+                    add_loop_time("feature_snapshot", loop_started)
+                    loop_started = time.perf_counter()
+                    intelligence = build_intelligence_from_snapshot(snapshot)
+                    add_loop_time("decision_engine", loop_started)
                     decision = (intelligence.get("verdict") or {}).get("value", "HOLD")
                     base_confidence = intelligence.get("confidence") or {}
                     risk_score = _safe_float(((intelligence.get("scores") or {}).get("risk") or {}).get("score"), 0.0)
@@ -3090,7 +3717,8 @@ def run_institutional_backtest(
                     signal_agreement = max(0.0, min(1.0, 1.0 - abs(tech_score_for_conf - (100.0 - risk_score)) / 100.0))
                     missing_count = len(_missing_fields(scores_for_conf))
                     data_completeness = max(0.35, 1.0 - min(0.65, missing_count * 0.025))
-                    learning_profile = compute_learning_profile(as_of_date=date, limit=5000)
+                    loop_started = time.perf_counter()
+                    learning_profile = learning_profile_at(date)
                     confidence_v2 = _confidence_v2(
                         base_confidence,
                         decision=decision,
@@ -3099,6 +3727,7 @@ def run_institutional_backtest(
                         data_completeness=data_completeness,
                         signal_agreement=signal_agreement,
                     )
+                    add_loop_time("confidence_engine_v2", loop_started)
                     confidence = _safe_float(confidence_v2.get("score"), 0.0)
                     base_weight = base_weights.get(ticker, 0.0)
                     current_weight = ((positions.get(ticker, 0.0) * price) / portfolio_value) if portfolio_value > 0 else 0.0
@@ -3123,15 +3752,18 @@ def run_institutional_backtest(
                     returns_by_horizon: Dict[str, Optional[float]] = {}
                     outcomes_by_horizon: Dict[str, str] = {}
                     future_window_outcomes: Dict[str, Dict[str, Any]] = {}
-                    for horizon in [7, 30, 60, 90, 180, 365]:
-                        horizon_return = _forward_return_for_ticker(ticker_frames[ticker], date, horizon)
+                    loop_started = time.perf_counter()
+                    for horizon in horizons:
+                        horizon_package = _forward_outcome_from_store(forward_outcome_stores[ticker], cutoff_pos, horizon, allocation_decision)
+                        horizon_return = horizon_package.get("future_return")
                         returns_by_horizon[str(horizon)] = horizon_return
                         outcomes_by_horizon[str(horizon)] = _evaluate_decision(allocation_decision, horizon_return)
-                        future_window_outcomes[str(horizon)] = _future_window_outcome(ticker_frames[ticker], date, horizon, allocation_decision)
+                        future_window_outcomes[str(horizon)] = horizon_package
                     future_return = returns_by_horizon.get(str(int(horizon_days)))
                     if future_return is None:
-                        future_return = _forward_return_for_ticker(ticker_frames[ticker], date, int(horizon_days))
+                        future_return = _forward_outcome_from_store(forward_outcome_stores[ticker], cutoff_pos, int(horizon_days), allocation_decision).get("future_return")
                     outcome = _evaluate_decision(allocation_decision, future_return) if future_return is not None else "INVALID"
+                    add_loop_time("decision_validation", loop_started)
                     price_at_decision = float(price)
                     decision_contexts[ticker] = {
                         "decision": allocation_decision,
@@ -3147,8 +3779,12 @@ def run_institutional_backtest(
                         engine_decision=decision,
                         allocation_delta=allocation_delta,
                     )
+                    loop_started = time.perf_counter()
                     prediction = _prediction_distribution_from_history(ticker_frames[ticker], date, int(horizon_days))
+                    add_loop_time("prediction_engine", loop_started)
+                    loop_started = time.perf_counter()
                     builder_critic_judge = _builder_critic_judge(decision_attribution, prediction, int(round(confidence)))
+                    add_loop_time("builder_critic_judge", loop_started)
                     decision_rows.append(
                         {
                             "ticker": ticker,
@@ -3199,6 +3835,7 @@ def run_institutional_backtest(
                 target_weights = {ticker: weight / total_target * max_gross_exposure for ticker, weight in target_weights.items()}
 
             portfolio_value = cash + sum((positions[ticker] * (prices[ticker] or 0.0)) for ticker in tickers)
+            loop_started = time.perf_counter()
             for ticker, target_weight in target_weights.items():
                 price = prices.get(ticker)
                 if price is None or price <= 0:
@@ -3239,7 +3876,9 @@ def run_institutional_backtest(
                         "trade_rationale": context.get("rationale") or "Deterministic rebalance target changed.",
                     }
                 )
+            add_loop_time("trade_simulation", loop_started)
 
+        loop_started = time.perf_counter()
         current_value = cash + sum((positions[ticker] * (_price_at(price_series[ticker], date) or 0.0)) for ticker in tickers)
         daily_return = (current_value / previous_value - 1.0) if previous_value > 0 else 0.0
         previous_value = current_value
@@ -3265,6 +3904,8 @@ def run_institutional_backtest(
             }
         )
 
+    mark_stage("rolling_simulation", stage_start, f"{len(equity_rows)} equity points, {len(decision_rows)} decisions")
+
     pipeline.extend(
         [
             {"stage": "Running rolling simulation", "status": "SUCCESS", "detail": f"{len(equity_rows)} equity points"},
@@ -3277,12 +3918,43 @@ def run_institutional_backtest(
         ]
     )
 
+    stage_start = time.perf_counter()
     metrics = _equity_curve_metrics(equity_rows)
     decision_metrics = _decision_quality_metrics(decision_rows)
     confidence_reconciliation = _confidence_reconciliation(decision_rows, decision_metrics.get("calibration") or [])
     portfolio_intelligence = build_portfolio_intelligence(holdings, as_of_date=end_ts, dataset=df)
     trade_lifecycle = _build_trade_lifecycle(trade_log)
     decision_validation = _decision_validation_rows(decision_rows)
+    prediction_quality_report = _prediction_quality_report(decision_validation)
+    agent_scoreboard = _agent_scoreboard(decision_rows)
+    recommendation_accuracy = evaluate_recommendation_accuracy(decision_rows, persist=False)
+    expanded_artifacts = os.getenv("XELTRIX_EXPANDED_BACKTEST_ARTIFACTS", "0").strip() == "1"
+    if expanded_artifacts:
+        feature_evaluation = evaluate_feature_versions({"Agentic Strategy": decision_rows})
+        try:
+            strategy_comparison = run_strategy_comparison(
+                tickers[0],
+                start_ts,
+                end_ts,
+                int(horizon_days),
+                dataset=df,
+            )
+        except Exception as exc:
+            strategy_comparison = {
+                "status": "UNAVAILABLE",
+                "message": f"Strategy comparison unavailable: {exc}",
+                "summary": [],
+            }
+    else:
+        feature_evaluation = {
+            "status": "SKIPPED",
+            "reason": "Skipped for accuracy-first fast demo mode.",
+        }
+        strategy_comparison = {
+            "status": "SKIPPED",
+            "reason": "Skipped for accuracy-first fast demo mode.",
+            "summary": [],
+        }
     win_rate_audit = _win_rate_audit(decision_rows, trade_log, trade_lifecycle)
     beta_alpha_audit = metrics.get("beta_alpha_audit") or _beta_alpha_audit(equity_rows)
     data_quality_audit = {
@@ -3296,6 +3968,7 @@ def run_institutional_backtest(
         "dataset_audit": _dataset_audit(df),
     }
     institutional_readiness = _institutional_readiness_score(metrics, decision_metrics, win_rate_audit, beta_alpha_audit, data_quality_audit)
+    mark_stage("metrics_and_audits", stage_start, "portfolio, decision, calibration, beta/alpha, readiness")
 
     result = {
         "status": "SUCCESS",
@@ -3321,6 +3994,11 @@ def run_institutional_backtest(
         "trade_lifecycle": trade_lifecycle,
         "decision_log": decision_rows,
         "decision_validation": decision_validation,
+        "prediction_quality_report": prediction_quality_report,
+        "agent_scoreboard": agent_scoreboard,
+        "recommendation_accuracy": recommendation_accuracy,
+        "feature_evaluation": feature_evaluation,
+        "strategy_comparison": strategy_comparison,
         "metrics": metrics,
         "decision_metrics": decision_metrics,
         "confidence_reconciliation": confidence_reconciliation,
@@ -3331,14 +4009,56 @@ def run_institutional_backtest(
         "portfolio_intelligence": portfolio_intelligence,
     }
     run_id = f"institutional:{start_ts.date().isoformat()}:{end_ts.date().isoformat()}:{'-'.join(tickers)}:{int(datetime.now(timezone.utc).timestamp())}"
-    store_decision_memory(decision_rows, run_id=run_id)
+    stage_start = time.perf_counter()
+    if persist:
+        store_decision_memory(decision_rows, run_id=run_id)
     result["run_id"] = run_id
-    result["learning_profile_after_run"] = compute_learning_profile(limit=10000)
+    result["learning_profile_after_run"] = compute_learning_profile(limit=10000) if persist else _compute_learning_profile_from_rows(parsed_learning_rows + decision_rows)
     result["portfolio_intelligence"] = _reconcile_portfolio_intelligence_with_backtest(portfolio_intelligence, result)
     result["unified_evaluation_object"] = _build_unified_evaluation_object(result)
     result["consistency_audit"] = _consistency_audit(result)
+    if (result.get("consistency_audit") or {}).get("status") == "REVIEW":
+        readiness_obj = dict(result.get("institutional_readiness") or {})
+        readiness_obj["score"] = min(int(readiness_obj.get("score") or 0), 65)
+        caps = list(readiness_obj.get("caps_applied") or [])
+        caps.append({"cap": 65, "reason": "Consistency audit found material contradictions requiring review."})
+        readiness_obj["caps_applied"] = caps
+        result["institutional_readiness"] = readiness_obj
+        result["portfolio_intelligence"] = _reconcile_portfolio_intelligence_with_backtest(result["portfolio_intelligence"], result)
+        result["unified_evaluation_object"] = _build_unified_evaluation_object(result)
+    result["hard_failure_audit"] = _hard_failure_audit(result)
+    result["metric_decision_value_audit"] = _metric_decision_value_audit()
+    if result["hard_failure_audit"].get("status") == "REVIEW":
+        result["status"] = "SUCCESS_WITH_REVIEW"
+    mark_stage("reconciliation_and_persistence", stage_start, f"persist={persist}")
+    finished_at = datetime.now(timezone.utc).isoformat()
+    result["performance_audit"] = {
+        "backtest_started_at": started_at,
+        "backtest_finished_at": finished_at,
+        "optimized_runtime_seconds": round(time.perf_counter() - runtime_start, 4),
+        "previous_runtime_seconds": "UNAVAILABLE - no baseline was persisted before this optimization pass.",
+        "stage_timings": stage_timings,
+        "loop_timing_breakdown": [
+            {"stage": key, "seconds": round(value, 4)}
+            for key, value in sorted(loop_timings.items(), key=lambda item: item[1], reverse=True)
+        ],
+        "decisions_per_second": round(len(decision_rows) / max(time.perf_counter() - runtime_start, 0.001), 3),
+        "equity_points": len(equity_rows),
+        "decisions": len(decision_rows),
+        "bottlenecks_removed": [
+            "Decision memory is loaded once per run instead of once per ticker per rebalance.",
+            "Ticker cutoff slices use cached ticker frames instead of repeatedly filtering the full dataset.",
+            "Forward-return lookups use positional search on ticker frames.",
+            "Benchmark proxy series is cached by date window.",
+            "Robustness runs can disable persistence to avoid JSONL write amplification.",
+            "Forward returns and max gain/loss windows are precomputed once per ticker and horizon.",
+            "Regime state is derived from the same precomputed snapshot used by the decision engine.",
+        ],
+        "complexity_notes": "Simulation cost is O(trading_days * tickers) with expensive memory/file IO removed from the inner loop.",
+    }
     result["institutional_report"] = generate_institutional_report(result)
-    store_institutional_run(result)
+    if persist:
+        store_institutional_run(result)
     return result
 
 
@@ -3509,6 +4229,11 @@ def generate_institutional_report(result: Dict[str, Any]) -> Dict[str, Any]:
             "win_rate_audit": result.get("win_rate_audit"),
             "decision_distribution": decision_metrics.get("decision_distribution"),
             "precision_recall": decision_metrics.get("precision_recall"),
+            "prediction_quality_report": result.get("prediction_quality_report"),
+            "agent_scoreboard": (result.get("agent_scoreboard") or {}).get("summary"),
+            "recommendation_accuracy": result.get("recommendation_accuracy"),
+            "feature_evaluation": result.get("feature_evaluation"),
+            "strategy_comparison": (result.get("strategy_comparison") or {}).get("competition"),
         },
         "trade_summary": {
             "trade_count": len(result.get("trade_log") or []),
@@ -3520,7 +4245,10 @@ def generate_institutional_report(result: Dict[str, Any]) -> Dict[str, Any]:
             "data_quality_audit": result.get("data_quality_audit"),
             "leakage_audit": "PASSED: backtest decisions slice data with Date <= cutoff.",
         },
+        "performance_audit": result.get("performance_audit"),
+        "metric_decision_value_audit": result.get("metric_decision_value_audit"),
         "consistency_audit": result.get("consistency_audit"),
+        "hard_failure_audit": result.get("hard_failure_audit"),
         "learning_summary": {
             "decision_memory_count": (result.get("learning_profile_after_run") or {}).get("memory_count"),
             "evaluated_memory_count": (result.get("learning_profile_after_run") or {}).get("evaluated_count"),
@@ -3552,11 +4280,18 @@ def store_institutional_run(result: Dict[str, Any]) -> None:
         "trade_lifecycle": result.get("trade_lifecycle"),
         "decision_log": result.get("decision_log"),
         "decision_validation": result.get("decision_validation"),
+        "prediction_quality_report": result.get("prediction_quality_report"),
+        "agent_scoreboard": result.get("agent_scoreboard"),
+        "recommendation_accuracy": result.get("recommendation_accuracy"),
+        "feature_evaluation": result.get("feature_evaluation"),
+        "strategy_comparison": result.get("strategy_comparison"),
         "win_rate_audit": result.get("win_rate_audit"),
         "beta_alpha_audit": result.get("beta_alpha_audit"),
         "confidence_reconciliation": result.get("confidence_reconciliation"),
         "consistency_audit": result.get("consistency_audit"),
+        "hard_failure_audit": result.get("hard_failure_audit"),
         "learning_profile_after_run": result.get("learning_profile_after_run"),
+        "performance_audit": result.get("performance_audit"),
         "institutional_report": result.get("institutional_report"),
     }
     with open(INSTITUTIONAL_RUNS_PATH, "a", encoding="utf-8") as file:
@@ -3577,20 +4312,20 @@ def run_factor_research(
     start_ts = _parse_date(start_date)
     end_ts = _parse_date(end_date)
     rows = []
+    factor_values = _vectorized_factor_values(data, factor)
+    close = pd.to_numeric(data["Close"], errors="coerce")
     for idx in range(len(data)):
         row = data.iloc[idx]
         date = row["Date"]
         if date < start_ts or date > end_ts:
             continue
-        history = data.iloc[: idx + 1].copy()
-        if len(history) < 90:
+        if idx + 1 < 90:
             continue
         future = _future_row(data, idx, horizon_days)
         if future is None:
             continue
-        snapshot = compute_indicator_snapshot(history)
-        value = snapshot.get(factor)
-        if value is None:
+        value = factor_values.iloc[idx] if idx < len(factor_values) else None
+        if value is None or pd.isna(value):
             continue
         future_return = (float(future["Close"]) / float(row["Close"])) - 1.0
         rows.append(
@@ -3599,9 +4334,10 @@ def run_factor_research(
                 "factor": factor,
                 "value": value,
                 "future_return": future_return,
-                "regime": classify_market_regime(history).get("regime"),
+                "regime": _regime_label_from_vectors(close, idx),
             }
         )
+        add_loop_time("equity_marking", loop_started)
     df_rows = pd.DataFrame(rows)
     if df_rows.empty:
         return {"status": "ERROR", "message": "No valid factor observations.", "rows": []}
@@ -3644,4 +4380,59 @@ def run_factor_research(
         "regime_performance": regime_perf,
         "decile_summary": grouped.to_dict("records"),
         "rows": rows,
+    }
+
+
+def rank_predictive_factors(
+    ticker: str,
+    start_date: Any,
+    end_date: Any,
+    horizon_days: int = 30,
+    *,
+    factors: Optional[List[str]] = None,
+    dataset: Optional[pd.DataFrame] = None,
+) -> Dict[str, Any]:
+    """Rank existing deterministic factors by observed predictive evidence."""
+    df = dataset if dataset is not None else load_dataset()
+    factors = factors or ["rsi_14", "rsi_percentile", "momentum_20d", "momentum_60d", "volatility_20d", "sma_20", "sma_50", "sma_200", "volume_anomaly_60d", "trend_persistence_60d", "breakout_60d"]
+    rows = []
+    errors = []
+    for factor in factors:
+        try:
+            result = run_factor_research(ticker, factor, start_date, end_date, horizon_days, dataset=df)
+            if result.get("status") != "SUCCESS":
+                errors.append({"factor": factor, "reason": result.get("message") or result.get("reason")})
+                continue
+            score = (
+                abs(float(result.get("rank_ic") or 0.0)) * 35
+                + abs(float(result.get("ic") or 0.0)) * 30
+                + abs(float(result.get("hit_rate") or 0.0) - 0.5) * 50
+                + min(20.0, math.log10(max(1, int(result.get("observations") or 1))) * 10)
+            )
+            rows.append(
+                {
+                    "factor": factor,
+                    "observations": result.get("observations"),
+                    "ic": result.get("ic"),
+                    "rank_ic": result.get("rank_ic"),
+                    "hit_rate": result.get("hit_rate"),
+                    "average_return": result.get("average_return"),
+                    "median_return": result.get("median_return"),
+                    "best_return": result.get("best_return"),
+                    "worst_return": result.get("worst_return"),
+                    "predictive_score": round(score, 4),
+                }
+            )
+        except Exception as exc:
+            errors.append({"factor": factor, "reason": str(exc)})
+    ranked = sorted(rows, key=lambda item: item["predictive_score"], reverse=True)
+    return {
+        "status": "SUCCESS" if ranked else "UNAVAILABLE",
+        "ticker": str(ticker).upper(),
+        "horizon_days": int(horizon_days),
+        "top_predictive_factors": ranked[:5],
+        "worst_factors": ranked[-5:],
+        "ranking": ranked,
+        "errors": errors,
+        "interpretation": "Factors are ranked only when backed by historical observations; unavailable factors are disclosed.",
     }

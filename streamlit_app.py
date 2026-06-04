@@ -11,6 +11,7 @@ import os
 import sys
 import re
 import streamlit as st
+import pandas as pd
 from datetime import datetime
 
 # Add paths - main directory first, then subdirectories
@@ -1138,6 +1139,39 @@ def parse_portfolio_text(text_input: str) -> list:
 def portfolio_analysis_interface():
     """Portfolio analysis interface"""
     st.subheader("Portfolio Analysis")
+    st.caption("Ajay demo mode: portfolio recommendation, confidence, risk, diversification, and allocation guidance only.")
+
+    weighted_raw = st.text_area(
+        "Portfolio Weights",
+        value="",
+        placeholder="Enter portfolio weights: AAPL 40%, MSFT 30%",
+        height=110,
+    )
+    as_of_raw = st.text_input("As-Of Date", value="", placeholder="YYYY-MM-DD")
+    if st.button("RUN PORTFOLIO INTELLIGENCE", type="primary", use_container_width=True):
+        if not weighted_raw.strip():
+            st.error("Enter portfolio weights before running portfolio intelligence.")
+            return
+        try:
+            from evaluation_engine import build_portfolio_intelligence, load_dataset
+            from portfolio_parser import parse_portfolio_input
+
+            parsed = parse_portfolio_input(weighted_raw)
+            if parsed.get("status") != "SUCCESS":
+                st.error("; ".join(parsed.get("issues") or ["Portfolio input could not be parsed."]))
+                return
+            as_of_date = datetime.strptime(as_of_raw, "%Y-%m-%d").date() if as_of_raw else None
+            result = build_portfolio_intelligence(parsed.get("holdings", []), as_of_date=as_of_date, dataset=load_dataset())
+            st.session_state["last_clean_portfolio_intelligence"] = result
+        except Exception as exc:
+            st.error(f"Portfolio intelligence failed: {exc}")
+            return
+
+    if st.session_state.get("last_clean_portfolio_intelligence"):
+        render_portfolio_intelligence_summary(st.session_state["last_clean_portfolio_intelligence"])
+    else:
+        st.info("No portfolio intelligence run yet. Enter weights and run analysis.")
+    return
     st.caption("Start small (3–5 holdings) to control cost. This module runs multiple stock analyses under the hood.")
 
     # Input format selection
@@ -1429,42 +1463,176 @@ def portfolio_analysis_interface():
 def _pct(value, digits: int = 1) -> str:
     try:
         if value is None:
-            return "-"
+            return "UNAVAILABLE"
         return f"{float(value) * 100:.{digits}f}%"
     except Exception:
-        return "-"
+        return "UNAVAILABLE"
 
 
 def _num(value, digits: int = 2) -> str:
     try:
         if value is None:
-            return "-"
+            return "UNAVAILABLE"
         return f"{float(value):.{digits}f}"
     except Exception:
-        return "-"
+        return "UNAVAILABLE"
+
+
+def _developer_mode_enabled() -> bool:
+    return os.getenv("DEVELOPER_MODE", os.getenv("XELTRIX_DEVELOPER_MODE", "0")).strip() == "1"
+
+
+def _metric_suffix(value, suffix: str = "/100") -> str:
+    if value in (None, "", "UNAVAILABLE", "-"):
+        return "UNAVAILABLE"
+    return f"{value}{suffix}"
+
+
+def _grade_from_score(score) -> str:
+    try:
+        value = float(score)
+    except Exception:
+        return "UNAVAILABLE"
+    if value >= 85:
+        return "A"
+    if value >= 70:
+        return "B"
+    if value >= 55:
+        return "C"
+    if value >= 40:
+        return "D"
+    return "F"
+
+
+def _display_metric(label: str, value, *, percent: bool = False, digits: int = 2):
+    formatted = _pct(value, digits) if percent else _num(value, digits) if isinstance(value, (int, float)) else (value if value not in (None, "") else "UNAVAILABLE")
+    st.metric(label, formatted)
+
+
+def _portfolio_strengths_risks_actions(output: dict) -> tuple[list[str], list[str], list[str]]:
+    portfolio = output.get("portfolio", {}) or {}
+    strengths: list[str] = []
+    risks: list[str] = []
+    actions: list[str] = []
+
+    expected_return = portfolio.get("expected_return")
+    max_drawdown = portfolio.get("max_drawdown")
+    sharpe = portfolio.get("sharpe_ratio")
+    diversification = portfolio.get("diversification_score")
+    risk_score = portfolio.get("risk_score")
+    concentration = portfolio.get("concentration")
+
+    if isinstance(expected_return, (int, float)) and expected_return > 0:
+        strengths.append("Positive expected return profile.")
+    if isinstance(sharpe, (int, float)) and sharpe >= 1:
+        strengths.append("Acceptable risk-adjusted return.")
+    if isinstance(diversification, (int, float)) and diversification >= 65:
+        strengths.append("Diversification is supportive.")
+    if not strengths:
+        strengths.append("No strong portfolio strength is proven by current evidence.")
+
+    if isinstance(concentration, (int, float)) and concentration >= 0.40:
+        risks.append("Single-name concentration is elevated.")
+    if isinstance(risk_score, (int, float)) and risk_score >= 70:
+        risks.append("Portfolio risk score is elevated.")
+    if isinstance(max_drawdown, (int, float)) and max_drawdown >= 0.15:
+        risks.append("Expected drawdown requires monitoring.")
+    if not risks:
+        risks.append("No major portfolio risk flag triggered.")
+
+    allocator_actions = ((output.get("allocator") or {}).get("suggestions") or [])[:3]
+    actions.extend(str(item) for item in allocator_actions if item)
+    if not actions:
+        actions.append("Maintain allocation discipline and rerun after new evidence.")
+    return strengths[:3], risks[:3], actions[:3]
+
+
+def _render_bullets(title: str, items: list[str]) -> None:
+    st.markdown(f"**{title}**")
+    for item in items:
+        st.write(f"- {item}")
+
+
+def _backtest_verdict(output: dict) -> tuple[str, list[str]]:
+    reasons: list[str] = []
+    status = "PASS"
+    metrics = output.get("metrics", {}) or {}
+    decision_metrics = output.get("decision_metrics", {}) or {}
+    recommendation_accuracy = output.get("recommendation_accuracy") or {}
+    consistency = output.get("consistency_audit") or {}
+    hard_failure = output.get("hard_failure_audit") or {}
+    beta_audit = output.get("beta_alpha_audit") or {}
+
+    if hard_failure.get("status") == "REVIEW":
+        status = "REVIEW"
+        reasons.extend(hard_failure.get("failures") or hard_failure.get("issues") or [])
+    if consistency.get("status") == "REVIEW":
+        status = "REVIEW"
+        reasons.extend(consistency.get("issues") or [])
+    if beta_audit.get("status") not in {"PASSED", "PROXY_USED"}:
+        status = "REVIEW"
+        reasons.extend(beta_audit.get("issues") or ["Benchmark audit requires review."])
+    if recommendation_accuracy.get("status") != "SUCCESS":
+        status = "REVIEW"
+        reasons.append("External ground truth is not configured, so recommendation accuracy is unavailable.")
+    win_rate = decision_metrics.get("win_rate")
+    if isinstance(win_rate, (int, float)) and win_rate < 0.45:
+        status = "REVIEW"
+        reasons.append("Decision win rate is below institutional target.")
+    if metrics.get("alpha") is not None and isinstance(metrics.get("alpha"), (int, float)) and float(metrics.get("alpha")) > 0:
+        reasons.append("Benchmark outperformance is positive.")
+    if not reasons:
+        reasons.append("Core backtest metrics, benchmark linkage, and consistency checks passed.")
+    if hard_failure.get("status") == "FAIL":
+        status = "FAIL"
+    return status, list(dict.fromkeys(str(reason) for reason in reasons if reason))[:5]
+
+
+def _render_audit_card(title: str, status: str, reasons: list[str]) -> None:
+    st.markdown(f"**{title}: {status or 'UNAVAILABLE'}**")
+    for reason in reasons[:3]:
+        st.write(f"- {reason}")
 
 
 def render_portfolio_intelligence_summary(output: dict):
     portfolio = output.get("portfolio", {}) or {}
-    st.markdown("### Portfolio Intelligence")
+    st.markdown("## 3. Portfolio Intelligence")
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
-        st.metric("Decision", portfolio.get("decision", "-"), f"{portfolio.get('composite_score', '-')}/100")
+        st.metric("Recommendation", portfolio.get("decision", "UNAVAILABLE"))
     with c2:
-        st.metric("Confidence", f"{portfolio.get('confidence', '-')}/100")
+        st.metric("Confidence", _metric_suffix(portfolio.get("confidence")))
     with c3:
-        st.metric("Risk", f"{portfolio.get('risk_score', '-')}/100", portfolio.get("concentration_risk", "-"))
+        st.metric("Portfolio Score", _metric_suffix(portfolio.get("composite_score")))
     with c4:
-        st.metric("Diversification", f"{portfolio.get('diversification_score', '-')}/100")
+        st.metric("Diversification", _metric_suffix(portfolio.get("diversification_score")))
     with c5:
-        st.metric("Sharpe", f"{float(portfolio.get('sharpe_ratio', 0) or 0):.2f}")
-    c6, c7, c8 = st.columns(3)
+        st.metric("Quality Grade", _grade_from_score(portfolio.get("composite_score")))
+    c6, c7, c8, c9, c10 = st.columns(5)
     with c6:
-        st.metric("Portfolio Beta", f"{float(portfolio.get('portfolio_beta', 0) or 0):.2f}")
+        st.metric("Risk", _metric_suffix(portfolio.get("risk_score")))
     with c7:
-        st.metric("VaR 95%", _pct(portfolio.get("value_at_risk_95"), 2))
+        st.metric("Expected Return", _pct(portfolio.get("expected_return"), 2))
     with c8:
-        st.metric("Max Drawdown", _pct(portfolio.get("max_drawdown"), 2))
+        st.metric("Expected Drawdown", _pct(portfolio.get("max_drawdown"), 2))
+    with c9:
+        reward = portfolio.get("expected_return")
+        risk = portfolio.get("max_drawdown")
+        ratio = (float(reward) / abs(float(risk))) if isinstance(reward, (int, float)) and isinstance(risk, (int, float)) and risk else None
+        st.metric("Risk/Reward", _num(ratio))
+    with c10:
+        allocation_hint = (((output.get("allocator") or {}).get("suggestions") or ["UNAVAILABLE"])[0])
+        st.metric("Suggested Allocation", allocation_hint)
+
+    strengths, risks, actions = _portfolio_strengths_risks_actions(output)
+    s_col, r_col, a_col = st.columns(3)
+    with s_col:
+        _render_bullets("Top Strengths", strengths)
+    with r_col:
+        _render_bullets("Top Risks", risks)
+    with a_col:
+        _render_bullets("Recommended Actions", actions)
+    return
 
     try:
         import pandas as pd
@@ -1520,34 +1688,107 @@ def render_portfolio_intelligence_summary(output: dict):
 def render_institutional_backtest(output: dict):
     metrics = output.get("metrics", {}) or {}
     decision_metrics = output.get("decision_metrics", {}) or {}
-    config = output.get("config", {}) or {}
+    portfolio_intel = output.get("portfolio_intelligence") or {}
+    portfolio = portfolio_intel.get("portfolio", {}) or {}
+    recommendation_accuracy = output.get("recommendation_accuracy") or {}
+    performance = output.get("performance_audit") or {}
+    beta_audit = output.get("beta_alpha_audit") or metrics.get("beta_alpha_audit") or {}
+    consistency = output.get("consistency_audit") or {}
+    accuracy_value = recommendation_accuracy.get("accuracy")
+    reliability_basis = accuracy_value if isinstance(accuracy_value, (int, float)) else decision_metrics.get("win_rate")
+    verdict, verdict_reasons = _backtest_verdict(output)
 
-    st.markdown("### Institutional Backtest Results")
-    c1, c2, c3, c4, c5 = st.columns(5)
+    st.markdown("## 1. Institutional Backtesting")
+    c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.metric("Final Value", f"${float(metrics.get('final_value', 0) or 0):,.0f}", _pct(metrics.get("total_return"), 2))
+        st.metric("Backtest Verdict", verdict)
     with c2:
-        st.metric("CAGR", _pct(metrics.get("cagr"), 2))
+        st.metric("Final Portfolio Value", _num(metrics.get("final_value")))
     with c3:
-        st.metric("Sharpe", f"{float(metrics.get('sharpe_ratio', 0) or 0):.2f}")
+        st.metric("Total Return", _pct(metrics.get("total_return"), 2))
     with c4:
-        st.metric("Max Drawdown", _pct(metrics.get("max_drawdown"), 2))
-    with c5:
-        st.metric("Win Rate", _pct(decision_metrics.get("win_rate")))
+        st.metric("Runtime", f"{performance.get('optimized_runtime_seconds', 'UNAVAILABLE')}s")
 
-    c6, c7, c8, c9, c10 = st.columns(5)
-    with c6:
+    b1, b2, b3, b4, b5, b6 = st.columns(6)
+    with b1:
+        st.metric("CAGR", _pct(metrics.get("cagr"), 2))
+    with b2:
+        st.metric("Sharpe", _num(metrics.get("sharpe_ratio")))
+    with b3:
+        st.metric("Sortino", _num(metrics.get("sortino_ratio")))
+    with b4:
+        st.metric("Max Drawdown", _pct(metrics.get("max_drawdown"), 2))
+    with b5:
+        st.metric("Win Rate", _pct(decision_metrics.get("win_rate"), 2))
+    with b6:
+        st.metric("Trade Count", len(output.get("trade_log") or []))
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
         st.metric("Alpha", _pct(metrics.get("alpha"), 2))
-    with c7:
+    with c2:
         st.metric("Beta", _num(metrics.get("beta")))
-    with c8:
-        st.metric("Sortino", f"{float(metrics.get('sortino_ratio', 0) or 0):.2f}")
-    with c9:
-        st.metric("Info Ratio", _num(metrics.get("information_ratio")))
-    with c10:
-        st.metric("Trades", len(output.get("trade_log") or []))
+    with c3:
+        st.metric("Information Ratio", _num(metrics.get("information_ratio")))
+    with c4:
+        st.metric("Benchmark Outperformance", _pct(metrics.get("alpha"), 2))
+
+    audit_1, audit_2, audit_3, audit_4 = st.columns(4)
+    with audit_1:
+        _render_audit_card("Backtest Verdict", verdict, verdict_reasons)
+    with audit_2:
+        benchmark_status = ((output.get("config") or {}).get("benchmark_resolution") or {}).get("status") or beta_audit.get("status")
+        benchmark_reason = ((output.get("config") or {}).get("benchmark_resolution") or {}).get("issues") or beta_audit.get("issues") or ["Benchmark linked successfully."]
+        _render_audit_card("Benchmark Audit", benchmark_status, benchmark_reason)
+    with audit_3:
+        decision_reasons = [
+            f"{decision_metrics.get('evaluated_decisions', decision_metrics.get('total_decisions', 0))} decisions evaluated.",
+            f"Win rate: {_pct(decision_metrics.get('win_rate'), 2)}.",
+        ]
+        _render_audit_card("Decision Audit", "PASSED" if decision_metrics.get("total_decisions", 0) else "UNAVAILABLE", decision_reasons)
+    with audit_4:
+        _render_audit_card("Consistency Audit", consistency.get("status", "PASSED"), consistency.get("issues") or ["No material contradiction surfaced."])
+
+    st.markdown("## 2. Recommendation Accuracy")
+    if recommendation_accuracy.get("status") != "SUCCESS":
+        st.warning("Status: UNAVAILABLE — Reason: External Ground Truth Not Configured.")
+    else:
+        a1, a2, a3, a4, a5, a6 = st.columns(6)
+        coverage = recommendation_accuracy.get("coverage")
+        if coverage is None:
+            total_predictions = recommendation_accuracy.get("total_predictions") or 0
+            evaluated_predictions = recommendation_accuracy.get("evaluated_predictions") or 0
+            coverage = evaluated_predictions / total_predictions if total_predictions else None
+        with a1:
+            st.metric("Accuracy", _pct(recommendation_accuracy.get("accuracy"), 2))
+        with a2:
+            st.metric("Precision", _pct(recommendation_accuracy.get("precision"), 2))
+        with a3:
+            st.metric("Recall", _pct(recommendation_accuracy.get("recall"), 2))
+        with a4:
+            st.metric("F1 Score", _pct(recommendation_accuracy.get("f1"), 2))
+        with a5:
+            st.metric("Coverage", _pct(coverage, 2))
+        with a6:
+            st.metric("Labels", recommendation_accuracy.get("evaluated_predictions", 0))
+        version_comparison = recommendation_accuracy.get("version_comparison") or {}
+        v1, v2, v3, v4 = st.columns(4)
+        with v1:
+            st.metric("Current Agent Accuracy", _pct(version_comparison.get("current_agent_accuracy"), 2))
+        with v2:
+            st.metric("Previous Agent Accuracy", _pct(version_comparison.get("previous_agent_accuracy"), 2))
+        with v3:
+            st.metric("Improvement", _pct(version_comparison.get("accuracy_delta"), 2))
+        with v4:
+            st.metric("Improved?", version_comparison.get("improved", "UNAVAILABLE"))
+
+    portfolio_intel = output.get("portfolio_intelligence") or {}
+    if portfolio_intel:
+        render_portfolio_intelligence_summary(portfolio_intel)
+    return
+
     readiness = output.get("institutional_readiness") or {}
-    if readiness:
+    if readiness and developer_mode:
         st.metric("Institutional Readiness", f"{readiness.get('score', '-')}/100", "audited result")
         with st.expander("Institutional Readiness Breakdown"):
             st.dataframe([readiness.get("components", {})], use_container_width=True, hide_index=True)
@@ -1560,6 +1801,25 @@ def render_institutional_backtest(output: dict):
         if pipeline:
             with st.expander("Execution Pipeline", expanded=True):
                 st.dataframe(pipeline, use_container_width=True, hide_index=True)
+
+        performance_audit = output.get("performance_audit") or {}
+        if performance_audit:
+            st.markdown("**Performance Audit Report**")
+            perf_summary = {
+                "optimized_runtime_seconds": performance_audit.get("optimized_runtime_seconds"),
+                "previous_runtime_seconds": performance_audit.get("previous_runtime_seconds"),
+                "decisions_per_second": performance_audit.get("decisions_per_second"),
+                "equity_points": performance_audit.get("equity_points"),
+                "decisions": performance_audit.get("decisions"),
+                "complexity_notes": performance_audit.get("complexity_notes"),
+            }
+            st.dataframe(pd.DataFrame([perf_summary]), use_container_width=True, hide_index=True)
+            timings = pd.DataFrame(performance_audit.get("stage_timings") or [])
+            if not timings.empty:
+                st.dataframe(timings, use_container_width=True, hide_index=True)
+            with st.expander("Bottlenecks Removed"):
+                for item in performance_audit.get("bottlenecks_removed") or []:
+                    st.write(f"- {item}")
 
         equity = pd.DataFrame(output.get("equity_curve") or [])
         if not equity.empty:
@@ -1587,6 +1847,70 @@ def render_institutional_backtest(output: dict):
                 st.plotly_chart(fig_dd, use_container_width=True)
             except Exception as chart_error:
                 st.warning(f"Chart diagnostics: drawdown render failed — {chart_error}")
+
+            if not developer_mode:
+                recommendation_accuracy = output.get("recommendation_accuracy") or {}
+                st.markdown("### Recommendation Accuracy")
+                acc_cols = st.columns(7)
+                with acc_cols[0]:
+                    st.metric("Total Predictions", recommendation_accuracy.get("total_predictions", len(output.get("decision_log") or [])))
+                with acc_cols[1]:
+                    st.metric("Evaluated", recommendation_accuracy.get("evaluated_predictions", recommendation_accuracy.get("historical_recommendations_evaluated", 0)))
+                with acc_cols[2]:
+                    st.metric("Correct", recommendation_accuracy.get("correct_recommendations", 0))
+                with acc_cols[3]:
+                    st.metric("Accuracy", _pct(recommendation_accuracy.get("accuracy"), 2))
+                with acc_cols[4]:
+                    st.metric("BUY", _pct(recommendation_accuracy.get("buy_accuracy"), 2))
+                with acc_cols[5]:
+                    st.metric("HOLD", _pct(recommendation_accuracy.get("hold_accuracy"), 2))
+                with acc_cols[6]:
+                    st.metric("SELL", _pct(recommendation_accuracy.get("sell_accuracy"), 2))
+                pr_cols = st.columns(3)
+                with pr_cols[0]:
+                    st.metric("Precision", _pct(recommendation_accuracy.get("precision"), 2))
+                with pr_cols[1]:
+                    st.metric("Recall", _pct(recommendation_accuracy.get("recall"), 2))
+                with pr_cols[2]:
+                    st.metric("F1", _pct(recommendation_accuracy.get("f1"), 2))
+                if recommendation_accuracy.get("status") != "SUCCESS":
+                    st.warning("Recommendation Accuracy: UNAVAILABLE - External ground truth is not configured.")
+                else:
+                    class_rows = recommendation_accuracy.get("per_class_metrics") or []
+                    if class_rows:
+                        st.dataframe(class_rows, use_container_width=True, hide_index=True)
+                    confusion = recommendation_accuracy.get("confusion_matrix") or []
+                    if confusion:
+                        with st.expander("Confusion Matrix"):
+                            st.dataframe(confusion, use_container_width=True, hide_index=True)
+
+                st.markdown("### Strategy Comparison")
+                strategy_comparison = output.get("strategy_comparison") or {}
+                if strategy_comparison.get("status") == "SUCCESS":
+                    rows = strategy_comparison.get("summary") or []
+                    if rows:
+                        visible = ["strategy", "status", "cagr", "sharpe", "max_drawdown", "win_rate"]
+                        strategy_df = pd.DataFrame(rows)
+                        st.dataframe(strategy_df[[c for c in visible if c in strategy_df.columns]], use_container_width=True, hide_index=True)
+                    competition = strategy_comparison.get("competition") or {}
+                    champion = (competition.get("champion_strategy") or {}).get("strategy")
+                    if champion:
+                        st.success(f"Winning Strategy: {champion}")
+                else:
+                    st.info("Run a backtest to compare Agentic Strategy against Buy & Hold, Momentum, Technical, Mean Reversion, Factor, and Hybrid strategies.")
+
+                st.markdown("### Feature Evaluation")
+                feature_evaluation = output.get("feature_evaluation") or {}
+                feature_rows = feature_evaluation.get("rows") or []
+                if feature_rows:
+                    st.dataframe(feature_rows, use_container_width=True, hide_index=True)
+                if feature_evaluation.get("status") != "SUCCESS":
+                    st.info("Feature accuracy comparison requires external ground truth. No synthetic feature improvement is shown.")
+
+                portfolio_intel = output.get("portfolio_intelligence") or {}
+                if portfolio_intel:
+                    render_portfolio_intelligence_summary(portfolio_intel)
+                return
 
             equity["rolling_volatility"] = equity["daily_return"].rolling(21, min_periods=5).std() * (252 ** 0.5)
             try:
@@ -1623,6 +1947,16 @@ def render_institutional_backtest(output: dict):
         if consistency:
             st.markdown("**Consistency Audit**")
             st.dataframe(pd.DataFrame([consistency]), use_container_width=True, hide_index=True)
+
+        hard_failure = output.get("hard_failure_audit") or {}
+        if hard_failure:
+            st.markdown("**Hard Failure Conditions**")
+            st.dataframe(pd.DataFrame([hard_failure]), use_container_width=True, hide_index=True)
+
+        metric_value = output.get("metric_decision_value_audit") or []
+        if metric_value:
+            with st.expander("Metric Decision-Value Audit"):
+                st.dataframe(metric_value, use_container_width=True, hide_index=True)
 
         decisions = pd.DataFrame(output.get("decision_log") or [])
         if not decisions.empty:
@@ -1686,6 +2020,10 @@ def render_institutional_backtest(output: dict):
                     "return_90d",
                     "return_180d",
                     "return_365d",
+                    "expected_return",
+                    "actual_return",
+                    "prediction_error",
+                    "direction_accuracy",
                     "max_gain_30d",
                     "max_loss_30d",
                     "risk_adjusted_outcome_30d",
@@ -1701,6 +2039,55 @@ def render_institutional_backtest(output: dict):
                     st.dataframe(validation[[c for c in attribution_cols if c in validation.columns]], use_container_width=True, hide_index=True)
             else:
                 st.warning("Decision validation report unavailable for this run.")
+
+            prediction_quality = output.get("prediction_quality_report") or {}
+            if prediction_quality:
+                st.markdown("**Prediction Accuracy Report**")
+                st.dataframe(pd.DataFrame([prediction_quality]), use_container_width=True, hide_index=True)
+
+            agent_scoreboard = output.get("agent_scoreboard") or {}
+            if agent_scoreboard:
+                st.markdown("**Builder / Critic / Judge Scoreboard**")
+                st.dataframe(pd.DataFrame([agent_scoreboard.get("summary") or {}]), use_container_width=True, hide_index=True)
+                agent_rows = pd.DataFrame(agent_scoreboard.get("rows") or [])
+                if not agent_rows.empty:
+                    with st.expander("Agent Evaluation Rows"):
+                        st.dataframe(agent_rows, use_container_width=True, hide_index=True)
+
+            recommendation_accuracy = output.get("recommendation_accuracy") or {}
+            if recommendation_accuracy:
+                st.markdown("**Recommendation Accuracy vs External Ground Truth**")
+                acc_cols = st.columns(5)
+                with acc_cols[0]:
+                    st.metric("Ground Truth", recommendation_accuracy.get("ground_truth_source", recommendation_accuracy.get("status", "UNAVAILABLE")))
+                with acc_cols[1]:
+                    st.metric("Evaluated", recommendation_accuracy.get("historical_recommendations_evaluated", 0))
+                with acc_cols[2]:
+                    st.metric("Correct", recommendation_accuracy.get("correct_recommendations", 0))
+                with acc_cols[3]:
+                    st.metric("Incorrect", recommendation_accuracy.get("incorrect_recommendations", 0))
+                with acc_cols[4]:
+                    st.metric("Accuracy", _pct(recommendation_accuracy.get("accuracy"), 2))
+                if recommendation_accuracy.get("status") == "UNAVAILABLE":
+                    st.warning(recommendation_accuracy.get("message", "External recommendation ground truth unavailable."))
+                    with st.expander("Ground Truth Source Research"):
+                        st.dataframe(recommendation_accuracy.get("source_research") or [], use_container_width=True, hide_index=True)
+                        config = recommendation_accuracy.get("configuration") or {}
+                        if config:
+                            st.dataframe(pd.DataFrame([config]), use_container_width=True, hide_index=True)
+                else:
+                    accuracy_rows = pd.DataFrame(recommendation_accuracy.get("evaluated_rows") or [])
+                    if not accuracy_rows.empty:
+                        st.dataframe(accuracy_rows.head(300), use_container_width=True, hide_index=True)
+                    for label, key in [
+                        ("Ticker Accuracy", "ticker_accuracy"),
+                        ("Monthly Accuracy", "rolling_monthly_accuracy"),
+                        ("Regime Accuracy", "regime_accuracy"),
+                    ]:
+                        rows = recommendation_accuracy.get(key) or []
+                        if rows:
+                            with st.expander(label):
+                                st.dataframe(rows, use_container_width=True, hide_index=True)
 
             with st.expander("Raw Decision Log"):
                 visible_cols = ["as_of_date", "ticker", "decision", "confidence", "target_weight", "future_return", "outcome", "regime"]
@@ -1738,7 +2125,7 @@ def render_institutional_backtest(output: dict):
                 render_portfolio_intelligence_summary(portfolio_intel)
 
         with st.expander("Backtest Configuration"):
-            st.json(config)
+            st.dataframe(pd.DataFrame([config]), use_container_width=True, hide_index=True)
         report = output.get("institutional_report") or {}
         if report:
             with st.expander("Institutional Report"):
@@ -1753,6 +2140,9 @@ def render_institutional_backtest(output: dict):
                     ("Learning Summary", "learning_summary"),
                     ("Data Quality / Leakage", "data_quality_analysis"),
                     ("Consistency Audit", "consistency_audit"),
+                    ("Hard Failure Conditions", "hard_failure_audit"),
+                    ("Performance Audit", "performance_audit"),
+                    ("Metric Decision-Value Audit", "metric_decision_value_audit"),
                     ("Institutional Readiness", "institutional_readiness"),
                 ]
                 for title, key in sections:
@@ -1778,14 +2168,21 @@ def render_institutional_backtest(output: dict):
         data_quality = output.get("data_quality_audit") or {}
         if data_quality:
             with st.expander("Data Quality / Leakage Audit"):
-                st.json(data_quality)
+                flat_quality = {k: v for k, v in data_quality.items() if not isinstance(v, (dict, list))}
+                if flat_quality:
+                    st.dataframe(pd.DataFrame([flat_quality]), use_container_width=True, hide_index=True)
+                for key in ["benchmark_resolution", "dataset_audit"]:
+                    payload = data_quality.get(key)
+                    if payload:
+                        st.markdown(f"**{key.replace('_', ' ').title()}**")
+                        st.dataframe(pd.DataFrame([payload]), use_container_width=True, hide_index=True)
     except Exception as e:
         st.error(f"Could not render institutional backtest: {e}")
 
 
 def institutional_backtesting_interface():
     st.subheader("Institutional Backtesting")
-    st.caption("Capital simulation, deterministic decisions, benchmark comparison, trade logs, calibration, and regime-segmented evaluation.")
+    st.caption("Accuracy-first backtesting: recommendation, trust, benchmark edge, and portfolio intelligence only.")
 
     try:
         from evaluation_engine import load_dataset, run_institutional_backtest
@@ -1808,7 +2205,7 @@ def institutional_backtesting_interface():
     )
     parsed = parse_portfolio_input(portfolio_raw)
     if portfolio_raw and parsed.get("status") == "SUCCESS":
-        st.dataframe(parsed.get("holdings", []), use_container_width=True, hide_index=True)
+        st.success(f"Parsed {len(parsed.get('holdings', []))} holding(s).")
         for issue in parsed.get("issues", []):
             st.caption(f"Parser note: {issue}")
     elif portfolio_raw:
@@ -1921,7 +2318,10 @@ def institutional_backtesting_interface():
                 )
                 st.session_state["last_institutional_backtest"] = output
             progress.progress(1.0)
-            status_box.success("Institutional backtest complete.")
+            if str(output.get("status")) == "SUCCESS":
+                status_box.success("Institutional backtest complete.")
+            else:
+                status_box.warning("Backtest completed with audit review items.")
         except Exception as e:
             status_box.error(f"Backtest failed: {e}")
 
@@ -2090,6 +2490,7 @@ def evaluation_lab_interface():
             run_historical_replay,
             run_multi_horizon_backtest,
             run_factor_research,
+            rank_predictive_factors,
             run_portfolio_backtest,
             run_strategy_backtest,
             run_strategy_comparison,
@@ -2362,6 +2763,23 @@ def evaluation_lab_interface():
             if rows:
                 st.markdown("**Strategy Comparison Framework**")
                 st.dataframe(rows, use_container_width=True, hide_index=True)
+                competition = comparison.get("competition") or {}
+                if competition:
+                    st.markdown("**Strategy Arena Verdict**")
+                    st.dataframe(
+                        pd.DataFrame(
+                            [
+                                {
+                                    "champion": (competition.get("champion_strategy") or {}).get("strategy"),
+                                    "runner_up": (competition.get("runner_up_strategy") or {}).get("strategy"),
+                                    "worst": (competition.get("worst_strategy") or {}).get("strategy"),
+                                    "scoring_rule": competition.get("scoring_rule"),
+                                }
+                            ]
+                        ),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
 
     with tab_factor:
         st.caption("Evaluate whether a deterministic factor had historical forward-return signal quality.")
@@ -2397,6 +2815,22 @@ def evaluation_lab_interface():
                 )
             except Exception as e:
                 st.error(f"Factor research failed: {e}")
+        if st.button("Rank Predictive Factors", use_container_width=True):
+            if not all([factor_ticker, factor_start_raw, factor_end_raw, factor_horizon]):
+                st.error("Complete ticker, dates, and horizon before ranking factors.")
+                return
+            try:
+                factor_start = datetime.strptime(factor_start_raw, "%Y-%m-%d").date()
+                factor_end = datetime.strptime(factor_end_raw, "%Y-%m-%d").date()
+                st.session_state["last_factor_ranking"] = rank_predictive_factors(
+                    factor_ticker,
+                    factor_start,
+                    factor_end,
+                    int(factor_horizon),
+                    dataset=dataset,
+                )
+            except Exception as e:
+                st.error(f"Factor ranking failed: {e}")
         if st.session_state.get("last_factor_research"):
             import pandas as pd
             import plotly.express as px
@@ -2450,6 +2884,15 @@ def evaluation_lab_interface():
                     except Exception as chart_error:
                         st.warning(f"Chart diagnostics: factor bucket render failed — {chart_error}")
 
+        if st.session_state.get("last_factor_ranking"):
+            ranking = st.session_state["last_factor_ranking"]
+            st.markdown("**Top Predictive / Worst Factors**")
+            if ranking.get("status") != "SUCCESS":
+                reasons = [str(item.get("reason")) for item in ranking.get("errors", [])[:3]]
+                st.warning("Factor ranking unavailable: " + ("; ".join(reasons) if reasons else "insufficient observations"))
+            else:
+                st.dataframe(pd.DataFrame(ranking.get("ranking") or []), use_container_width=True, hide_index=True)
+
     with tab_calibration:
         runs = load_evaluation_runs(limit=5000)
         if not runs:
@@ -2498,26 +2941,12 @@ def main():
     render_hero()
 
     st.sidebar.title("Navigation")
-    page = st.sidebar.radio(
-        "Select Module",
-        [
-            "Institutional Backtesting",
-            "Portfolio Analysis",
-            "Stock Research",
-            "Evaluation Lab",
-            "Strategy Lab",
-            "Factor Research Lab",
-            "Calibration Center",
-            "Historical Replay",
-            "Agent Debate Center",
-            "Market Sentiment",
-            "AI Recommendation",
-            "Risk Intelligence",
-        ],
-        index=0,
-    )
+    visible_modules = ["Ajay Demo"]
+    st.sidebar.caption("Ajay demo mode: Institutional Backtesting + Recommendation Accuracy + Portfolio Intelligence only.")
 
-    if page == "Institutional Backtesting":
+    page = st.sidebar.radio("Select Module", visible_modules, index=0)
+
+    if page == "Ajay Demo":
         institutional_backtesting_interface()
     elif page == "Stock Research":
         stock_analysis_interface()
