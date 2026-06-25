@@ -2,7 +2,7 @@
 TradingView Market Data Tools
 Get comprehensive market data including company info, financials, dividends, analyst recommendations
 """
-
+import json
 import os
 import requests
 from typing import Dict, Any
@@ -129,10 +129,15 @@ def get_dividend_info(symbol: str) -> Dict[str, Any]:
     return get_market_data(symbol, "dividend")
 
 
-def get_analyst_recommendations(symbol: str) -> Dict[str, Any]:
-    """Get analyst recommendations and price targets."""
-    return get_market_data(symbol, "analyst-recommendations")
+# def get_analyst_recommendations(symbol: str) -> Dict[str, Any]:
+#     """Get analyst recommendations and price targets."""
+#     return get_market_data(symbol, "analyst-recommendations")
 
+def get_analyst_recommendations(symbol: str):
+    return get_market_data(
+        symbol,
+        "analyst-recommendations"
+    )
 
 def get_current_metrics(symbol: str) -> Dict[str, Any]:
     """Get current market metrics and ratios."""
@@ -196,10 +201,45 @@ if __name__ == "__main__":
         print(f"Error: {result['message']}")
     
     # Test analyst recommendations
+    # print("\n=== Testing Analyst Recommendations ===")
+    # analyst_result = get_analyst_recommendations("AAPL")
+    # print(f"Status: {analyst_result['status']}")
+    # if analyst_result['status'] == 'SUCCESS':
+    #     print(f"Data keys: {list(analyst_result['data'].keys())}")
+    # else:
+    #     print(f"Error: {analyst_result['message']}")
+
+
     print("\n=== Testing Analyst Recommendations ===")
     analyst_result = get_analyst_recommendations("AAPL")
+
     print(f"Status: {analyst_result['status']}")
+
     if analyst_result['status'] == 'SUCCESS':
-        print(f"Data keys: {list(analyst_result['data'].keys())}")
+        print("\nFULL RESPONSE:")
+        print(json.dumps(analyst_result, indent=2))
+        data = analyst_result["data"]["data"]["analyst_recommendations"]
+        print("\nFIELDS:")
+        for key in data.keys():
+            print(key)
     else:
         print(f"Error: {analyst_result['message']}")
+
+print("\n=== HISTORY ANNUAL ===")
+
+history_result = get_market_data(
+    "AAPL",
+    "history-annual"
+)
+
+print(json.dumps(history_result, indent=2)[:5000])
+
+
+print("\n=== HISTORY QUARTERLY ===")
+
+history_result = get_market_data(
+    "AAPL",
+    "history-quarterly"
+)
+
+print(json.dumps(history_result, indent=2)[:5000])
