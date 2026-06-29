@@ -11,8 +11,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE_URL = "https://tradingview-data1.p.rapidapi.com"
-API_KEY = os.getenv("RAPIDAPI_KEY")
+BASE_URL = "https://trading-view.p.rapidapi.com"
 
 # Import price tool for getting historical data
 try:

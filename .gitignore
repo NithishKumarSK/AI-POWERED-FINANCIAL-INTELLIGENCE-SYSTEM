@@ -1,7 +1,12 @@
-# Environment variables
+# Environment variables — never commit real credentials
 .env
 .env.real
 .env.local
+.env.*
+!.env.example
+*.key
+*.pem
+.streamlit/secrets.toml
 
 # Python
 __pycache__/

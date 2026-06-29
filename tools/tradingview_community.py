@@ -10,8 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE_URL = "https://tradingview-data1.p.rapidapi.com"
-API_KEY = os.getenv("RAPIDAPI_KEY")
+BASE_URL = "https://trading-view.p.rapidapi.com"
 
 
 def get_community_data(symbol: str = None) -> Dict[str, Any]:
@@ -41,8 +40,8 @@ def get_hot_ideas() -> Dict[str, Any]:
         url = f"{BASE_URL}/api/ideas/hot"
         headers = {
             "Content-Type": "application/json",
-            "x-rapidapi-host": "tradingview-data1.p.rapidapi.com",
-            "x-rapidapi-key": API_KEY
+            "x-rapidapi-host": "trading-view.p.rapidapi.com",
+            "x-rapidapi-key": os.getenv("RAPIDAPI_KEY", "")
         }
         
         response = requests.get(url, headers=headers, timeout=30)
@@ -78,8 +77,8 @@ def get_editors_picks() -> Dict[str, Any]:
         url = f"{BASE_URL}/api/ideas/editors-picks"
         headers = {
             "Content-Type": "application/json",
-            "x-rapidapi-host": "tradingview-data1.p.rapidapi.com",
-            "x-rapidapi-key": API_KEY
+            "x-rapidapi-host": "trading-view.p.rapidapi.com",
+            "x-rapidapi-key": os.getenv("RAPIDAPI_KEY", "")
         }
         
         response = requests.get(url, headers=headers, timeout=30)
@@ -123,8 +122,8 @@ def get_symbol_ideas(symbol: str) -> Dict[str, Any]:
         url = f"{BASE_URL}/api/ideas/{formatted_symbol}"
         headers = {
             "Content-Type": "application/json",
-            "x-rapidapi-host": "tradingview-data1.p.rapidapi.com",
-            "x-rapidapi-key": API_KEY
+            "x-rapidapi-host": "trading-view.p.rapidapi.com",
+            "x-rapidapi-key": os.getenv("RAPIDAPI_KEY", "")
         }
         
         response = requests.get(url, headers=headers, timeout=30)

@@ -11,8 +11,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE_URL = "https://tradingview-data1.p.rapidapi.com"
-API_KEY = os.getenv("RAPIDAPI_KEY")
+BASE_URL = "https://trading-view.p.rapidapi.com"
 
 
 def get_calendar(calendar_type: str, from_timestamp: int = None, to_timestamp: int = None) -> Dict[str, Any]:
@@ -32,8 +31,8 @@ def get_calendar(calendar_type: str, from_timestamp: int = None, to_timestamp: i
     try:
         url = f"{BASE_URL}/api/calendar/{calendar_type}"
         headers = {
-            "x-rapidapi-host": "tradingview-data1.p.rapidapi.com",
-            "x-rapidapi-key": API_KEY
+            "x-rapidapi-host": "trading-view.p.rapidapi.com",
+            "x-rapidapi-key": os.getenv("RAPIDAPI_KEY", "")
         }
         
         params = {}

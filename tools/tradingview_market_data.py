@@ -10,8 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE_URL = "https://tradingview-data1.p.rapidapi.com"
-API_KEY = os.getenv("RAPIDAPI_KEY")
+BASE_URL = "https://trading-view.p.rapidapi.com"
 
 
 def get_market_data(symbol: str, endpoint: str = "") -> Dict[str, Any]:
@@ -35,8 +34,8 @@ def get_market_data(symbol: str, endpoint: str = "") -> Dict[str, Any]:
         
         headers = {
             "Content-Type": "application/json",
-            "x-rapidapi-host": "tradingview-data1.p.rapidapi.com",
-            "x-rapidapi-key": API_KEY
+            "x-rapidapi-host": "trading-view.p.rapidapi.com",
+            "x-rapidapi-key": os.getenv("RAPIDAPI_KEY", "")
         }
         
         response = requests.get(url, headers=headers, timeout=30)
@@ -80,8 +79,8 @@ def get_market_data_exact(symbol: str, exchange: str = "NASDAQ") -> Dict[str, An
         url = f"{BASE_URL}/api/market-data/{exchange}:{symbol}"
         
         headers = {
-            "x-rapidapi-host": "tradingview-data1.p.rapidapi.com",
-            "x-rapidapi-key": API_KEY
+            "x-rapidapi-host": "trading-view.p.rapidapi.com",
+            "x-rapidapi-key": os.getenv("RAPIDAPI_KEY", "")
         }
         
         response = requests.get(url, headers=headers, timeout=30)
@@ -225,21 +224,10 @@ if __name__ == "__main__":
     else:
         print(f"Error: {analyst_result['message']}")
 
-print("\n=== HISTORY ANNUAL ===")
+    print("\n=== HISTORY ANNUAL ===")
+    history_result = get_market_data("AAPL", "history-annual")
+    print(json.dumps(history_result, indent=2)[:5000])
 
-history_result = get_market_data(
-    "AAPL",
-    "history-annual"
-)
-
-print(json.dumps(history_result, indent=2)[:5000])
-
-
-print("\n=== HISTORY QUARTERLY ===")
-
-history_result = get_market_data(
-    "AAPL",
-    "history-quarterly"
-)
-
-print(json.dumps(history_result, indent=2)[:5000])
+    print("\n=== HISTORY QUARTERLY ===")
+    history_result = get_market_data("AAPL", "history-quarterly")
+    print(json.dumps(history_result, indent=2)[:5000])

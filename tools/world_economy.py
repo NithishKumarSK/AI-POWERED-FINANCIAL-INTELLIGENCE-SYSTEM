@@ -10,8 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE_URL = "https://tradingview-data1.p.rapidapi.com"
-API_KEY = os.getenv("RAPIDAPI_KEY")
+BASE_URL = "https://trading-view.p.rapidapi.com"
 
 
 def get_world_economy_indicator(indicator: str, region: str = "g20") -> Dict[str, Any]:
@@ -28,8 +27,8 @@ def get_world_economy_indicator(indicator: str, region: str = "g20") -> Dict[str
     try:
         url = f"{BASE_URL}/api/world-economy/indicators/{indicator}"
         headers = {
-            "x-rapidapi-host": "tradingview-data1.p.rapidapi.com",
-            "x-rapidapi-key": API_KEY
+            "x-rapidapi-host": "trading-view.p.rapidapi.com",
+            "x-rapidapi-key": os.getenv("RAPIDAPI_KEY", "")
         }
         params = {
             "region": region

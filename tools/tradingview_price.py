@@ -11,8 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # TradingView API base URL (using RapidAPI endpoint as provided)
-BASE_URL = "https://tradingview-data1.p.rapidapi.com"
-API_KEY = os.getenv("RAPIDAPI_KEY")
+BASE_URL = "https://trading-view.p.rapidapi.com"
 
 
 def validate_symbol(symbol: str) -> bool:
@@ -30,8 +29,8 @@ def validate_symbol(symbol: str) -> bool:
         url = f"{BASE_URL}/api/price/{formatted_symbol}"
         headers = {
             "Content-Type": "application/json",
-            "x-rapidapi-host": "tradingview-data1.p.rapidapi.com",
-            "x-rapidapi-key": API_KEY
+            "x-rapidapi-host": "trading-view.p.rapidapi.com",
+            "x-rapidapi-key": os.getenv("RAPIDAPI_KEY", "")
         }
         
         response = requests.get(url, headers=headers, timeout=10)
@@ -146,8 +145,8 @@ def get_price(symbol: str) -> Dict[str, Any]:
         url = f"{BASE_URL}/api/price/{formatted_symbol}"
         headers = {
             "Content-Type": "application/json",
-            "x-rapidapi-host": "tradingview-data1.p.rapidapi.com",
-            "x-rapidapi-key": API_KEY
+            "x-rapidapi-host": "trading-view.p.rapidapi.com",
+            "x-rapidapi-key": os.getenv("RAPIDAPI_KEY", "")
         }
         
         response = requests.get(url, headers=headers, timeout=30)
@@ -191,8 +190,8 @@ def get_batch_prices(symbols: List[str]) -> Dict[str, Any]:
         url = f"{BASE_URL}/api/price/batch"
         headers = {
             "Content-Type": "application/json",
-            "x-rapidapi-host": "tradingview-data1.p.rapidapi.com",
-            "x-rapidapi-key": API_KEY
+            "x-rapidapi-host": "trading-view.p.rapidapi.com",
+            "x-rapidapi-key": os.getenv("RAPIDAPI_KEY", "")
         }
         
         # According to API documentation, batch format should be:

@@ -10,8 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE_URL = "https://tradingview-data1.p.rapidapi.com"
-API_KEY = os.getenv("RAPIDAPI_KEY")
+BASE_URL = "https://trading-view.p.rapidapi.com"
 
 
 def format_symbol(symbol: str) -> str:
@@ -65,8 +64,8 @@ def get_technical_analysis(symbol: str) -> Dict[str, Any]:
         url = f"{BASE_URL}/api/ta/{formatted_symbol}"
         headers = {
             "Content-Type": "application/json",
-            "x-rapidapi-host": "tradingview-data1.p.rapidapi.com",
-            "x-rapidapi-key": API_KEY
+            "x-rapidapi-host": "trading-view.p.rapidapi.com",
+            "x-rapidapi-key": os.getenv("RAPIDAPI_KEY", "")
         }
         
         response = requests.get(url, headers=headers, timeout=30)
@@ -110,8 +109,8 @@ def get_technical_indicators(symbol: str) -> Dict[str, Any]:
         url = f"{BASE_URL}/api/ta/{formatted_symbol}/indicators"
         headers = {
             "Content-Type": "application/json",
-            "x-rapidapi-host": "tradingview-data1.p.rapidapi.com",
-            "x-rapidapi-key": API_KEY
+            "x-rapidapi-host": "trading-view.p.rapidapi.com",
+            "x-rapidapi-key": os.getenv("RAPIDAPI_KEY", "")
         }
         
         response = requests.get(url, headers=headers, timeout=30)

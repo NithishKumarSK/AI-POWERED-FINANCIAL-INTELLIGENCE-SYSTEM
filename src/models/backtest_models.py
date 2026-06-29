@@ -1,0 +1,204 @@
+"""Pydantic / dataclass models for tastytrade backtest payloads and results."""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from decimal import Decimal
+from typing import Any, Dict, List, Optional
+
+
+# ---------------------------------------------------------------------------
+# Payload models (sent to API)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class BacktestLeg:
+    """A single options leg in the backtest payload.
+
+    type MUST be "equity-option" — any other value returns type=unknown, statistics=null.
+    direction MUST be "short" or "long" (not "sell"/"buy").
+    """
+    type: str = "equity-option"
+    direction: str = "short"
+    quantity: int = 1
+    side: str = "put"
+    days_until_expiration: int = 45
+    strike_selection: str = "delta"
+    delta: int = 30
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "type": self.type,
+            "direction": self.direction,
+            "quantity": self.quantity,
+            "side": self.side,
+            "daysUntilExpiration": self.days_until_expiration,
+            "strikeSelection": self.strike_selection,
+            "delta": self.delta,
+        }
+
+
+@dataclass
+class BacktestPayload:
+    """Full payload sent to POST /backtests."""
+    symbol: str
+    start_date: str
+    end_date: str
+    legs: List[BacktestLeg] = field(default_factory=list)
+    entry_frequency: str = "every day"
+    status: str = "pending"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "startDate": self.start_date,
+            "endDate": self.end_date,
+            "symbol": self.symbol,
+            "status": self.status,
+            "entryConditions": {"frequency": self.entry_frequency},
+            "exitConditions": {},
+            "legs": [leg.to_dict() for leg in self.legs],
+        }
+
+
+# ---------------------------------------------------------------------------
+# Response models (parsed from API)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class BacktestSnapshot:
+    """One price snapshot entry from a backtest trial."""
+    date: str
+    profit_loss: Decimal
+    open_price: Optional[Decimal] = None
+    close_price: Optional[Decimal] = None
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "BacktestSnapshot":
+        def _dec(v: Any) -> Optional[Decimal]:
+            try:
+                return Decimal(str(v)) if v is not None else None
+            except Exception:
+                return None
+
+        return cls(
+            date=str(d.get("date", "")),
+            profit_loss=_dec(d.get("profitLoss") or d.get("profit_loss") or "0") or Decimal("0"),
+            open_price=_dec(d.get("openPrice") or d.get("open_price")),
+            close_price=_dec(d.get("closePrice") or d.get("close_price")),
+        )
+
+
+@dataclass
+class BacktestTrial:
+    """One complete trial (open → close) within a backtest."""
+    entry_date: str
+    exit_date: str
+    profit_loss: Decimal
+    snapshots: List[BacktestSnapshot] = field(default_factory=list)
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "BacktestTrial":
+        def _dec(v: Any) -> Decimal:
+            try:
+                return Decimal(str(v)) if v is not None else Decimal("0")
+            except Exception:
+                return Decimal("0")
+
+        snaps = [BacktestSnapshot.from_dict(s) for s in (d.get("snapshots") or [])]
+        return cls(
+            entry_date=str(d.get("entryDate") or d.get("entry_date") or ""),
+            exit_date=str(d.get("exitDate") or d.get("exit_date") or ""),
+            profit_loss=_dec(d.get("profitLoss") or d.get("profit_loss")),
+            snapshots=snaps,
+            raw=d,
+        )
+
+
+@dataclass
+class BacktestStatistics:
+    """Aggregate statistics returned by the backtester."""
+    total_profit_loss: Decimal
+    win_rate: float
+    average_profit_loss: Decimal
+    num_trades: int
+    num_wins: int
+    num_losses: int
+    max_profit: Decimal
+    max_loss: Decimal
+    sharpe_ratio: Optional[float] = None
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "BacktestStatistics":
+        def _dec(v: Any) -> Decimal:
+            try:
+                return Decimal(str(v)) if v is not None else Decimal("0")
+            except Exception:
+                return Decimal("0")
+
+        def _f(v: Any, default: float = 0.0) -> float:
+            try:
+                return float(v) if v is not None else default
+            except Exception:
+                return default
+
+        def _i(v: Any) -> int:
+            try:
+                return int(v) if v is not None else 0
+            except Exception:
+                return 0
+
+        return cls(
+            total_profit_loss=_dec(d.get("totalProfitLoss") or d.get("total_profit_loss")),
+            win_rate=_f(d.get("winRate") or d.get("win_rate")),
+            average_profit_loss=_dec(d.get("averageProfitLoss") or d.get("average_profit_loss")),
+            num_trades=_i(d.get("numTrades") or d.get("num_trades") or d.get("numberOfTrades")),
+            num_wins=_i(d.get("numWins") or d.get("num_wins")),
+            num_losses=_i(d.get("numLosses") or d.get("num_losses")),
+            max_profit=_dec(d.get("maxProfit") or d.get("max_profit")),
+            max_loss=_dec(d.get("maxLoss") or d.get("max_loss")),
+            sharpe_ratio=_f(d.get("sharpeRatio") or d.get("sharpe_ratio")) or None,
+            raw=d,
+        )
+
+
+@dataclass
+class BacktestResult:
+    """Complete backtest result including trials and statistics."""
+    backtest_id: str
+    symbol: str
+    status: str
+    leg_type: str
+    trials: List[BacktestTrial]
+    statistics: Optional[BacktestStatistics]
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def is_valid(self) -> bool:
+        """True only when the result contains real data (not unknown/null)."""
+        if self.leg_type == "unknown":
+            return False
+        if self.statistics is None:
+            return False
+        if not self.trials:
+            return False
+        all_zero = all(t.profit_loss == Decimal("0") for t in self.trials)
+        if all_zero and len(self.trials) > 0:
+            return False
+        return True
+
+
+@dataclass
+class BacktestValidationResult:
+    """Validation gate result for a BacktestResult."""
+    passed: bool
+    reasons: List[str] = field(default_factory=list)
+    result: Optional[BacktestResult] = None
+
+    @classmethod
+    def fail(cls, *reasons: str) -> "BacktestValidationResult":
+        return cls(passed=False, reasons=list(reasons))
+
+    @classmethod
+    def ok(cls, result: BacktestResult) -> "BacktestValidationResult":
+        return cls(passed=True, reasons=[], result=result)

@@ -10,6 +10,7 @@ import time
 import warnings
 import json
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from typing import Dict, Any, List
 from dotenv import load_dotenv
 
@@ -21,7 +22,8 @@ try:
 except ModuleNotFoundError:
     genai = None
 
-load_dotenv()
+_AGENT_ROOT = Path(__file__).resolve().parent
+load_dotenv(_AGENT_ROOT / ".env", override=True)
 
 # Add tools directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'tools'))
@@ -557,31 +559,52 @@ def sentiment_score(news_result: Dict[str, Any], community_result: Dict[str, Any
     score = None
 
     # News: keyword sentiment on titles (no inference beyond explicit text)
-    news_payload = _payload(news_result) or {}
+    news_payload = _payload(news_result)  # may be None for list-style responses
     articles = None
     if isinstance(news_payload, list):
         articles = news_payload
     elif isinstance(news_payload, dict):
         articles = news_payload.get("data") if isinstance(news_payload.get("data"), list) else news_payload.get("articles")
+    # Also handle new format: news_result["data"] is a direct list of articles
+    if articles is None and isinstance(news_result, dict) and news_result.get("status") == "SUCCESS":
+        raw_data = news_result.get("data")
+        if isinstance(raw_data, list):
+            articles = raw_data
     if not isinstance(articles, list):
         missing.append("news.articles")
     else:
         bulls = 0
         bears = 0
+        _BULL_KW = [
+            "beats", "beat", "upgrade", "upgraded", "raises guidance", "record",
+            "surge", "rally", "gains", "gain", "rises", "rise", "jumped", "jumps",
+            "soars", "soar", "buying opportunity", "outperform", "buy", "strong",
+            "positive", "growth", "breakout", "bullish",
+        ]
+        _BEAR_KW = [
+            "misses", "miss", "downgrade", "downgraded", "cuts guidance", "plunge",
+            "lawsuit", "probe", "lower", "falls", "fall", "drops", "drop", "tumbles",
+            "decline", "declines", "sell", "weak", "warning", "loss", "bearish",
+            "concern", "cut", "layoffs",
+        ]
         for a in articles[:50]:
             if not isinstance(a, dict):
                 continue
             title = (a.get("title") or a.get("headline") or "").lower()
             if not title:
                 continue
-            if any(k in title for k in ["beats", "beat", "upgrade", "upgraded", "raises guidance", "record", "surge", "rally"]):
+            if any(k in title for k in _BULL_KW):
                 bulls += 1
-            if any(k in title for k in ["misses", "miss", "downgrade", "downgraded", "cuts guidance", "plunge", "lawsuit", "probe"]):
+            if any(k in title for k in _BEAR_KW):
                 bears += 1
 
         if bulls or bears:
             score = 50.0 + (bulls - bears) * 6.0
             factors.append({"factor": "News title balance", "impact": _clamp_score(score) - 50, "value": {"bull": bulls, "bear": bears}})
+        elif len(articles) > 0:
+            # Articles present but no strong sentiment keywords — treat as neutral
+            score = 50.0
+            factors.append({"factor": "News neutral (no keywords matched)", "impact": 0, "value": {"articles": len(articles)}})
 
     # Community sentiment (if available) as mild modifier
     comm_payload = _payload(community_result) or {}
@@ -751,7 +774,7 @@ def compute_intelligence_scores(
 
     if available == 0:
         composite = 0
-        verdict = "HOLD"
+        verdict = "REVIEW"
     elif composite >= 67:
         verdict = "BUY"
     elif composite <= 33:
@@ -1687,7 +1710,20 @@ class StockAnalysisAgent:
                 gdp_result=gdp_result,
                 interest_rates_result=interest_rates_result,
             )
-            
+
+            # If ALL core engines report Unavailable, mark for REVIEW
+            scores_dict = intelligence.get("scores", {})
+            all_unavailable = all(
+                scores_dict.get(k, {}).get("signal") == "Unavailable"
+                for k in ("fundamental", "technical", "valuation", "risk")
+            )
+            if all_unavailable:
+                intelligence["verdict"] = {"value": "REVIEW", "score": 0}
+                intelligence["data_error"] = {
+                    "type": "ALL_DATA_UNAVAILABLE",
+                    "message": "RapidAPI endpoints unavailable — use strategy prediction agent for options analysis.",
+                }
+
             return {
                 "status": "SUCCESS",
                 "symbol": symbol,
@@ -2085,7 +2121,10 @@ TECHNICAL INDICATORS:
             # Add news sentiment
             if news_result.get('status') == 'SUCCESS':
                 news_data = news_result.get('data', {})
-                if news_data.get('success') or news_data.get('news'):
+                has_news = (isinstance(news_data, list) and len(news_data) > 0) or (
+                    isinstance(news_data, dict) and (news_data.get('success') or news_data.get('news'))
+                )
+                if has_news:
                     data_summary += """
 RECENT NEWS SENTIMENT:
 - Current news articles and sentiment available
@@ -2499,10 +2538,12 @@ COMPREHENSIVE MARKET DATA (15 sections):
             # Add news summary
             if news_result.get('status') == 'SUCCESS':
                 news_data = news_result.get('data', {})
-                if news_data.get('success'):
+                if isinstance(news_data, list):
+                    data_summary += f"News Data: Available with {len(news_data)} recent news articles\n"
+                elif isinstance(news_data, dict) and news_data.get('success'):
                     data_summary += "News Data: Available with recent news articles\n"
                 else:
-                    data_summary += f"News Data: Available but API returned error - {news_data.get('msg', 'Unknown error')}\n"
+                    data_summary += "News Data: Available\n"
             else:
                 data_summary += f"News Data: {news_result.get('message', 'Not available')}\n"
             
@@ -2779,18 +2820,20 @@ DATA SOURCES STATUS (13 Tools Used):
         # Add news summary
         if news_result.get('status') == 'SUCCESS':
             news_data = news_result.get('data', {})
-            if news_data.get('success'):
+            report += f"NEWS SUMMARY:\n"
+            if isinstance(news_data, list):
+                report += f"Status: Data available\n"
+                report += f"Number of articles: {len(news_data)}\n"
+            elif isinstance(news_data, dict) and news_data.get('success'):
                 actual_news_data = news_data.get('data', {})
-                report += f"NEWS SUMMARY:\n"
                 report += f"Status: Data available\n"
                 if isinstance(actual_news_data, list):
                     report += f"Number of articles: {len(actual_news_data)}\n"
                 elif isinstance(actual_news_data, dict):
                     report += f"Data keys: {list(actual_news_data.keys())}\n"
-                report += "\n"
             else:
-                report += f"NEWS SUMMARY:\n"
-                report += f"Error: {news_data.get('msg', 'Data not available')}\n\n"
+                report += f"Status: Available\n"
+            report += "\n"
         
         report += f"{'='*80}\n"
         report += f"Report generated by Stock Analysis Agent\n"

@@ -10,8 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE_URL = "https://tradingview-data1.p.rapidapi.com"
-API_KEY = os.getenv("RAPIDAPI_KEY")
+BASE_URL = "https://trading-view.p.rapidapi.com"
 
 
 def get_editor_picks(page: int = 1, lang: str = "en") -> Dict[str, Any]:
@@ -28,8 +27,8 @@ def get_editor_picks(page: int = 1, lang: str = "en") -> Dict[str, Any]:
     try:
         url = f"{BASE_URL}/api/ideas/editors-picks"
         headers = {
-            "x-rapidapi-host": "tradingview-data1.p.rapidapi.com",
-            "x-rapidapi-key": API_KEY
+            "x-rapidapi-host": "trading-view.p.rapidapi.com",
+            "x-rapidapi-key": os.getenv("RAPIDAPI_KEY", "")
         }
         params = {
             "page": page,
@@ -75,8 +74,8 @@ def get_editor_picks_by_symbol(symbol: str, page: int = 1, lang: str = "en") -> 
     try:
         url = f"{BASE_URL}/api/ideas/editors-picks"
         headers = {
-            "x-rapidapi-host": "tradingview-data1.p.rapidapi.com",
-            "x-rapidapi-key": API_KEY
+            "x-rapidapi-host": "trading-view.p.rapidapi.com",
+            "x-rapidapi-key": os.getenv("RAPIDAPI_KEY", "")
         }
         params = {
             "page": page,
