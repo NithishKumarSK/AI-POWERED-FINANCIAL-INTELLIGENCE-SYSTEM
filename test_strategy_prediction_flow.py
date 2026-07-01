@@ -1071,5 +1071,512 @@ class TestO1ToO7ValidationRegressions:
         assert hasattr(strategy_validation, "validate_dates")
 
 
+class TestPortfolioModeDetection:
+    """Portfolio mode detection and routing tests."""
+
+    def test_detect_single_symbol_aapl(self):
+        """Single ticker AAPL must route to single_strategy mode."""
+        from portfolio_mode import detect_input_mode
+        assert detect_input_mode("AAPL") == "single_strategy"
+
+    def test_detect_portfolio_weighted_space(self):
+        """Space-separated weighted tickers must route to portfolio mode."""
+        from portfolio_mode import detect_input_mode
+        assert detect_input_mode("GOOGL 50% AAPL 20% TSLA 20% MSFT 10%") == "portfolio"
+
+    def test_detect_portfolio_weighted_commas(self):
+        """Comma-separated weighted tickers must route to portfolio mode."""
+        from portfolio_mode import detect_input_mode
+        assert detect_input_mode("GOOGL 50%, AAPL 30%, MSFT 20%") == "portfolio"
+
+    def test_parse_portfolio_weights_sum_100(self):
+        """parse_and_validate_portfolio must succeed when weights sum to 100."""
+        from portfolio_mode import parse_and_validate_portfolio
+        result = parse_and_validate_portfolio("AAPL 50% MSFT 50%", 100000)
+        assert result["status"] == "SUCCESS", f"Expected SUCCESS, got: {result}"
+        assert len(result["holdings"]) == 2
+
+    def test_portfolio_does_not_use_single_symbol_validator_on_raw_string(self):
+        """The raw portfolio string must never be passed to validate_strategy_input."""
+        from portfolio_mode import detect_input_mode
+        from strategy_validation import validate_strategy_input
+        raw = "GOOGL 50% AAPL 20% TSLA 20% MSFT 10%"
+        mode = detect_input_mode(raw)
+        assert mode == "portfolio", "Portfolio string must be detected as portfolio mode"
+        # validate_strategy_input would block this as invalid symbol — confirm it does
+        si = {
+            "symbol": raw, "direction": "BULLISH", "side": "SELL",
+            "start_date": "2023-01-01", "end_date": "2024-01-01",
+            "initial_capital": 10000, "dte": 30, "delta": 0.30,
+            "legs": 1, "entry_frequency": "weekly",
+        }
+        ok, _ = validate_strategy_input(si)
+        assert not ok, "Raw portfolio string MUST fail single-symbol validation (confirms routing matters)"
+
+    def test_portfolio_validates_each_symbol_individually(self):
+        """Each ticker in portfolio must pass individual symbol validation."""
+        from portfolio_mode import parse_and_validate_portfolio
+        result = parse_and_validate_portfolio("AAPL 60% MSFT 40%", 50000)
+        assert result["status"] == "SUCCESS"
+        tickers = [h["ticker"] for h in result["holdings"]]
+        assert "AAPL" in tickers
+        assert "MSFT" in tickers
+
+    def test_portfolio_invalid_weight_blocks(self):
+        """Portfolio with weights that don't sum near 100 must return ERROR or issues."""
+        from portfolio_mode import parse_and_validate_portfolio
+        result = parse_and_validate_portfolio("AAPL 10% MSFT 10%", 10000)
+        # weights sum to 20% — parser must flag this
+        is_error = result["status"] == "ERROR" or len(result.get("issues", [])) > 0
+        assert is_error, f"Weights summing to 20% must produce error/issues. Got: {result}"
+
+    def test_single_strategy_still_blocks_fake_symbol(self):
+        """Fake symbol XYZ must still be blocked in single-strategy mode after portfolio mode added."""
+        from strategy_validation import validate_strategy_input
+        si = {
+            "symbol": "XYZ", "direction": "BULLISH", "side": "SELL",
+            "start_date": "2023-01-01", "end_date": "2024-01-01",
+            "initial_capital": 10000, "dte": 30, "delta": 0.30,
+            "legs": 1, "entry_frequency": "weekly",
+        }
+        ok, err = validate_strategy_input(si)
+        assert not ok, "XYZ must be blocked by single-symbol validation"
+        assert "XYZ" in err or "blocked" in err.lower() or "invalid" in err.lower()
+
+    def test_blank_still_blocks(self):
+        """Blank symbol must still be blocked in single-strategy mode."""
+        from strategy_validation import validate_strategy_input
+        si = {
+            "symbol": "", "direction": "BULLISH", "side": "SELL",
+            "start_date": "2023-01-01", "end_date": "2024-01-01",
+            "initial_capital": 10000, "dte": 30, "delta": 0.30,
+            "legs": 1, "entry_frequency": "weekly",
+        }
+        ok, err = validate_strategy_input(si)
+        assert not ok, "Blank symbol must be blocked"
+
+
+class TestPortfolioAIResilience:
+    """Portfolio analysis must always succeed even when Gemini returns broken JSON."""
+
+    _HOLDINGS_4 = [
+        {"ticker": "GOOGL", "weight": 0.50, "weight_pct": 50.0, "allocation": 40000},
+        {"ticker": "CVS",   "weight": 0.20, "weight_pct": 20.0, "allocation": 16000},
+        {"ticker": "TSLA",  "weight": 0.20, "weight_pct": 20.0, "allocation": 16000},
+        {"ticker": "MSFT",  "weight": 0.10, "weight_pct": 10.0, "allocation":  8000},
+    ]
+
+    def test_safe_parse_llm_json_handles_truncated(self):
+        """Truncated JSON returns (None, error_str) without raising."""
+        from portfolio_mode import safe_parse_llm_json
+        result, err = safe_parse_llm_json(
+            '{"recommendation": "HOLD", "explanation": "broken'
+        )
+        assert result is None
+        assert err is not None and isinstance(err, str)
+
+    def test_safe_parse_llm_json_strips_fences(self):
+        """Markdown-fenced JSON is parsed correctly."""
+        from portfolio_mode import safe_parse_llm_json
+        result, err = safe_parse_llm_json('```json\n{"key": "value"}\n```')
+        assert result == {"key": "value"}
+        assert err is None
+
+    def test_portfolio_analysis_complete_without_gemini(self):
+        """run_deterministic_portfolio_analysis returns all required fields."""
+        from portfolio_mode import run_deterministic_portfolio_analysis
+        required = {
+            "status", "recommendation", "portfolio_score", "risk_score",
+            "diversification_score", "concentration_risk", "expected_return_pct",
+            "expected_drawdown_pct", "confidence_score", "top_strengths",
+            "top_risks", "recommended_actions", "holding_analysis",
+            "final_decision", "risk_status", "diversification_status",
+            "analysis_summary", "gemini_status",
+        }
+        result = run_deterministic_portfolio_analysis(
+            self._HOLDINGS_4, 80000, "SPY"
+        )
+        assert result["status"] == "SUCCESS"
+        missing = required - result.keys()
+        assert not missing, f"Missing fields: {missing}"
+        for f in ("top_strengths", "top_risks", "recommended_actions"):
+            assert isinstance(result[f], list) and len(result[f]) > 0, f"{f} must be non-empty list"
+
+    def test_portfolio_ai_invalid_json_does_not_crash(self):
+        """Gemini returning malformed JSON → result still SUCCESS with gemini_status=FAILED."""
+        from portfolio_mode import run_portfolio_gemini_analysis
+        from unittest.mock import patch, MagicMock
+
+        mock_resp = MagicMock()
+        mock_resp.text = '{"recommendation": "HOLD", "explanation": "broken'
+        mock_model = MagicMock()
+        mock_model.generate_content.return_value = mock_resp
+
+        with patch("google.generativeai.configure"), \
+             patch("google.generativeai.GenerativeModel", return_value=mock_model):
+            result = run_portfolio_gemini_analysis(self._HOLDINGS_4, 80000, "SPY")
+
+        assert result["status"] == "SUCCESS", (
+            f"Must return SUCCESS even when Gemini JSON is broken. Got: {result.get('status')}"
+        )
+        assert result.get("gemini_status") == "FAILED", (
+            f"gemini_status must be FAILED. Got: {result.get('gemini_status')}"
+        )
+        assert "portfolio_score" in result
+        assert "risk_score" in result
+        assert "holding_analysis" in result
+
+    def test_portfolio_numeric_metrics_not_overwritten_by_gemini(self):
+        """Gemini cannot overwrite deterministic numeric scores even if it tries."""
+        from portfolio_mode import run_portfolio_gemini_analysis, run_deterministic_portfolio_analysis
+        from unittest.mock import patch, MagicMock
+
+        det = run_deterministic_portfolio_analysis(self._HOLDINGS_4, 80000, "SPY")
+        expected_score = det["portfolio_score"]
+
+        mock_resp = MagicMock()
+        mock_resp.text = (
+            '{"top_strengths": ["s1","s2","s3"], "top_risks": ["r1","r2","r3"],'
+            '"recommended_actions": ["a1","a2","a3"], "analysis_summary": "test",'
+            '"portfolio_score": 99}'  # Gemini tries to override score — must be ignored
+        )
+        mock_model = MagicMock()
+        mock_model.generate_content.return_value = mock_resp
+
+        with patch("google.generativeai.configure"), \
+             patch("google.generativeai.GenerativeModel", return_value=mock_model):
+            result = run_portfolio_gemini_analysis(self._HOLDINGS_4, 80000, "SPY")
+
+        assert result["portfolio_score"] == expected_score, (
+            f"Gemini must not overwrite portfolio_score. "
+            f"Expected {expected_score}, got {result['portfolio_score']}"
+        )
+        assert result["top_strengths"] == ["s1", "s2", "s3"], (
+            "Gemini text fields should be merged"
+        )
+
+    def test_portfolio_rebalance_for_50_percent_concentration(self):
+        """GOOGL at 50% must trigger REBALANCE recommendation."""
+        from portfolio_mode import run_deterministic_portfolio_analysis
+        result = run_deterministic_portfolio_analysis(self._HOLDINGS_4, 80000, "SPY")
+        assert result["recommendation"] == "REBALANCE", (
+            f"50% concentration must trigger REBALANCE. Got: {result['recommendation']}"
+        )
+        assert result["concentration_risk"] == "HIGH", (
+            f"50% max weight must set concentration_risk=HIGH. Got: {result['concentration_risk']}"
+        )
+
+    def test_portfolio_allocations_correct(self):
+        """Deterministic analysis allocations must match input holdings."""
+        from portfolio_mode import run_deterministic_portfolio_analysis
+        result = run_deterministic_portfolio_analysis(self._HOLDINGS_4, 80000, "SPY")
+        ha_map = {h["ticker"]: h for h in result["holding_analysis"]}
+        assert "GOOGL" in ha_map, "GOOGL must appear in holding_analysis"
+        assert "TSLA"  in ha_map, "TSLA must appear in holding_analysis"
+        assert "MSFT"  in ha_map, "MSFT must appear in holding_analysis"
+        assert "CVS"   in ha_map, "CVS must appear in holding_analysis"
+
+    def test_portfolio_mode_does_not_call_tastytrade(self):
+        """portfolio_mode.py must not reference tastytrade at all."""
+        from pathlib import Path
+        source = (
+            Path(__file__).parent / "portfolio_mode.py"
+        ).read_text(encoding="utf-8")
+        assert "tastytrade" not in source.lower(), (
+            "portfolio_mode.py must not import or call tastytrade"
+        )
+        assert "run_tastytrade" not in source, (
+            "portfolio_mode.py must not call run_tastytrade_strategy_backtest"
+        )
+
+
+class TestPortfolioVerification:
+    """Per-holding AI prediction + backtest aggregation tests."""
+
+    _PSI = {
+        "mode":             "portfolio_strategy",
+        "holdings": [
+            {"symbol": "GOOGL", "weight": 50.0, "allocated_capital": 40000.0},
+            {"symbol": "CVS",   "weight": 20.0, "allocated_capital": 16000.0},
+            {"symbol": "MSFT",  "weight": 20.0, "allocated_capital": 16000.0},
+        ],
+        "start_date":      "2021-06-25",
+        "end_date":        "2021-12-26",
+        "initial_capital": 72000.0,
+        "benchmark":       "SPY",
+        "direction":       "short",
+        "side":            "put",
+        "dte":             50,
+        "delta":           30,
+        "legs":            1,
+        "entry_frequency": "monthly",
+        "decision_horizon": 30,
+    }
+
+    def _mock_ai(self, **kwargs):
+        """Return a fake successful AI result."""
+        def _factory(si):
+            capital = float(si["initial_capital"])
+            return {
+                "status":                  "SUCCESS",
+                "decision":                "BUY",
+                "predicted_final_capital": capital * 1.05,
+                "predicted_total_return_pct": 5.0,
+                "predicted_win_rate":      60.0,
+                "predicted_trade_count":   6,
+                "predicted_max_drawdown":  8.0,
+                "predicted_volatility":    12.0,
+                "predicted_sharpe":        0.8,
+                "predicted_risk_score":    40.0,
+                "confidence_score":        70.0,
+            }
+        return _factory
+
+    def _mock_bt(self, factor: float = 1.03):
+        """Return a fake backtest function that returns passed_validation=True."""
+        def _factory(si):
+            capital = float(si["initial_capital"])
+            return {
+                "passed_validation": True,
+                "status":            "SUCCESS",
+                "decision":          "BUY",
+                "final_capital":     round(capital * factor, 2),
+                "total_return_pct":  round((factor - 1) * 100, 2),
+                "win_rate":          58.0,
+                "trade_count":       6,
+                "max_drawdown":      9.0,
+            }
+        return _factory
+
+    def test_portfolio_ai_prediction_runs_per_holding(self):
+        """run_portfolio_ai_prediction must call AI once per holding."""
+        from portfolio_strategy_engine import run_portfolio_ai_prediction
+
+        call_log = []
+        def _fake_ai(si):
+            call_log.append(si["symbol"])
+            return {"status": "SUCCESS", "decision": "HOLD",
+                    "predicted_final_capital": si["initial_capital"],
+                    "predicted_win_rate": 50.0, "predicted_trade_count": 5,
+                    "predicted_max_drawdown": 10.0, "predicted_volatility": 15.0,
+                    "predicted_sharpe": 0.5, "predicted_risk_score": 45.0,
+                    "confidence_score": 60.0}
+
+        with patch("strategy_prediction_agent.run_ai_strategy_prediction", side_effect=_fake_ai):
+            result = run_portfolio_ai_prediction(self._PSI)
+
+        assert len(call_log) == 3, f"AI must be called once per holding. Got {len(call_log)} calls."
+        assert set(call_log) == {"GOOGL", "CVS", "MSFT"}, f"Called with: {call_log}"
+
+    def test_portfolio_backtest_runs_per_holding(self):
+        """run_portfolio_backtest_actual must call backtest_fn once per holding."""
+        from portfolio_strategy_engine import run_portfolio_backtest_actual
+
+        call_log = []
+        def _fake_bt(si):
+            call_log.append(si["symbol"])
+            return {"passed_validation": True, "decision": "HOLD",
+                    "final_capital": si["initial_capital"], "total_return_pct": 0.0,
+                    "win_rate": 50.0, "trade_count": 5, "max_drawdown": 8.0}
+
+        result = run_portfolio_backtest_actual(self._PSI, _fake_bt)
+        assert len(call_log) == 3, f"Backtest must be called once per holding. Got {len(call_log)}"
+        assert set(call_log) == {"GOOGL", "CVS", "MSFT"}
+
+    def test_portfolio_backtest_does_not_use_raw_portfolio_string(self):
+        """backtest_fn must never be called with the raw portfolio string as symbol."""
+        from portfolio_strategy_engine import run_portfolio_backtest_actual
+
+        raw_string = "GOOGL 50% CVS 20% MSFT 30%"
+        called_with = []
+        def _fake_bt(si):
+            called_with.append(si.get("symbol", ""))
+            return {"passed_validation": True, "decision": "HOLD",
+                    "final_capital": si["initial_capital"], "total_return_pct": 0.0,
+                    "win_rate": 50.0, "trade_count": 4, "max_drawdown": 7.0}
+
+        run_portfolio_backtest_actual(self._PSI, _fake_bt)
+        for sym in called_with:
+            assert sym != raw_string, (
+                f"Raw portfolio string was passed to backtest. Found: {sym}"
+            )
+            assert len(sym) <= 10, f"Symbol {sym!r} looks like a raw string"
+
+    def test_portfolio_aggregate_final_capital_sum(self):
+        """Portfolio final capital must equal sum of holding final capitals."""
+        from portfolio_strategy_engine import run_portfolio_backtest_actual
+
+        holding_finals = {}
+        def _fake_bt(si):
+            sym = si["symbol"]
+            final = round(si["initial_capital"] * 1.04, 2)
+            holding_finals[sym] = final
+            return {"passed_validation": True, "decision": "BUY",
+                    "final_capital": final, "total_return_pct": 4.0,
+                    "win_rate": 55.0, "trade_count": 6, "max_drawdown": 9.0}
+
+        result = run_portfolio_backtest_actual(self._PSI, _fake_bt)
+        expected_total = round(sum(holding_finals.values()), 2)
+        assert abs(result["final_capital"] - expected_total) < 1.0, (
+            f"Portfolio final_capital {result['final_capital']} != sum of holdings {expected_total}"
+        )
+
+    def test_portfolio_aggregate_total_pl_sum(self):
+        """Portfolio total_pl must equal final_capital - initial_capital."""
+        from portfolio_strategy_engine import run_portfolio_backtest_actual
+
+        def _fake_bt(si):
+            final = round(si["initial_capital"] * 1.06, 2)
+            return {"passed_validation": True, "decision": "BUY",
+                    "final_capital": final, "total_return_pct": 6.0,
+                    "win_rate": 60.0, "trade_count": 6, "max_drawdown": 8.0}
+
+        result = run_portfolio_backtest_actual(self._PSI, _fake_bt)
+        expected_pl = round(result["final_capital"] - self._PSI["initial_capital"], 2)
+        assert abs(result["total_pl"] - expected_pl) < 1.0, (
+            f"total_pl {result['total_pl']} != final - initial = {expected_pl}"
+        )
+
+    def test_portfolio_comparison_metrics(self):
+        """compare_portfolio_ai_vs_backtest must produce correct comparison dict."""
+        from portfolio_strategy_engine import compare_portfolio_ai_vs_backtest
+
+        pf_ai = {
+            "decision": "BUY", "total_return_pct": 8.0, "total_pl": 5760.0,
+            "final_capital": 77760.0, "win_rate": 62.0, "max_drawdown": 9.0,
+            "holding_predictions": [],
+        }
+        pf_bt = {
+            "decision": "BUY", "total_return_pct": 5.0, "total_pl": 3600.0,
+            "final_capital": 75600.0, "win_rate": 58.0, "max_drawdown": 10.0,
+            "initial_capital": 72000.0,
+            "holding_actuals": [],
+        }
+        cmp = compare_portfolio_ai_vs_backtest(pf_ai, pf_bt)
+        assert cmp["decision_match"] is True
+        assert cmp["directional_match"] is True
+        assert cmp["agreement"] == "MATCH"
+        assert abs(cmp["return_error_pct"] - 3.0) < 0.1
+
+    def test_portfolio_accuracy_uses_separate_records_file(self):
+        """Portfolio evaluation records must use a different file than single-stock records."""
+        from portfolio_accuracy_engine import PORTFOLIO_EVAL_FILE
+        from strategy_accuracy_engine import EVAL_FILE as SINGLE_EVAL_FILE
+        assert str(PORTFOLIO_EVAL_FILE) != str(SINGLE_EVAL_FILE), (
+            "Portfolio and single-stock evaluation files must be different"
+        )
+        assert "portfolio" in str(PORTFOLIO_EVAL_FILE).lower()
+
+    def test_portfolio_accuracy_does_not_mix_single_strategy_records(self):
+        """Portfolio JSONL filename must not equal the single-strategy JSONL filename."""
+        from portfolio_accuracy_engine import PORTFOLIO_EVAL_FILE
+        pf_name = PORTFOLIO_EVAL_FILE.name
+        assert "portfolio" in pf_name.lower(), f"File name must contain 'portfolio': {pf_name}"
+        assert pf_name != "strategy_prediction_evaluation_runs.jsonl"
+
+    def test_portfolio_final_board_match(self):
+        """AI BUY + Backtest BUY → agreement MATCH, final_verified_decision BUY."""
+        from portfolio_strategy_engine import compare_portfolio_ai_vs_backtest
+        pf_ai = {"decision": "BUY",  "total_return_pct": 8.0, "total_pl": 1000.0,
+                 "final_capital": 73000.0, "win_rate": 60.0, "max_drawdown": 8.0,
+                 "holding_predictions": []}
+        pf_bt = {"decision": "BUY",  "total_return_pct": 6.0, "total_pl": 800.0,
+                 "final_capital": 72800.0, "win_rate": 58.0, "max_drawdown": 9.0,
+                 "initial_capital": 72000.0, "failed_holdings": [], "holding_actuals": []}
+        cmp = compare_portfolio_ai_vs_backtest(pf_ai, pf_bt)
+        assert cmp["agreement"] == "MATCH"
+        assert cmp["final_verified_decision"] == "BUY"
+
+    def test_portfolio_final_board_conflict(self):
+        """AI BUY + Backtest SELL → agreement CONFLICT, final_verified_decision REVIEW."""
+        from portfolio_strategy_engine import compare_portfolio_ai_vs_backtest
+        pf_ai = {"decision": "BUY",  "total_return_pct": 8.0, "total_pl": 1000.0,
+                 "final_capital": 73000.0, "win_rate": 60.0, "max_drawdown": 8.0,
+                 "holding_predictions": []}
+        pf_bt = {"decision": "SELL", "total_return_pct": -8.0, "total_pl": -1000.0,
+                 "final_capital": 71000.0, "win_rate": 40.0, "max_drawdown": 15.0,
+                 "initial_capital": 72000.0, "failed_holdings": [], "holding_actuals": []}
+        cmp = compare_portfolio_ai_vs_backtest(pf_ai, pf_bt)
+        assert cmp["agreement"] == "CONFLICT"
+        assert cmp["final_verified_decision"] == "REVIEW"
+
+    def test_portfolio_backtest_failure_blocks_accuracy_record(self):
+        """If any holding backtest fails, passed_validation=False and record must not be saved."""
+        from portfolio_strategy_engine import run_portfolio_backtest_actual
+
+        def _always_fail(si):
+            return {"passed_validation": False, "status": "ERROR",
+                    "decision": "REVIEW", "explanation": "Auth failed"}
+
+        result = run_portfolio_backtest_actual(self._PSI, _always_fail)
+        assert result["passed_validation"] is False, (
+            "All-failed backtest must have passed_validation=False"
+        )
+        assert result["failed_holdings"] == ["GOOGL", "CVS", "MSFT"]
+
+    def test_portfolio_hash_matches_all_outputs(self):
+        """Same portfolio_si → same hash every time."""
+        from portfolio_strategy_engine import build_portfolio_strategy_hash
+        h1 = build_portfolio_strategy_hash(self._PSI)
+        h2 = build_portfolio_strategy_hash(self._PSI)
+        assert h1 == h2, "Portfolio hash must be deterministic"
+        assert len(h1) == 16, "Hash must be 16 hex chars"
+
+    def test_portfolio_section_2_data_structure(self):
+        """pf_ai must contain all required fields for Section 2 rendering."""
+        from portfolio_strategy_engine import run_portfolio_ai_prediction
+        from unittest.mock import patch
+
+        def _fake_ai(si):
+            return {"status": "SUCCESS", "decision": "HOLD",
+                    "predicted_final_capital": si["initial_capital"] * 1.02,
+                    "predicted_win_rate": 52.0, "predicted_trade_count": 5,
+                    "predicted_max_drawdown": 9.0, "predicted_volatility": 13.0,
+                    "predicted_sharpe": 0.6, "predicted_risk_score": 42.0,
+                    "confidence_score": 65.0}
+
+        with patch("strategy_prediction_agent.run_ai_strategy_prediction", side_effect=_fake_ai):
+            result = run_portfolio_ai_prediction(self._PSI)
+
+        required = {"decision", "initial_capital", "final_capital", "total_pl",
+                    "total_return_pct", "cagr", "sharpe", "win_rate", "trade_count",
+                    "max_drawdown", "volatility", "risk_score", "confidence_score",
+                    "holding_predictions"}
+        missing = required - result.keys()
+        assert not missing, f"pf_ai missing required fields: {missing}"
+
+    def test_portfolio_holding_level_comparison_data(self):
+        """compare_portfolio_ai_vs_backtest must produce holding_comparisons list."""
+        from portfolio_strategy_engine import compare_portfolio_ai_vs_backtest
+        pf_ai = {
+            "decision": "BUY", "total_return_pct": 5.0, "total_pl": 500.0,
+            "final_capital": 72500.0, "win_rate": 56.0, "max_drawdown": 8.0,
+            "holding_predictions": [
+                {"symbol": "GOOGL", "weight": 50.0, "allocated_capital": 40000.0,
+                 "predicted_final_capital": 42000.0, "predicted_return_pct": 5.0, "decision": "BUY"},
+                {"symbol": "MSFT",  "weight": 30.0, "allocated_capital": 16000.0,
+                 "predicted_final_capital": 16500.0, "predicted_return_pct": 3.0, "decision": "HOLD"},
+            ],
+        }
+        pf_bt = {
+            "decision": "BUY", "total_return_pct": 3.0, "total_pl": 300.0,
+            "final_capital": 72300.0, "win_rate": 54.0, "max_drawdown": 9.0,
+            "initial_capital": 72000.0, "failed_holdings": [],
+            "holding_actuals": [
+                {"symbol": "GOOGL", "weight": 50.0, "allocated_capital": 40000.0,
+                 "actual_final_capital": 41600.0, "actual_return_pct": 4.0, "decision": "BUY"},
+                {"symbol": "MSFT",  "weight": 30.0, "allocated_capital": 16000.0,
+                 "actual_final_capital": 16300.0, "actual_return_pct": 1.9, "decision": "HOLD"},
+            ],
+        }
+        cmp = compare_portfolio_ai_vs_backtest(pf_ai, pf_bt)
+        assert "holding_comparisons" in cmp
+        assert len(cmp["holding_comparisons"]) == 2
+        googl_hc = next(h for h in cmp["holding_comparisons"] if h["symbol"] == "GOOGL")
+        assert "directional_match" in googl_hc
+        assert "holding_verdict" in googl_hc
+        assert "return_error" in googl_hc
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

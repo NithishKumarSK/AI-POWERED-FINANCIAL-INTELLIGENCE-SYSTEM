@@ -37,6 +37,23 @@ from strategy_prediction_agent import (
     REQUIRED_FIELDS,
 )
 from strategy_validation import validate_strategy_input
+from portfolio_mode import (
+    detect_input_mode,
+    parse_and_validate_portfolio,
+    run_portfolio_gemini_analysis,
+    render_portfolio_sections,
+)
+from portfolio_strategy_engine import (
+    build_portfolio_strategy_input,
+    build_portfolio_strategy_hash,
+    run_portfolio_ai_prediction,
+    run_portfolio_backtest_actual,
+    compare_portfolio_ai_vs_backtest,
+)
+from portfolio_accuracy_engine import (
+    build_portfolio_evaluation_record,
+    save_portfolio_evaluation_record,
+)
 from strategy_backtest_comparator import compare_prediction_vs_backtest, enrich_backtest_metrics
 from strategy_accuracy_engine import (
     load_strategy_accuracy_records,
@@ -1341,80 +1358,149 @@ def main() -> None:
 
     if st.session_state.get("run_btn"):
         # Clear all outputs from the previous run before starting fresh.
-        # This prevents stale charts/numbers from a prior valid run being
-        # displayed after a new run fails validation.
-        for _k in ("ai_raw", "ai_ui", "bt_raw", "bt_ui", "input_hash", "last_si"):
+        for _k in ("ai_raw", "ai_ui", "bt_raw", "bt_ui", "input_hash", "last_si",
+                   "portfolio_state", "run_mode"):
             st.session_state.pop(_k, None)
 
-        # Step 1: Central validation gate — MUST pass before AI or backtest.
-        valid, err = validate_strategy_input(si)
-        if not valid:
-            st.error(f"Run blocked: {err}")
-            st.stop()
+        # ── Portfolio mode detection (BEFORE single-symbol validator) ──────────
+        # Portfolio strings like "GOOGL 50% AAPL 20% TSLA 20% MSFT 10%" must
+        # NEVER be passed into validate_strategy_input — that function only
+        # handles single symbols.
+        if detect_input_mode(si["symbol"]) == "portfolio":
+            st.session_state["has_run"] = True
+            st.session_state["run_mode"] = "portfolio"
 
-        st.session_state["has_run"] = True
-        input_hash = build_strategy_input_hash(si)
-
-        # Step 2: Ensure calibration dataset (runs mini backtests if < 6 similar records)
-        # This runs BEFORE AI prediction so the agent can calibrate against empirical data.
-        # Mini backtests use different time windows — NOT the exact target window (no leakage).
-        if _CALIBRATION_ENGINE_AVAILABLE:
-            with st.spinner(
-                f"Checking calibration dataset for {si['symbol']} "
-                f"{si['direction']} {si['side']}… "
-                "(first run may execute mini backtests — subsequent runs will be faster)"
-            ):
-                try:
-                    _ensure_calibration(
-                        si, input_hash,
-                        min_records=6,
-                        max_new_backtests=8,
-                        backtest_fn=run_tastytrade_strategy_backtest,
-                    )
-                except Exception:
-                    pass  # calibration failure is non-fatal — prediction still runs
-
-        # Step 3: AI prediction — INDEPENDENT of backtest (no backtest data here)
-        # _load_calibration_records inside the agent will now pick up any newly added
-        # calibration probe records saved by _ensure_calibration above.
-        with st.spinner(f"Running AI strategy prediction for {si['symbol']}…"):
-            ai_raw = run_ai_strategy_prediction(si)
-
-        # Step 3: Normalize AI output → generic UI field names
-        ai_ui = normalize_ai_prediction_for_ui(ai_raw, si)
-
-        # Step 4: Blocking validation on normalized AI output
-        if ai_ui.get("status") == "SUCCESS":
-            ok, err = validate_no_missing_output(ai_ui)
-            if not ok:
-                st.error(f"AI prediction output incomplete — {err}")
+            # Step 1: Parse and validate portfolio input
+            pf = parse_and_validate_portfolio(si["symbol"], si["initial_capital"])
+            if pf["status"] == "ERROR":
+                for _e in pf["errors"]:
+                    st.error(f"Portfolio blocked: {_e}")
                 st.stop()
 
-        st.session_state["ai_raw"]     = ai_raw
-        st.session_state["ai_ui"]      = ai_ui
-        st.session_state["input_hash"] = input_hash
-        st.session_state["last_si"]    = si
+            # Step 2: Build canonical portfolio strategy input + hash
+            portfolio_si   = build_portfolio_strategy_input(pf["holdings"], si)
+            portfolio_hash = build_portfolio_strategy_hash(portfolio_si)
 
-        # Step 5: tastytrade backtest (ground-truth verifier)
-        with st.spinner(f"Running tastytrade backtest for {si['symbol']}…"):
-            bt_raw = run_tastytrade_strategy_backtest(si)
+            # Step 3: Run AI prediction per holding (BEFORE backtest — no leakage)
+            with st.spinner(
+                f"Running AI prediction for {len(pf['holdings'])} holdings…"
+            ):
+                pf_ai = run_portfolio_ai_prediction(portfolio_si)
 
-        # Step 6: Normalize backtest output → same generic UI field names
-        bt_ui = normalize_backtest_for_ui(bt_raw, si)
-        st.session_state["bt_raw"] = bt_raw
-        st.session_state["bt_ui"]  = bt_ui
+            # Step 4: Run tastytrade backtest per holding with allocated capital
+            # Raw portfolio string is NEVER passed to the backtest function.
+            with st.spinner(
+                f"Running tastytrade backtest for {len(pf['holdings'])} holdings…"
+            ):
+                pf_bt = run_portfolio_backtest_actual(
+                    portfolio_si, run_tastytrade_strategy_backtest
+                )
 
-        # Step 7: Save evaluation record.
-        # Guard: only save when AI succeeded, backtest passed, and was NOT auto-retried.
-        # Auto-retry (removed from code, but guard remains for safety) produces results
-        # for different dates than the user requested — an integrity violation.
-        _bt_ok = (bt_raw.get("passed_validation")
-                  and not bt_raw.get("_retried", False)
-                  and bt_raw.get("decision") not in ("REVIEW", "MISSING", None, ""))
-        if ai_raw.get("status") == "SUCCESS" and _bt_ok:
-            mv  = ai_raw.get("model_version", _ACCURACY_MODEL_VERSION)
-            rec = build_evaluation_record(si, input_hash, ai_raw, bt_raw, model_version=mv)
-            save_strategy_evaluation_record(rec)
+            # Step 5: Compare AI vs backtest
+            pf_cmp = compare_portfolio_ai_vs_backtest(pf_ai, pf_bt)
+
+            # Step 6: Save portfolio accuracy record (only if all backtests passed)
+            if pf_bt.get("passed_validation"):
+                _pf_rec = build_portfolio_evaluation_record(
+                    portfolio_si, portfolio_hash, pf_ai, pf_bt, pf_cmp
+                )
+                save_portfolio_evaluation_record(_pf_rec)
+
+            # Step 7: Deterministic factor intelligence (Gemini enrichment — safe fallback)
+            with st.spinner("Computing portfolio factor intelligence…"):
+                deterministic = run_portfolio_gemini_analysis(
+                    pf["holdings"], si["initial_capital"], si["benchmark"]
+                )
+
+            st.session_state["portfolio_state"] = {
+                "holdings":       pf["holdings"],
+                "issues":         pf.get("issues", []),
+                "si":             si,
+                "raw_input":      si["symbol"],
+                "portfolio_si":   portfolio_si,
+                "portfolio_hash": portfolio_hash,
+                "pf_ai":          pf_ai,
+                "pf_bt":          pf_bt,
+                "pf_cmp":         pf_cmp,
+                "deterministic":  deterministic,
+            }
+        else:
+            # ── Step 1: Single-symbol validation gate ──────────────────────────
+            valid, err = validate_strategy_input(si)
+            if not valid:
+                st.error(f"Run blocked: {err}")
+                st.stop()
+
+            st.session_state["has_run"] = True
+            input_hash = build_strategy_input_hash(si)
+
+            # Step 2: Ensure calibration dataset (runs mini backtests if < 6 similar records)
+            # This runs BEFORE AI prediction so the agent can calibrate against empirical data.
+            # Mini backtests use different time windows — NOT the exact target window (no leakage).
+            if _CALIBRATION_ENGINE_AVAILABLE:
+                with st.spinner(
+                    f"Checking calibration dataset for {si['symbol']} "
+                    f"{si['direction']} {si['side']}… "
+                    "(first run may execute mini backtests — subsequent runs will be faster)"
+                ):
+                    try:
+                        _ensure_calibration(
+                            si, input_hash,
+                            min_records=6,
+                            max_new_backtests=8,
+                            backtest_fn=run_tastytrade_strategy_backtest,
+                        )
+                    except Exception:
+                        pass  # calibration failure is non-fatal — prediction still runs
+
+            # Step 3: AI prediction — INDEPENDENT of backtest (no backtest data here)
+            # _load_calibration_records inside the agent will now pick up any newly added
+            # calibration probe records saved by _ensure_calibration above.
+            with st.spinner(f"Running AI strategy prediction for {si['symbol']}…"):
+                ai_raw = run_ai_strategy_prediction(si)
+
+            # Step 3: Normalize AI output → generic UI field names
+            ai_ui = normalize_ai_prediction_for_ui(ai_raw, si)
+
+            # Step 4: Blocking validation on normalized AI output
+            if ai_ui.get("status") == "SUCCESS":
+                ok, err = validate_no_missing_output(ai_ui)
+                if not ok:
+                    st.error(f"AI prediction output incomplete — {err}")
+                    st.stop()
+
+            st.session_state["ai_raw"]     = ai_raw
+            st.session_state["ai_ui"]      = ai_ui
+            st.session_state["input_hash"] = input_hash
+            st.session_state["last_si"]    = si
+
+            # Step 5: tastytrade backtest (ground-truth verifier)
+            with st.spinner(f"Running tastytrade backtest for {si['symbol']}…"):
+                bt_raw = run_tastytrade_strategy_backtest(si)
+
+            # Step 6: Normalize backtest output → same generic UI field names
+            bt_ui = normalize_backtest_for_ui(bt_raw, si)
+            st.session_state["bt_raw"] = bt_raw
+            st.session_state["bt_ui"]  = bt_ui
+
+            # Step 7: Save evaluation record.
+            # Guard: only save when AI succeeded, backtest passed, and was NOT auto-retried.
+            # Auto-retry (removed from code, but guard remains for safety) produces results
+            # for different dates than the user requested — an integrity violation.
+            _bt_ok = (bt_raw.get("passed_validation")
+                      and not bt_raw.get("_retried", False)
+                      and bt_raw.get("decision") not in ("REVIEW", "MISSING", None, ""))
+            if ai_raw.get("status") == "SUCCESS" and _bt_ok:
+                mv  = ai_raw.get("model_version", _ACCURACY_MODEL_VERSION)
+                rec = build_evaluation_record(si, input_hash, ai_raw, bt_raw, model_version=mv)
+                save_strategy_evaluation_record(rec)
+
+    # ── Portfolio mode: render sections and exit ─────────────────────────────
+    if st.session_state.get("run_mode") == "portfolio":
+        portfolio_state = st.session_state.get("portfolio_state", {})
+        if portfolio_state:
+            render_portfolio_sections(portfolio_state)
+        return
 
     if not st.session_state.get("has_run"):
         _hr()
