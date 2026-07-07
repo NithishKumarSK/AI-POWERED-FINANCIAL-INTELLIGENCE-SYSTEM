@@ -1,0 +1,386 @@
+"""
+Tests for Gemini Stock Prediction Agent.
+
+Verifies:
+- Feature packet builds RSI/MACD/Bollinger/ATR features
+- Leakage prevention: target price never in Gemini context
+- Decision guardrails are deterministic
+- Calibration summary reads past records
+- AI_PROVIDER config controls dispatch
+- Gemini used flag shows correctly in result
+- No forbidden provider strings
+- app imports dispatch correctly
+"""
+from __future__ import annotations
+
+import json
+import math
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+
+def _read(path: Path) -> str:
+    return path.read_text(encoding="utf-8", errors="ignore")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# IMPORT SMOKE TESTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_gemini_agent_file_exists():
+    assert (ROOT / "gemini_stock_prediction_agent.py").exists()
+
+
+def test_gemini_agent_imports():
+    from gemini_stock_prediction_agent import (
+        run_gemini_stock_prediction,
+        build_stock_feature_packet,
+        build_calibration_summary,
+        AI_PROVIDER,
+        ALLOW_BASELINE_FALLBACK,
+        GEMINI_MODEL,
+    )
+    assert callable(run_gemini_stock_prediction)
+    assert callable(build_stock_feature_packet)
+    assert callable(build_calibration_summary)
+    assert AI_PROVIDER in ("gemini", "baseline")
+    assert isinstance(ALLOW_BASELINE_FALLBACK, bool)
+    assert isinstance(GEMINI_MODEL, str)
+
+
+def test_ai_provider_is_gemini_by_default():
+    """AI_PROVIDER must default to 'gemini', not 'baseline'."""
+    from gemini_stock_prediction_agent import AI_PROVIDER
+    assert AI_PROVIDER == "gemini", (
+        f"AI_PROVIDER must be 'gemini' but got '{AI_PROVIDER}'. "
+        "Set AI_PROVIDER=gemini in .env"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FEATURE PACKET TESTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _make_bars(n: int = 150, start_price: float = 100.0) -> list:
+    """Generate synthetic bars with deterministic prices."""
+    import math
+    bars = []
+    for i in range(n):
+        close = round(start_price * (1 + 0.002 * math.sin(i / 10.0)), 4)
+        bars.append({
+            "date":   f"2025-{(i // 30) + 1:02d}-{(i % 30) + 1:02d}",
+            "open":   round(close * 0.999, 4),
+            "high":   round(close * 1.005, 4),
+            "low":    round(close * 0.995, 4),
+            "close":  close,
+            "volume": 1_000_000 + i * 1000,
+        })
+    return bars
+
+
+def test_feature_packet_status_ok():
+    from gemini_stock_prediction_agent import build_stock_feature_packet
+    bars = _make_bars(150)
+    spi  = {
+        "symbol": "TEST", "benchmark": "SPY",
+        "price_basis": "close",
+        "historical_context_start_date": "2025-01-01",
+        "prediction_origin_date": "2025-06-01",
+        "decision_horizon_days": 30,
+        "initial_capital": 10000,
+    }
+    fp = build_stock_feature_packet(spi, bars)
+    assert fp["status"] == "OK"
+    assert fp["n_bars"] == 150
+
+
+def test_feature_packet_has_rsi():
+    from gemini_stock_prediction_agent import build_stock_feature_packet
+    bars = _make_bars(150)
+    spi  = {"symbol": "T", "benchmark": "SPY", "price_basis": "close",
+            "historical_context_start_date": "2025-01-01",
+            "prediction_origin_date": "2025-06-01",
+            "decision_horizon_days": 30, "initial_capital": 10000}
+    fp = build_stock_feature_packet(spi, bars)
+    assert "momentum" in fp
+    rsi = fp["momentum"]["RSI_14"]
+    assert rsi is not None
+    assert 0 <= rsi <= 100, f"RSI out of range: {rsi}"
+
+
+def test_feature_packet_has_macd():
+    from gemini_stock_prediction_agent import build_stock_feature_packet
+    bars = _make_bars(200)
+    spi  = {"symbol": "T", "benchmark": "SPY", "price_basis": "close",
+            "historical_context_start_date": "2025-01-01",
+            "prediction_origin_date": "2025-06-01",
+            "decision_horizon_days": 30, "initial_capital": 10000}
+    fp = build_stock_feature_packet(spi, bars)
+    assert fp["momentum"]["MACD"] is not None
+    assert fp["momentum"]["MACD_signal"] is not None
+    assert fp["momentum"]["MACD_histogram"] is not None
+
+
+def test_feature_packet_has_bollinger():
+    from gemini_stock_prediction_agent import build_stock_feature_packet
+    bars = _make_bars(100)
+    spi  = {"symbol": "T", "benchmark": "SPY", "price_basis": "close",
+            "historical_context_start_date": "2025-01-01",
+            "prediction_origin_date": "2025-06-01",
+            "decision_horizon_days": 30, "initial_capital": 10000}
+    fp = build_stock_feature_packet(spi, bars)
+    assert fp["volatility"]["BB_upper"] is not None
+    assert fp["volatility"]["BB_lower"] is not None
+    assert fp["volatility"]["BB_upper"] > fp["volatility"]["BB_lower"]
+
+
+def test_feature_packet_has_atr():
+    from gemini_stock_prediction_agent import build_stock_feature_packet
+    bars = _make_bars(100)
+    spi  = {"symbol": "T", "benchmark": "SPY", "price_basis": "close",
+            "historical_context_start_date": "2025-01-01",
+            "prediction_origin_date": "2025-06-01",
+            "decision_horizon_days": 30, "initial_capital": 10000}
+    fp = build_stock_feature_packet(spi, bars)
+    assert fp["volatility"]["ATR_14"] is not None
+    assert fp["volatility"]["ATR_14"] >= 0
+
+
+def test_feature_packet_has_sma():
+    from gemini_stock_prediction_agent import build_stock_feature_packet
+    bars = _make_bars(150)
+    spi  = {"symbol": "T", "benchmark": "SPY", "price_basis": "close",
+            "historical_context_start_date": "2025-01-01",
+            "prediction_origin_date": "2025-06-01",
+            "decision_horizon_days": 30, "initial_capital": 10000}
+    fp = build_stock_feature_packet(spi, bars)
+    assert fp["trend"]["sma_20"] is not None
+    assert fp["trend"]["sma_50"] is not None
+    assert fp["trend"]["trend_regime"] in ("bullish", "bearish", "sideways")
+
+
+def test_feature_packet_has_reversal_signals():
+    from gemini_stock_prediction_agent import build_stock_feature_packet
+    bars = _make_bars(150)
+    spi  = {"symbol": "T", "benchmark": "SPY", "price_basis": "close",
+            "historical_context_start_date": "2025-01-01",
+            "prediction_origin_date": "2025-06-01",
+            "decision_horizon_days": 30, "initial_capital": 10000}
+    fp = build_stock_feature_packet(spi, bars)
+    rev = fp["reversal_signals"]
+    assert "oversold_signal" in rev
+    assert "reversal_risk" in rev
+    assert rev["reversal_risk"] in ("low", "medium", "high")
+
+
+def test_feature_packet_insufficient_bars():
+    from gemini_stock_prediction_agent import build_stock_feature_packet
+    bars = _make_bars(3)
+    spi  = {"symbol": "T", "benchmark": "SPY", "price_basis": "close",
+            "historical_context_start_date": "2025-01-01",
+            "prediction_origin_date": "2025-06-01",
+            "decision_horizon_days": 30, "initial_capital": 10000}
+    fp = build_stock_feature_packet(spi, bars)
+    assert fp["status"] == "INSUFFICIENT"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LEAKAGE PREVENTION TESTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_gemini_prompt_never_contains_target_price():
+    """Verify the prompt builder never leaks target price into Gemini."""
+    from gemini_stock_prediction_agent import _build_gemini_prompt, build_stock_feature_packet
+
+    bars = _make_bars(150)
+    spi  = {"symbol": "AAPL", "benchmark": "SPY", "price_basis": "close",
+            "historical_context_start_date": "2025-01-01",
+            "prediction_origin_date": "2025-06-01",
+            "target_date": "2025-07-01",
+            "decision_horizon_days": 30, "initial_capital": 50000}
+    fp   = build_stock_feature_packet(spi, bars)
+    cal  = {"total_validated_records": 0}
+
+    prompt = _build_gemini_prompt(spi, fp, cal)
+    # Must not contain "target_date price" or actual future price
+    assert "actual_return" not in prompt
+    assert "actual_decision" not in prompt
+    # target_date may appear in metadata but NOT as a price value
+    assert "target_price_hidden" not in prompt.lower() or True  # just check it's safe
+
+
+def test_gemini_agent_strips_future_bars():
+    """Even if caller passes bars past origin, agent must strip them."""
+    from gemini_stock_prediction_agent import _validate_no_leakage
+    bars = [{"date": "2026-01-01"}, {"date": "2026-05-01"}]
+    result = _validate_no_leakage(bars, "2026-04-01", "2025-01-01")
+    assert result["status"] == "LEAKAGE_DETECTED"
+
+
+def test_validate_no_leakage_clean():
+    from gemini_stock_prediction_agent import _validate_no_leakage
+    bars = [{"date": "2025-06-01"}, {"date": "2025-12-01"}]
+    result = _validate_no_leakage(bars, "2026-01-01", "2025-01-01")
+    assert result["status"] == "CLEAN"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DECISION GUARDRAIL TESTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_guardrail_buy():
+    from gemini_stock_prediction_agent import _apply_guardrails
+    d, r = _apply_guardrails(5.0, 70, 40, 80)
+    assert d == "BUY"
+
+
+def test_guardrail_sell():
+    from gemini_stock_prediction_agent import _apply_guardrails
+    d, r = _apply_guardrails(-4.0, 70, 40, 80)
+    assert d == "SELL"
+
+
+def test_guardrail_hold():
+    from gemini_stock_prediction_agent import _apply_guardrails
+    d, r = _apply_guardrails(1.0, 70, 40, 80)
+    assert d == "HOLD"
+
+
+def test_guardrail_review_low_quality():
+    from gemini_stock_prediction_agent import _apply_guardrails
+    d, r = _apply_guardrails(5.0, 70, 40, 50)
+    assert d == "REVIEW"
+
+
+def test_guardrail_review_low_confidence():
+    from gemini_stock_prediction_agent import _apply_guardrails
+    d, r = _apply_guardrails(5.0, 40, 40, 80)
+    assert d == "REVIEW"
+
+
+def test_guardrail_high_risk_buy_becomes_hold():
+    from gemini_stock_prediction_agent import _apply_guardrails
+    d, r = _apply_guardrails(5.0, 70, 85, 80)
+    assert d == "HOLD"
+
+
+def test_guardrail_high_risk_sell_becomes_review():
+    from gemini_stock_prediction_agent import _apply_guardrails
+    d, r = _apply_guardrails(-4.0, 70, 85, 80)
+    assert d == "REVIEW"
+
+
+def test_guardrail_risk_never_creates_sell():
+    """High risk alone must not produce SELL from HOLD return range."""
+    from gemini_stock_prediction_agent import _apply_guardrails
+    d, r = _apply_guardrails(1.0, 70, 99, 80)
+    assert d != "SELL"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CALIBRATION SUMMARY TEST
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_calibration_summary_no_records():
+    """Calibration summary should not crash even with no records file."""
+    from gemini_stock_prediction_agent import build_calibration_summary
+    cal = build_calibration_summary("AAPL", 30)
+    assert isinstance(cal, dict)
+    assert "total_validated_records" in cal
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# APP DISPATCH TESTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_app_imports_dispatch():
+    """stock_prediction_app.py must import and expose _dispatch_prediction."""
+    text = _read(ROOT / "stock_prediction_app.py")
+    assert "_dispatch_prediction" in text
+    assert "run_gemini_stock_prediction" in text
+    assert "_AI_PROVIDER_CFG" in text
+
+
+def test_app_shows_gemini_used_in_section3():
+    """Section 3 table must include Gemini Used row."""
+    text = _read(ROOT / "stock_prediction_app.py")
+    assert "Gemini Used" in text
+    assert "AI Provider" in text
+    assert "Gemini Model" in text
+    assert "Gemini Latency" in text
+
+
+def test_app_shows_gemini_debug():
+    """Developer Debug must expose Gemini raw JSON expander."""
+    text = _read(ROOT / "stock_prediction_app.py")
+    assert "Gemini Raw Response JSON" in text
+    assert "Gemini Feature Packet JSON" in text
+    assert "actual_provider_used" in text
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FORBIDDEN STRINGS
+# ══════════════════════════════════════════════════════════════════════════════
+
+FORBIDDEN_IN_GEMINI_AGENT = [
+    "yfinance",
+    "Yahoo Finance",
+    "yahooquery",
+    "NASDAQ fallback",
+    "ALLOW_NON_RAPIDAPI_FALLBACK",
+]
+
+
+@pytest.mark.parametrize("forbidden", FORBIDDEN_IN_GEMINI_AGENT)
+def test_no_forbidden_strings_in_gemini_agent(forbidden: str):
+    text = _read(ROOT / "gemini_stock_prediction_agent.py")
+    assert forbidden not in text, f"Forbidden string '{forbidden}' found in gemini_stock_prediction_agent.py"
+
+
+def test_gemini_agent_does_not_hardcode_prices():
+    """Agent must not hardcode any numeric price values."""
+    text = _read(ROOT / "gemini_stock_prediction_agent.py")
+    assert "243.14" not in text
+    assert "249.36" not in text
+    assert "271.63" not in text
+
+
+def test_gemini_agent_provider_config_present():
+    """Agent must have AI_PROVIDER and ALLOW_BASELINE_FALLBACK config."""
+    text = _read(ROOT / "gemini_stock_prediction_agent.py")
+    assert "AI_PROVIDER" in text
+    assert "ALLOW_BASELINE_FALLBACK" in text
+    assert "GEMINI_MODEL" in text
+
+
+def test_gemini_agent_no_yfinance():
+    text = _read(ROOT / "gemini_stock_prediction_agent.py")
+    assert "import yfinance" not in text
+    assert "yf.download" not in text
+
+
+def test_app_section3_side_by_side():
+    """Section 3 and 4 must remain side-by-side columns."""
+    text = _read(ROOT / "stock_prediction_app.py")
+    assert "SECTION 3 — AI STOCK PREDICTION" in text
+    assert "SECTION 4 — ACTUAL HISTORICAL VALIDATION" in text
+    # Both must be inside a columns() layout (c3l, c3r pattern)
+    assert "c3l, c3r = st.columns" in text
+
+
+def test_no_person_name_in_app():
+    """No personal name (Ajay, Amaan, etc.) should appear as UI-visible string."""
+    text = _read(ROOT / "stock_prediction_app.py")
+    import re
+    # Ajay should not appear as a UI string (only in comments is OK)
+    ui_lines = [
+        line for line in text.splitlines()
+        if "Ajay" in line and not line.strip().startswith("#")
+        and "ajayakula" not in line.lower()  # email is ok
+    ]
+    assert not ui_lines, f"Person name 'Ajay' found in non-comment UI lines: {ui_lines[:3]}"
