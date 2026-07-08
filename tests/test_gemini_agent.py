@@ -367,7 +367,9 @@ def test_gemini_agent_no_yfinance():
 def test_app_section3_side_by_side():
     """Section 3 and 4 must remain side-by-side columns."""
     text = _read(ROOT / "stock_prediction_app.py")
-    assert "SECTION 3 — AI STOCK PREDICTION" in text
+    # Section 3 header is dynamic: GEMINI AI STOCK PREDICTION or AI STOCK PREDICTION
+    assert "STOCK PREDICTION" in text and "SECTION 3" in text
+    assert "GEMINI AI STOCK PREDICTION" in text  # Gemini title must exist in code
     assert "SECTION 4 — ACTUAL HISTORICAL VALIDATION" in text
     # Both must be inside a columns() layout (c3l, c3r pattern)
     assert "c3l, c3r = st.columns" in text

@@ -38,6 +38,101 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+
+def _apply_light_demo_theme():
+    """Force white/light professional UI — overrides any dark browser/OS defaults."""
+    st.markdown("""
+<style>
+/* ── Page root ─────────────────────────────────────────── */
+html, body, [data-testid="stAppViewContainer"],
+.stApp, section.main, .main .block-container {
+    background-color: #FFFFFF !important;
+    color: #111827 !important;
+}
+/* ── Sidebar ───────────────────────────────────────────── */
+[data-testid="stSidebar"], [data-testid="stSidebarContent"] {
+    background-color: #F8FAFC !important;
+}
+/* ── Header / toolbar ──────────────────────────────────── */
+[data-testid="stHeader"] {
+    background-color: #FFFFFF !important;
+}
+/* ── Block container ───────────────────────────────────── */
+.block-container {
+    background-color: #FFFFFF !important;
+    padding-top: 1rem !important;
+}
+/* ── Inputs ────────────────────────────────────────────── */
+.stTextInput input, .stNumberInput input,
+.stDateInput input, .stSelectbox select,
+.stTextArea textarea {
+    background-color: #FFFFFF !important;
+    color: #111827 !important;
+    border: 1px solid #D1D5DB !important;
+    border-radius: 6px !important;
+}
+/* ── Selectbox / dropdown ──────────────────────────────── */
+.stSelectbox > div > div {
+    background-color: #FFFFFF !important;
+    color: #111827 !important;
+    border: 1px solid #D1D5DB !important;
+}
+/* ── Radio buttons ─────────────────────────────────────── */
+.stRadio > div { background-color: #FFFFFF !important; }
+/* ── Buttons ───────────────────────────────────────────── */
+.stButton > button {
+    background-color: #2563EB !important;
+    color: #FFFFFF !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-weight: 700 !important;
+}
+.stButton > button:hover {
+    background-color: #1D4ED8 !important;
+}
+/* ── Expanders ─────────────────────────────────────────── */
+.streamlit-expanderHeader, .streamlit-expanderContent,
+[data-testid="stExpander"] {
+    background-color: #F8FAFC !important;
+    color: #111827 !important;
+    border: 1px solid #E5E7EB !important;
+    border-radius: 6px !important;
+}
+/* ── Metrics ───────────────────────────────────────────── */
+[data-testid="metric-container"] {
+    background-color: #F8FAFC !important;
+    border: 1px solid #E5E7EB !important;
+    border-radius: 8px !important;
+    padding: 0.5rem !important;
+}
+/* ── Dataframes / tables ───────────────────────────────── */
+.stDataFrame, [data-testid="stTable"] {
+    background-color: #FFFFFF !important;
+}
+/* ── Info / warning / error boxes ─────────────────────── */
+.stAlert {
+    background-color: #F8FAFC !important;
+    color: #111827 !important;
+}
+/* ── Text / labels ─────────────────────────────────────── */
+label, p, span, .stMarkdown, h1, h2, h3 {
+    color: #111827 !important;
+}
+/* ── Vertical/Horizontal blocks ────────────────────────── */
+div[data-testid="stVerticalBlock"],
+div[data-testid="stHorizontalBlock"] {
+    background-color: transparent !important;
+}
+/* ── JSON viewer ───────────────────────────────────────── */
+.stJson { background-color: #F8FAFC !important; }
+/* ── Spinner ───────────────────────────────────────────── */
+.stSpinner { color: #2563EB !important; }
+</style>
+""", unsafe_allow_html=True)
+
+
+_apply_light_demo_theme()
+
 # ── Stock prediction core imports ──────────────────────────────────────────────
 from historical_price_service import (
     fetch_price_history,
@@ -98,21 +193,39 @@ def _clear_run():
         st.session_state.pop(k, None)
 
 
+_BUILD_TS = __import__("datetime").datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+_BUILD_FILE = __file__
+
+
 def _dispatch_prediction(spi: dict, ctx_bars: list) -> dict:
-    """Route to Gemini or baseline based on AI_PROVIDER config."""
-    if _AI_PROVIDER_CFG == "gemini":
+    """Route to Gemini or baseline — reads env at call time, never uses stale import."""
+    # Read FRESH from environment every single call — bypasses module-level cache
+    provider       = os.getenv("AI_PROVIDER", "gemini").lower().strip()
+    allow_fallback = os.getenv("ALLOW_BASELINE_FALLBACK", "false").lower() == "true"
+
+    import sys as _sys
+    print(f"[DISPATCH] provider={provider!r}  allow_fallback={allow_fallback}  "
+          f"symbol={spi.get('symbol')}  origin={spi.get('prediction_origin_date')}",
+          flush=True, file=_sys.stderr)
+
+    if provider == "gemini":
         result = run_gemini_stock_prediction(spi, ctx_bars)
-        if result.get("status") != "SUCCESS" and _ALLOW_BASELINE_FALLBACK:
+        print(f"[DISPATCH] Gemini returned status={result.get('status')}  "
+              f"source={result.get('source')}  gemini_used={result.get('gemini_used')}",
+              flush=True, file=_sys.stderr)
+        if result.get("status") != "SUCCESS" and allow_fallback:
             fallback = run_stock_prediction(spi, ctx_bars)
-            fallback["ai_provider"]       = "baseline_fallback"
-            fallback["gemini_used"]       = False
-            fallback["fallback_reason"]   = result.get("error", "Gemini unavailable")
+            fallback["ai_provider"]     = "baseline_fallback"
+            fallback["gemini_used"]     = False
+            fallback["fallback_reason"] = result.get("error", "Gemini unavailable")
+            print(f"[DISPATCH] FALLBACK triggered: {fallback['fallback_reason']}", flush=True, file=_sys.stderr)
             return fallback
         return result
     # baseline mode
     result = run_stock_prediction(spi, ctx_bars)
     result["ai_provider"] = "baseline"
     result["gemini_used"] = False
+    print(f"[DISPATCH] Baseline returned source={result.get('source')}", flush=True, file=_sys.stderr)
     return result
 
 
@@ -214,6 +327,26 @@ def _err_color(v, suffix=""):
 
 
 def main():
+    _apply_light_demo_theme()  # re-inject on every Streamlit rerun
+    # ── Build metadata banner — proof of active code version ─────────────────
+    _active_ai   = os.getenv("AI_PROVIDER", "gemini").upper()
+    _gemini_key  = bool(os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", ""))
+    _allow_fb    = os.getenv("ALLOW_BASELINE_FALLBACK", "false")
+    _banner_col  = "#10B981" if _active_ai == "GEMINI" and _gemini_key else "#F59E0B"
+    st.markdown(
+        f'<div style="background:#052E1A;border:1px solid {_banner_col};border-radius:6px;'
+        f'padding:.35rem 1rem;margin-bottom:.5rem;font-size:.7rem;'
+        f'display:flex;justify-content:space-between;align-items:center">'
+        f'<span style="color:#6EE7B7;font-weight:700">BUILD ACTIVE</span>'
+        f'<span style="color:#D1FAE5">AI_PROVIDER: <b style="color:{_banner_col}">{_active_ai}</b></span>'
+        f'<span style="color:#D1FAE5">Gemini Key: <b style="color:{_banner_col}">{"PRESENT" if _gemini_key else "MISSING"}</b></span>'
+        f'<span style="color:#D1FAE5">Fallback: <b>{_allow_fb.upper()}</b></span>'
+        f'<span style="color:#D1FAE5">Built: <b>{_BUILD_TS}</b></span>'
+        f'<span style="color:#D1FAE5">File: <b>{_BUILD_FILE[-40:]}</b></span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
     # Page header
     st.markdown(
         '<div style="background:#0A2540;padding:1rem 1.5rem;border-radius:8px;'
@@ -657,6 +790,15 @@ def _run_all(
     with st.spinner(f"Running {prov_label} prediction (data up to {origin_date} only)..."):
         ai_result = _dispatch_prediction(spi, ctx_bars)
 
+    # Hard-fail guard: Gemini mode must never silently serve baseline output
+    if _AI_PROVIDER_CFG == "gemini" and ai_result.get("source") != "gemini_stock_prediction_agent":
+        st.error(
+            f"RUNTIME WIRING ERROR: AI_PROVIDER=gemini but received "
+            f"source={ai_result.get('source')}. "
+            "The Gemini agent did not run. Check GEMINI_API_KEY and restart the server."
+        )
+        return
+
     st.session_state["ai_result"] = ai_result
 
     if ai_result.get("status") != "SUCCESS":
@@ -792,6 +934,15 @@ def _run_options_all(
     prov_label2 = "Gemini" if _AI_PROVIDER_CFG == "gemini" else "AI"
     with st.spinner(f"Running {prov_label2} prediction (context up to {origin_date})..."):
         ai_result = _dispatch_prediction(spi, ctx_bars)
+
+    # Hard-fail guard: Gemini mode must never silently serve baseline output
+    if _AI_PROVIDER_CFG == "gemini" and ai_result.get("source") != "gemini_stock_prediction_agent":
+        st.error(
+            f"RUNTIME WIRING ERROR: AI_PROVIDER=gemini but received "
+            f"source={ai_result.get('source')}. "
+            "The Gemini agent did not run. Check GEMINI_API_KEY and restart the server."
+        )
+        return
 
     st.session_state["ai_result"] = ai_result
 
@@ -1003,6 +1154,76 @@ def _render_results():
         "Revealed after prediction."
     )
 
+    # ── Execution Truth Panel ─────────────────────────────────────────────────
+    _etp_ai_selected   = os.getenv("AI_PROVIDER", "gemini").upper()
+    _etp_ai_used       = (ai.get("ai_provider") or "unknown").upper()
+    _etp_source        = ai.get("source", "---")
+    _etp_mv            = ai.get("model_version", "---")
+    _etp_gemini_used   = bool(ai.get("gemini_used"))
+    _etp_gemini_lat    = ai.get("gemini_latency_ms")
+    _etp_gem_model     = ai.get("model_name", "---") if _etp_gemini_used else "---"
+    _etp_hist_src      = get_provider_used(symbol) or "external_historical_provider"
+    _etp_hist_label    = {
+        "rapidapi_tradingview": "RapidAPI TradingView",
+        "external_historical_provider": "External Historical Provider (NASDAQ public)",
+    }.get(_etp_hist_src, _etp_hist_src)
+    _etp_tt_used       = False  # Stock mode never uses tastytrade
+    _etp_rapidapi_hist = "Unavailable (subscription plan)"
+    _etp_rapidapi_used = "NO — market snapshot only (/market/get-movers)"
+    _etp_gemini_badge  = (
+        '<span style="color:#10B981;font-weight:800">YES</span>'
+        if _etp_gemini_used else
+        '<span style="color:#EF4444;font-weight:800">NO</span>'
+    )
+    _etp_gemini_key_ok = bool(
+        os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
+    )
+    _etp_wrong_source  = (
+        _etp_ai_selected == "GEMINI" and _etp_source != "gemini_stock_prediction_agent"
+    )
+    _etp_build_color   = "#7C3AED"
+    st.markdown(
+        f'<div style="background:#0A1628;border:1px solid {"#DF1B41" if _etp_wrong_source else "#7C3AED"};'
+        f'border-radius:8px;padding:.7rem 1.1rem;margin:.6rem 0">'
+        f'<div style="color:{"#EF4444" if _etp_wrong_source else "#A78BFA"};font-weight:800;'
+        f'font-size:.82rem;margin-bottom:.5rem">EXECUTION TRUTH PANEL</div>'
+        f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.3rem .8rem;font-size:.71rem">'
+        # AI block
+        f'<div style="color:#93C5FD;font-weight:700">AI PROVIDER</div>'
+        f'<div style="color:#93C5FD;font-weight:700">MARKET DATA</div>'
+        f'<div style="color:#93C5FD;font-weight:700">VALIDATION</div>'
+        # AI values
+        f'<div style="color:#F1F5F9">Selected: <b>{_etp_ai_selected}</b><br>'
+        f'Actually Used: <b style="color:{"#10B981" if _etp_ai_selected==_etp_ai_used else "#EF4444"}">{_etp_ai_used}</b><br>'
+        f'Gemini API Called: {_etp_gemini_badge}<br>'
+        f'Gemini Key Present: <b>{"YES" if _etp_gemini_key_ok else "NO"}</b><br>'
+        f'Gemini Model: <b>{_etp_gem_model}</b><br>'
+        f'Latency: <b>{"---" if not _etp_gemini_lat else f"{_etp_gemini_lat:.0f} ms"}</b><br>'
+        f'Prediction Source: <b style="color:{"#10B981" if _etp_source=="gemini_stock_prediction_agent" else "#EF4444"}">{_etp_source}</b><br>'
+        f'Model Version: <b>{_etp_mv}</b></div>'
+        # Market data values
+        f'<div style="color:#F1F5F9">RapidAPI Used: <b>NO</b><br>'
+        f'RapidAPI Movers: <b>Available</b><br>'
+        f'RapidAPI OHLCV: <b style="color:#F59E0B">{_etp_rapidapi_hist}</b><br>'
+        f'Historical Bars: <b>{_etp_hist_label}</b><br>'
+        f'Historical Source: <b>{_etp_hist_src}</b></div>'
+        # Validation values
+        f'<div style="color:#F1F5F9">Mode: <b>Stock Price Validation</b><br>'
+        f'Tastytrade Used: <b>NO — stock mode uses price validation</b><br>'
+        f'Tastytrade Token: <b>Not required in stock mode</b><br>'
+        f'Validation Engine: <b>historical_stock_price_validation</b></div>'
+        f'</div>'
+        + (
+            f'<div style="background:#7F1D1D;color:#FCA5A5;padding:.4rem .7rem;'
+            f'border-radius:4px;margin-top:.5rem;font-size:.72rem;font-weight:700">'
+            f'WIRING ERROR: AI_PROVIDER={_etp_ai_selected} but source={_etp_source}. '
+            f'Restart Streamlit: Ctrl+C then streamlit run streamlit_app.py</div>'
+            if _etp_wrong_source else ""
+        )
+        + f'</div>',
+        unsafe_allow_html=True,
+    )
+
     # ── Section 3 (left) | Section 4 (right) — side-by-side ──────────────────
     st.markdown(
         f'<div style="color:#8BA9C4;font-size:.72rem;margin:.8rem 0 .2rem 0">'
@@ -1014,12 +1235,6 @@ def _render_results():
     c3l, c3r = st.columns(2)
 
     with c3l:
-        st.markdown(
-            '<div style="background:#0F2940;padding:.4rem 1rem;border-radius:6px;'
-            'color:#93C5FD;font-weight:800;font-size:.85rem;margin-bottom:.4rem">'
-            "SECTION 3 — AI STOCK PREDICTION</div>",
-            unsafe_allow_html=True,
-        )
         _ai_prov   = ai.get("ai_provider", "baseline")
         _gem_used  = bool(ai.get("gemini_used"))
         _gem_lat   = ai.get("gemini_latency_ms")
@@ -1029,6 +1244,16 @@ def _render_results():
             if _gem_used else
             f'<span style="color:#EF4444;font-weight:700">NO</span>'
         )
+        _s3_title = "GEMINI AI STOCK PREDICTION" if _gem_used else "AI STOCK PREDICTION"
+        st.markdown(
+            f'<div style="background:#0F2940;padding:.4rem 1rem;border-radius:6px;'
+            f'color:#93C5FD;font-weight:800;font-size:.85rem;margin-bottom:.4rem">'
+            f"SECTION 3 — {_s3_title}</div>",
+            unsafe_allow_html=True,
+        )
+        _ph = ai.get("prompt_hash", "")
+        _oh = ai.get("gemini_output_hash", "")
+        _dq = ai.get("data_quality_score")
         st.markdown(
             _table([
                 ("Decision",              _decision_badge(ai.get("decision", "---"))),
@@ -1041,11 +1266,14 @@ def _render_results():
                 ("Decision Horizon",      f"{horizon} days"),
                 ("Confidence Score",      f"{ai.get('confidence_score', '---')}/100"),
                 ("Risk Score",            f"{ai.get('risk_score', '---')}/100"),
+                ("Data Quality Score",    f"{_dq}/100" if _dq is not None else "---"),
                 ("Effective Origin Date", ai.get("effective_origin_date", "---")),
                 ("AI Provider",           _ai_prov.upper()),
                 ("Gemini Used",           _gem_label),
                 ("Gemini Model",          _gem_mod if _gem_used else "---"),
                 ("Gemini Latency",        f"{_gem_lat} ms" if _gem_used and _gem_lat else "---"),
+                ("Prompt Hash",           f'<code style="font-size:.65rem">{_ph[:16]}…</code>' if _ph else "---"),
+                ("Output Hash",           f'<code style="font-size:.65rem">{_oh[:16]}…</code>' if _oh else "---"),
                 ("Model Version",         ai.get("model_version", "---")),
             ]),
             unsafe_allow_html=True,
@@ -2067,7 +2295,7 @@ def _run_rolling(symbol, ctx_start, n_months, capital, benchmark):
         }
 
         ctx_bars   = filter_history_up_to(hist, origin_s)
-        ai_result  = run_stock_prediction(spi, ctx_bars)
+        ai_result  = _dispatch_prediction(spi, ctx_bars)
         val_result = run_stock_validation(spi, ai_result, hist)
 
         if ai_result.get("status") == "SUCCESS" and val_result.get("status") == "SUCCESS":

@@ -78,7 +78,7 @@ REQUIRED_IN_PREDICTION_APP = [
     "decision_horizon_days",
     "target_date",
     # Stock mode sections — Section 3 and 4 are side-by-side column headers
-    "SECTION 3 — AI STOCK PREDICTION",
+    "GEMINI AI STOCK PREDICTION",
     "SECTION 4 — ACTUAL HISTORICAL VALIDATION",
     "AI STOCK PREDICTION",
     "ACTUAL HISTORICAL VALIDATION",
@@ -318,12 +318,15 @@ def test_options_backtest_uses_prediction_origin_as_start():
 
 def test_stock_mode_side_by_side_headers():
     """
-    Stock Mode: Section 3 (left) and Section 4 (right) are side-by-side column headers.
-    Static proof: both column headers must appear in source with SECTION prefix.
+    Stock Mode: Section 3 header is dynamic (GEMINI AI STOCK PREDICTION when Gemini active).
+    Static proof: both title strings must appear in source, Section 4 must be present.
     """
     text = _read(ROOT / "stock_prediction_app.py")
-    assert "SECTION 3 — AI STOCK PREDICTION" in text, (
-        "'SECTION 3 — AI STOCK PREDICTION' must be the left column header in stock mode."
+    assert "GEMINI AI STOCK PREDICTION" in text, (
+        "'GEMINI AI STOCK PREDICTION' must be the Gemini-active Section 3 title in stock mode."
+    )
+    assert "AI STOCK PREDICTION" in text, (
+        "'AI STOCK PREDICTION' must appear in source (used in Section 3 header logic)."
     )
     assert "SECTION 4 — ACTUAL HISTORICAL VALIDATION" in text, (
         "'SECTION 4 — ACTUAL HISTORICAL VALIDATION' must be the right column header in stock mode."
@@ -506,3 +509,84 @@ def test_no_data_source_nasdaq_in_app():
     assert "nasdaq_public_api" not in text, (
         "stock_prediction_app.py must not reference 'nasdaq_public_api' as a UI label."
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LIGHT THEME / WHITE UI CONTRACT
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_streamlit_config_exists():
+    """`.streamlit/config.toml` must exist — required to force light theme."""
+    cfg = ROOT / ".streamlit" / "config.toml"
+    assert cfg.exists(), ".streamlit/config.toml must exist to enforce light theme"
+
+
+def test_streamlit_config_has_light_base():
+    """Streamlit config must set base = 'light', not dark."""
+    cfg = _read(ROOT / ".streamlit" / "config.toml")
+    assert 'base = "light"' in cfg, (
+        "config.toml must have base = \"light\" to force white UI"
+    )
+    assert "dark" not in cfg.lower(), (
+        "config.toml must not contain 'dark' theme setting"
+    )
+
+
+def test_streamlit_config_white_background():
+    """Streamlit config must set backgroundColor = '#FFFFFF'."""
+    cfg = _read(ROOT / ".streamlit" / "config.toml")
+    assert "#FFFFFF" in cfg, (
+        "config.toml must set backgroundColor = '#FFFFFF'"
+    )
+
+
+def test_app_injects_light_css():
+    """stock_prediction_app.py must inject CSS that forces white background."""
+    text = _read(ROOT / "stock_prediction_app.py")
+    assert "_apply_light_demo_theme" in text, (
+        "App must define and call _apply_light_demo_theme() for white UI"
+    )
+    assert "background-color: #FFFFFF" in text, (
+        "Injected CSS must force background-color: #FFFFFF"
+    )
+
+
+def test_app_no_dark_theme_css():
+    """App must not inject CSS that forces dark/black page background."""
+    text = _read(ROOT / "stock_prediction_app.py")
+    # Dark background forced globally is forbidden
+    assert "background-color: #000000" not in text
+    assert "background-color: black" not in text
+
+
+def test_build_active_banner_present():
+    """App must render a BUILD ACTIVE banner showing AI_PROVIDER and build timestamp."""
+    text = _read(ROOT / "stock_prediction_app.py")
+    assert "BUILD ACTIVE" in text, "Build Active banner must exist in app"
+    assert "_BUILD_TS" in text, "Build timestamp variable must exist"
+    assert "AI_PROVIDER" in text
+
+
+def test_execution_truth_panel_present():
+    """App must render an Execution Truth Panel before Section 3."""
+    text = _read(ROOT / "stock_prediction_app.py")
+    assert "EXECUTION TRUTH PANEL" in text
+    assert "Gemini API Called" in text
+    assert "Tastytrade Used" in text
+    assert "RapidAPI Used" in text
+    assert "RapidAPI OHLCV" in text
+
+
+def test_stock_mode_says_tastytrade_no():
+    """Execution Truth Panel in stock mode must state tastytrade is not used."""
+    text = _read(ROOT / "stock_prediction_app.py")
+    assert "stock mode uses" in text.lower() or "Stock mode uses" in text, (
+        "App must clearly state tastytrade is not used in stock mode"
+    )
+
+
+def test_light_theme_config_no_black():
+    """config.toml must not set any color to #000000 or 'black'."""
+    cfg = _read(ROOT / ".streamlit" / "config.toml")
+    assert "#000000" not in cfg
+    assert "black" not in cfg.lower()

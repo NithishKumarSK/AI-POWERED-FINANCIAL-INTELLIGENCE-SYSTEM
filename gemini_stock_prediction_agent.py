@@ -789,7 +789,7 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
     return {
         "status":                       "SUCCESS",
         "source":                       "gemini_stock_prediction_agent",
-        "model_version":                f"gemini_walkforward_{GEMINI_MODEL}",
+        "model_version":                "gemini_stock_prediction_agent_v1",
         "ai_provider":                  "gemini",
         "gemini_used":                  True,
         "model_name":                   GEMINI_MODEL,
@@ -851,7 +851,7 @@ def _error_result(spi: dict, input_hash: str, error_msg: str, extra: dict = None
     result = {
         "status":                       "FAILED",
         "source":                       "gemini_stock_prediction_agent",
-        "model_version":                f"gemini_walkforward_{GEMINI_MODEL}",
+        "model_version":                "gemini_stock_prediction_agent_v1",
         "ai_provider":                  "gemini",
         "gemini_used":                  False,
         "stock_prediction_input_hash":  input_hash,
