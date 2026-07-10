@@ -26,23 +26,29 @@ _TOKEN_TTL: float = 14 * 60  # 14 min — refresh before 15-min expiry
 
 
 def get_access_token() -> Tuple[Optional[str], str]:
-    """Return a valid access token, using cache or refresh as needed."""
+    """Return a valid access token, using cache or refresh as needed.
+
+    Prefers refresh-token flow over the static TASTYTRADE_ACCESS_TOKEN env value,
+    because the static token may be expired (TTL ~15 min after issuance).
+    Static token is only used as last resort when no refresh token is configured.
+    """
     global _cached_token, _cached_token_time
 
     if _cached_token and (time.time() - _cached_token_time) < _TOKEN_TTL:
         return _cached_token, ""
 
-    # Try env-supplied static token first (short-lived — only valid ~15min after issuance)
-    if settings.tastytrade_access_token and not _cached_token:
+    # Prefer refresh flow — static env token expires quickly and causes 401
+    if settings.tastytrade_refresh_token:
+        return refresh_access_token()
+
+    # Fall back to static env token only when no refresh token is available
+    if settings.tastytrade_access_token:
         _cached_token = settings.tastytrade_access_token
         _cached_token_time = time.time()
-        logger.info("[TastytradeAuth] Using access token from environment.")
+        logger.info("[TastytradeAuth] Using static access token from environment (no refresh token).")
         return _cached_token, ""
 
-    if not settings.tastytrade_refresh_token:
-        return None, "TASTYTRADE_REFRESH_TOKEN is not configured. Add it to .env."
-
-    return refresh_access_token()
+    return None, "TASTYTRADE_REFRESH_TOKEN is not configured. Add it to .env."
 
 
 def refresh_access_token() -> Tuple[Optional[str], str]:

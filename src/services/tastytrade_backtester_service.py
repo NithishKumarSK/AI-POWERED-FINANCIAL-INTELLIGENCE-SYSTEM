@@ -212,27 +212,29 @@ def get_backtest_logs(backtest_id: str) -> List[str]:
 # ---------------------------------------------------------------------------
 
 def parse_backtest_result(backtest_id: str, data: Dict[str, Any]) -> BacktestResult:
-    """Parse raw API response into a structured BacktestResult."""
-    # Normalise nested structures
-    result_data = data.get("result") or data.get("data") or data
+    """Parse raw API response into a structured BacktestResult.
 
-    # Leg type — anything other than "equity-option" is a misconfiguration
-    legs = result_data.get("legs") or []
+    The backtester API nests trials/statistics/snapshots under data["results"].
+    Top-level keys hold metadata (symbol, status, legs, dates).
+    """
+    # Leg type lives at top level
+    legs = data.get("legs") or []
     leg_type = "unknown"
     if legs:
         leg_type = legs[0].get("type", "unknown")
-    elif "type" in result_data:
-        leg_type = result_data["type"]
 
-    # Trials
-    raw_trials = result_data.get("trials") or result_data.get("snapshots") or []
+    # Results are nested under "results" key
+    results_obj: Dict[str, Any] = data.get("results") or {}
+
+    # Trials — API returns {profitLoss, openDateTime, closeDateTime}
+    raw_trials = results_obj.get("trials") or results_obj.get("snapshots") or []
     trials = [BacktestTrial.from_dict(t) for t in raw_trials]
 
-    # Statistics
-    raw_stats = result_data.get("statistics") or result_data.get("stats")
+    # Statistics — API returns human-readable keys like "Win percentage", "Total profit/loss"
+    raw_stats = results_obj.get("statistics") or results_obj.get("stats")
     statistics = BacktestStatistics.from_dict(raw_stats) if raw_stats else _compute_statistics(trials)
 
-    symbol = result_data.get("symbol") or data.get("symbol") or ""
+    symbol = data.get("symbol") or ""
 
     return BacktestResult(
         backtest_id=backtest_id,

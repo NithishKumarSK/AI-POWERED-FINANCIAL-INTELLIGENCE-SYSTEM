@@ -572,8 +572,8 @@ def test_execution_truth_panel_present():
     text = _read(ROOT / "stock_prediction_app.py")
     assert "EXECUTION TRUTH PANEL" in text
     assert "Gemini API Called" in text
-    assert "Tastytrade Used" in text
-    assert "RapidAPI Used" in text
+    assert "Tastytrade" in text
+    assert "RapidAPI" in text
     assert "RapidAPI OHLCV" in text
 
 

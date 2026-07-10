@@ -105,9 +105,18 @@ class BacktestTrial:
                 return Decimal("0")
 
         snaps = [BacktestSnapshot.from_dict(s) for s in (d.get("snapshots") or [])]
+        # API may use openDateTime/closeDateTime or entryDate/exitDate
+        entry = (
+            d.get("entryDate") or d.get("entry_date")
+            or d.get("openDateTime") or d.get("open_date_time") or ""
+        )
+        exit_ = (
+            d.get("exitDate") or d.get("exit_date")
+            or d.get("closeDateTime") or d.get("close_date_time") or ""
+        )
         return cls(
-            entry_date=str(d.get("entryDate") or d.get("entry_date") or ""),
-            exit_date=str(d.get("exitDate") or d.get("exit_date") or ""),
+            entry_date=str(entry),
+            exit_date=str(exit_),
             profit_loss=_dec(d.get("profitLoss") or d.get("profit_loss")),
             snapshots=snaps,
             raw=d,
@@ -148,16 +157,43 @@ class BacktestStatistics:
             except Exception:
                 return 0
 
+        # Handle both camelCase API keys and the human-readable "Win percentage" style
+        # that the backtester.vast.tastyworks.com API actually returns
+        win_pct_raw = (
+            d.get("winRate") or d.get("win_rate")
+            or d.get("Win percentage") or d.get("win_percentage") or 0
+        )
+        # "Win percentage" comes as "36.36" (0-100 scale); winRate comes as 0-1 scale
+        win_pct = _f(win_pct_raw)
+        if win_pct > 1.0:
+            win_pct = win_pct / 100.0
+
+        total_pl_raw = (
+            d.get("totalProfitLoss") or d.get("total_profit_loss")
+            or d.get("Total profit/loss") or 0
+        )
+        avg_pl_raw = (
+            d.get("averageProfitLoss") or d.get("average_profit_loss")
+            or d.get("Avg. profit/loss per trade") or d.get("Avg. return per trade") or 0
+        )
+
         return cls(
-            total_profit_loss=_dec(d.get("totalProfitLoss") or d.get("total_profit_loss")),
-            win_rate=_f(d.get("winRate") or d.get("win_rate")),
-            average_profit_loss=_dec(d.get("averageProfitLoss") or d.get("average_profit_loss")),
-            num_trades=_i(d.get("numTrades") or d.get("num_trades") or d.get("numberOfTrades")),
-            num_wins=_i(d.get("numWins") or d.get("num_wins")),
-            num_losses=_i(d.get("numLosses") or d.get("num_losses")),
-            max_profit=_dec(d.get("maxProfit") or d.get("max_profit")),
-            max_loss=_dec(d.get("maxLoss") or d.get("max_loss")),
-            sharpe_ratio=_f(d.get("sharpeRatio") or d.get("sharpe_ratio")) or None,
+            total_profit_loss=_dec(total_pl_raw),
+            win_rate=win_pct,
+            average_profit_loss=_dec(avg_pl_raw),
+            num_trades=_i(
+                d.get("numTrades") or d.get("num_trades") or d.get("numberOfTrades")
+                or d.get("Number of trades") or 0
+            ),
+            num_wins=_i(d.get("numWins") or d.get("num_wins") or d.get("Wins") or 0),
+            num_losses=_i(d.get("numLosses") or d.get("num_losses") or d.get("Losses") or 0),
+            max_profit=_dec(
+                d.get("maxProfit") or d.get("max_profit") or d.get("Highest profit") or 0
+            ),
+            max_loss=_dec(
+                d.get("maxLoss") or d.get("max_loss") or d.get("Worst loss") or 0
+            ),
+            sharpe_ratio=_f(d.get("sharpeRatio") or d.get("sharpe_ratio") or d.get("MAR ratio")) or None,
             raw=d,
         )
 

@@ -27,7 +27,7 @@ class Settings:
     tastytrade_access_token: str = field(
         default_factory=lambda: os.getenv("TASTYTRADE_ACCESS_TOKEN", "").strip())
     tastytrade_user_agent: str = field(
-        default_factory=lambda: os.getenv("TASTYTRADE_USER_AGENT", "ajay-ai-finance/1.0"))
+        default_factory=lambda: os.getenv("TASTYTRADE_USER_AGENT", "flex-ai-finance/1.0"))
 
     # Google Gemini
     gemini_api_key: str = field(

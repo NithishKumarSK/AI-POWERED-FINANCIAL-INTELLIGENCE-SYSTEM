@@ -40,11 +40,19 @@ _GEMINI_KEY             = os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_A
 
 STOCK_EVAL_FILE = ROOT / "stock_prediction_evaluation_runs.jsonl"
 
-_AI_BUY_THRESHOLD  =  3.0
-_AI_SELL_THRESHOLD = -3.0
 _HIGH_RISK_CUTOFF  = 80
 _RETURN_CLAMP_MAX  = 20.0
 _RETURN_CLAMP_MIN  = -20.0
+
+
+def _get_horizon_thresholds(horizon_days: int) -> Tuple[float, float]:
+    """Return (buy_threshold, sell_threshold) calibrated to prediction horizon."""
+    if horizon_days <= 10:
+        return 1.25, -1.25
+    elif horizon_days <= 30:
+        return 2.0, -2.0
+    else:
+        return 2.5, -2.5
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -441,7 +449,133 @@ def build_calibration_summary(symbol: str = "", horizon_days: int = 0) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# DECISION GUARDRAILS (deterministic — same rules as baseline)
+# SIGNAL SCORE ENGINE — deterministic bull/bear/uncertainty from feature packet
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _compute_signal_scores(feature_packet: dict) -> dict:
+    """
+    Compute deterministic bullish/bearish/uncertainty scores (each 0-100) from
+    the feature packet. Each indicator casts a vote (bull, bear, uncertain) that
+    sums to 1.0 per indicator. Final score = mean vote × 100 across all indicators.
+    """
+    trend     = feature_packet.get("trend", {}) or {}
+    momentum  = feature_packet.get("momentum", {}) or {}
+    volatility = feature_packet.get("volatility", {}) or {}
+    returns   = feature_packet.get("returns", {}) or {}
+    reversal  = feature_packet.get("reversal_signals", {}) or {}
+
+    signals: List[Tuple[float, float, float]] = []  # (bull, bear, uncert) each vote sums to 1.0
+
+    # 1. Trend regime + SMA alignment
+    regime = trend.get("trend_regime", "sideways")
+    pvs20  = trend.get("price_vs_sma_20_pct") or 0.0
+    pvs50  = trend.get("price_vs_sma_50_pct") or 0.0
+    if regime == "bullish" and pvs20 > 2 and pvs50 > 2:
+        signals.append((1.0, 0.0, 0.0))
+    elif regime == "bearish" and pvs20 < -2 and pvs50 < -2:
+        signals.append((0.0, 1.0, 0.0))
+    elif pvs20 > 1:
+        signals.append((0.6, 0.0, 0.4))
+    elif pvs20 < -1:
+        signals.append((0.0, 0.6, 0.4))
+    else:
+        signals.append((0.0, 0.0, 1.0))
+
+    # 2. RSI
+    rsi = momentum.get("RSI_14")
+    if rsi is not None:
+        if 55 <= rsi < 70:
+            signals.append((1.0, 0.0, 0.0))
+        elif 30 < rsi <= 45:
+            signals.append((0.0, 1.0, 0.0))
+        elif rsi >= 70:
+            signals.append((0.5, 0.0, 0.5))   # overbought → uncertain
+        elif rsi <= 30:
+            signals.append((0.0, 0.4, 0.6))   # oversold → uncertain (reversal risk)
+        else:
+            signals.append((0.0, 0.0, 1.0))
+
+    # 3. MACD line + histogram
+    macd_v = momentum.get("MACD")
+    macd_h = momentum.get("MACD_histogram")
+    if macd_v is not None and macd_h is not None:
+        if macd_v > 0 and macd_h > 0:
+            signals.append((1.0, 0.0, 0.0))
+        elif macd_v < 0 and macd_h < 0:
+            signals.append((0.0, 1.0, 0.0))
+        elif macd_h > 0:
+            signals.append((0.6, 0.0, 0.4))
+        elif macd_h < 0:
+            signals.append((0.0, 0.6, 0.4))
+        else:
+            signals.append((0.0, 0.0, 1.0))
+
+    # 4. Recent returns (20d + 60d)
+    r20 = returns.get("return_20d")
+    r60 = returns.get("return_60d")
+    if r20 is not None and r60 is not None:
+        if r20 > 3 and r60 > 5:
+            signals.append((1.0, 0.0, 0.0))
+        elif r20 < -3 and r60 < -5:
+            signals.append((0.0, 1.0, 0.0))
+        elif r20 > 1:
+            signals.append((0.6, 0.0, 0.4))
+        elif r20 < -1:
+            signals.append((0.0, 0.6, 0.4))
+        else:
+            signals.append((0.0, 0.0, 1.0))
+
+    # 5. Bollinger band position
+    bb_pos = volatility.get("BB_position")
+    if bb_pos is not None:
+        if bb_pos > 0.8:
+            signals.append((0.0, 0.4, 0.6))   # near upper band → bearish tilt + uncertain
+        elif bb_pos < 0.2:
+            signals.append((0.4, 0.0, 0.6))   # near lower band → bullish tilt + uncertain
+        else:
+            signals.append((0.0, 0.0, 1.0))
+
+    # 6. Volatility regime
+    vol_regime = volatility.get("volatility_regime", "medium")
+    if vol_regime == "high":
+        signals.append((0.0, 0.0, 1.0))
+    elif vol_regime == "low":
+        pass   # no vote — low vol is neutral
+
+    # 7. Reversal risk
+    rev_risk = reversal.get("reversal_risk", "low")
+    if rev_risk == "high":
+        signals.append((0.0, 0.0, 1.0))
+    elif rev_risk == "medium":
+        signals.append((0.0, 0.0, 0.8))
+
+    if not signals:
+        return {"bullish_score": 50, "bearish_score": 50, "uncertainty_score": 50,
+                "dominant": "uncertain", "dominant_score": 50}
+
+    n = len(signals)
+    bull_s  = round(sum(s[0] for s in signals) / n * 100)
+    bear_s  = round(sum(s[1] for s in signals) / n * 100)
+    uncert_s = round(sum(s[2] for s in signals) / n * 100)
+
+    if bull_s > bear_s and bull_s > uncert_s:
+        dominant, dom_score = "bullish", bull_s
+    elif bear_s > bull_s and bear_s > uncert_s:
+        dominant, dom_score = "bearish", bear_s
+    else:
+        dominant, dom_score = "uncertain", uncert_s
+
+    return {
+        "bullish_score":    bull_s,
+        "bearish_score":    bear_s,
+        "uncertainty_score": uncert_s,
+        "dominant":          dominant,
+        "dominant_score":    dom_score,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DECISION GUARDRAILS (deterministic — dynamic thresholds by horizon)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _apply_guardrails(
@@ -449,19 +583,54 @@ def _apply_guardrails(
     confidence_score: int,
     risk_score: int,
     data_quality_score: int,
+    horizon_days: int = 30,
+    signal_scores: Optional[dict] = None,
 ) -> Tuple[str, str]:
-    """Deterministic post-Gemini decision guardrails. Risk NEVER creates SELL."""
+    """Deterministic post-Gemini guardrails with horizon-calibrated thresholds.
+    Risk score NEVER creates SELL. HOLD can be overridden by strong signal consensus.
+    """
     if data_quality_score < 60:
         return "REVIEW", f"Data quality too low ({data_quality_score}/100) — insufficient data."
     if confidence_score < 50:
         return "REVIEW", f"Confidence too low ({confidence_score}/100) — mixed signals."
 
-    if predicted_return_pct >= _AI_BUY_THRESHOLD:
-        decision, reason = "BUY",  f"Predicted return {predicted_return_pct:+.2f}% >= +{_AI_BUY_THRESHOLD}% BUY threshold."
-    elif predicted_return_pct <= _AI_SELL_THRESHOLD:
-        decision, reason = "SELL", f"Predicted return {predicted_return_pct:+.2f}% <= {_AI_SELL_THRESHOLD}% SELL threshold."
+    buy_thr, sell_thr = _get_horizon_thresholds(horizon_days)
+
+    if predicted_return_pct >= buy_thr:
+        decision, reason = "BUY",  (
+            f"Predicted return {predicted_return_pct:+.2f}% >= +{buy_thr}% BUY threshold "
+            f"({horizon_days}d horizon)."
+        )
+    elif predicted_return_pct <= sell_thr:
+        decision, reason = "SELL", (
+            f"Predicted return {predicted_return_pct:+.2f}% <= {sell_thr}% SELL threshold "
+            f"({horizon_days}d horizon)."
+        )
     else:
-        decision, reason = "HOLD", f"Return {predicted_return_pct:+.2f}% in HOLD band."
+        decision, reason = "HOLD", (
+            f"Return {predicted_return_pct:+.2f}% in HOLD band (±{abs(sell_thr):.2f}% "
+            f"for {horizon_days}d horizon)."
+        )
+
+    # Post-Gemini HOLD override: strong signal consensus + confidence overrides weak HOLD
+    if decision == "HOLD" and signal_scores and confidence_score >= 60:
+        dominant   = signal_scores.get("dominant", "uncertain")
+        dom_score  = signal_scores.get("dominant_score", 0)
+        near_thr   = abs(predicted_return_pct) >= abs(sell_thr) * 0.75
+        if dominant == "bullish" and dom_score >= 65 and near_thr:
+            decision = "BUY"
+            reason   = (
+                f"HOLD→BUY override: bullish signals {dom_score}/100, "
+                f"return {predicted_return_pct:+.2f}% near threshold. "
+                f"[was: {reason}]"
+            )
+        elif dominant == "bearish" and dom_score >= 65 and near_thr:
+            decision = "SELL"
+            reason   = (
+                f"HOLD→SELL override: bearish signals {dom_score}/100, "
+                f"return {predicted_return_pct:+.2f}% near threshold. "
+                f"[was: {reason}]"
+            )
 
     if risk_score >= _HIGH_RISK_CUTOFF and decision == "BUY":
         return "HOLD",   f"BUY downgraded to HOLD: high risk ({risk_score}/100) despite positive return."
@@ -482,6 +651,8 @@ def _build_gemini_prompt(
 ) -> str:
     fp_json  = json.dumps(feature_packet, indent=2, default=str)
     cal_json = json.dumps(calibration_summary, indent=2, default=str)
+    horizon_days = int(normalized_input.get("decision_horizon_days") or 30)
+    buy_thr, sell_thr = _get_horizon_thresholds(horizon_days)
     inp_json = json.dumps({
         "symbol":                        normalized_input.get("symbol"),
         "benchmark":                     normalized_input.get("benchmark"),
@@ -490,7 +661,9 @@ def _build_gemini_prompt(
         "historical_context_start_date": normalized_input.get("historical_context_start_date"),
         "effective_origin_date":         normalized_input.get("prediction_origin_date"),
         "target_date":                   normalized_input.get("target_date"),
-        "horizon_days":                  normalized_input.get("decision_horizon_days"),
+        "horizon_days":                  horizon_days,
+        "buy_threshold_pct":             buy_thr,
+        "sell_threshold_pct":            sell_thr,
     }, indent=2)
 
     return f"""You are a financial decision-support reasoning agent for a walk-forward backtesting system.
@@ -508,6 +681,29 @@ The calibration summary below may show a SELL bias in past predictions.
 If momentum looks negative but RSI is oversold (< 35), price is near support, and reversal_risk is medium/high,
 do NOT blindly predict SELL. Consider HOLD or even a muted negative return with REVIEW decision.
 Strong downside momentum followed by extreme oversold RSI historically precedes reversals.
+
+DECISION QUALITY — AVOID HOLD OVERUSE:
+Use HOLD ONLY when ALL of the following are true:
+- Expected price movement is genuinely near zero (predicted_return_pct within 0.5% of 0)
+- Bullish and bearish signals are nearly equal and balanced (no dominant direction)
+- Confidence is genuinely weak (< 55) with no clear trend
+
+Use REVIEW (not HOLD) when:
+- Uncertainty is high but there IS a directional lean — flag for human review, not neutral
+
+Do NOT default to HOLD when:
+- Trend regime + SMA position agree on a direction
+- RSI clearly signals momentum (>60 bullish, <40 bearish)
+- MACD line AND histogram both point the same direction
+- 20d and 60d returns consistently agree on direction
+
+Horizon-calibrated thresholds for this prediction:
+- BUY if predicted_return_pct >= +{buy_thr}%
+- SELL if predicted_return_pct <= {sell_thr}%
+- Only predict HOLD if return is genuinely in the ±{abs(sell_thr)}% neutral zone
+
+If meaningful positive return ({buy_thr}%+) is predicted WITH bullish trend AND positive MACD → commit to BUY.
+If meaningful negative return ({sell_thr}% or worse) WITH bearish trend AND negative MACD → commit to SELL.
 
 NORMALIZED INPUT:
 {inp_json}
@@ -636,8 +832,14 @@ def _call_gemini(
         conf  = max(0, min(100, int(gemini_json.get("confidence_score") or 50)))
         risk  = max(0, min(100, int(gemini_json.get("risk_score") or 50)))
         dq    = feature_packet.get("data_quality_score", 70)
+        h_days = int(normalized_input.get("decision_horizon_days") or 30)
 
-        decision, decision_reason = _apply_guardrails(pred_return, conf, risk, dq)
+        sig_scores = _compute_signal_scores(feature_packet)
+        decision, decision_reason = _apply_guardrails(
+            pred_return, conf, risk, dq,
+            horizon_days=h_days,
+            signal_scores=sig_scores,
+        )
 
         output_hash = hashlib.sha256(raw_text.encode()).hexdigest()[:16]
 
@@ -658,6 +860,7 @@ def _call_gemini(
             "confidence_score":         conf,
             "risk_score":               risk,
             "data_quality_score":       dq,
+            "signal_scores":            sig_scores,
             "reasoning":                gemini_json.get("main_reason", ""),
             "trend_assessment":         gemini_json.get("trend_assessment", ""),
             "momentum_assessment":      gemini_json.get("momentum_assessment", ""),
@@ -815,6 +1018,7 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
         "confidence_score":             gemini_result["confidence_score"],
         "risk_score":                   gemini_result["risk_score"],
         "data_quality_score":           gemini_result["data_quality_score"],
+        "signal_scores":                gemini_result.get("signal_scores", {}),
         "latest_date_seen_by_ai":       history[-1]["date"] if history else origin_str,
         "target_price_hidden_from_ai":  True,
         "leakage_check":                leakage_check,

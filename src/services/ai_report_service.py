@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 def _build_stock_prompt(symbol: str, data: Dict[str, Any]) -> str:
     verdict = data.get("verdict", {}) or {}
     scores = data.get("scores", {}) or {}
-    return f"""You are Ajay's AI Financial Analyst. Summarise the analysis for {symbol}.
+    return f"""You are an AI Financial Analyst. Summarise the analysis for {symbol}.
 
 Decision: {verdict.get('value', 'N/A')} (score {verdict.get('score', 'N/A')}/100)
 Confidence: {verdict.get('confidence', 'N/A')}%
@@ -37,7 +37,7 @@ def _build_portfolio_prompt(data: Dict[str, Any]) -> str:
     summary = data.get("summary", {}) or {}
     holdings = data.get("holdings", []) or []
     tickers = [h.get("ticker", "") for h in holdings[:10]]
-    return f"""You are Ajay's AI Financial Analyst. Summarise this portfolio analysis.
+    return f"""You are an AI Financial Analyst. Summarise this portfolio analysis.
 
 Holdings ({len(holdings)}): {', '.join(tickers)}
 Overall signal: {summary.get('overall_signal', 'N/A')}
@@ -49,7 +49,7 @@ Write 3–4 sentences: portfolio strength, risks, and a recommended action prior
 
 
 def _build_backtest_prompt(data: Dict[str, Any]) -> str:
-    return f"""You are Ajay's AI Financial Analyst. Summarise this backtest.
+    return f"""You are an AI Financial Analyst. Summarise this backtest.
 
 Ticker: {data.get('ticker', data.get('symbol', 'N/A'))}
 Strategy: {data.get('strategy', 'N/A')}

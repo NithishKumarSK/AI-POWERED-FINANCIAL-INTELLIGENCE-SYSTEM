@@ -11,7 +11,7 @@ Expected output (last line):
     ALL STOCK VALIDATION TESTS PASSED
 
 Tests:
-  1. TSLA formula (Ajay's known-answer example: origin=402, target=371, capital=50000)
+  1. TSLA formula (known-answer example: origin=402, target=371, capital=50000)
   2. 10% gain (BUY decision)
   3. -1.5% loss (HOLD decision -- within -2%/+2% band)
   4. -10% loss (SELL decision)
@@ -60,7 +60,7 @@ def _close(a, b, tol=_TOL) -> bool:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TEST 1 -- Ajay's TSLA known-answer example
+# TEST 1 -- TSLA known-answer example
 # origin=402, target=371, capital=50,000
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -90,10 +90,10 @@ def test1_tsla_known_answer():
     _assert(result["actual_decision"] == expected_decision,
             f"decision={result['actual_decision']} expected={expected_decision}")
 
-    # Verify against Ajay's exact numbers
+    # Verify exact formula output
     _assert(
         abs(result["actual_final_capital"] - 46144.278606965) < 0.01,
-        "Ajay expected capital $46,144.28 -- formula matches",
+        "Expected capital $46,144.28 -- formula matches",
     )
 
 

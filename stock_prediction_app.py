@@ -114,10 +114,13 @@ html, body, [data-testid="stAppViewContainer"],
     background-color: #F8FAFC !important;
     color: #111827 !important;
 }
-/* ── Text / labels ─────────────────────────────────────── */
-label, p, span, .stMarkdown, h1, h2, h3 {
+/* ── Text / labels (light backgrounds only) ────────────── */
+label, p, .stMarkdown, h1, h2, h3 {
     color: #111827 !important;
 }
+/* ── Dark panel children: respect inline color styles ───── */
+/* span elements inside dark panels carry explicit color attrs;
+   excluding span from global !important lets them render correctly */
 /* ── Vertical/Horizontal blocks ────────────────────────── */
 div[data-testid="stVerticalBlock"],
 div[data-testid="stHorizontalBlock"] {
@@ -127,6 +130,18 @@ div[data-testid="stHorizontalBlock"] {
 .stJson { background-color: #F8FAFC !important; }
 /* ── Spinner ───────────────────────────────────────────── */
 .stSpinner { color: #2563EB !important; }
+/* ── Dark panels: all inline children keep their color ─── */
+/* Targets divs with dark backgrounds injected via st.markdown */
+[data-testid="stMarkdownContainer"] div[style*="background:#0A"],
+[data-testid="stMarkdownContainer"] div[style*="background:#05"],
+[data-testid="stMarkdownContainer"] div[style*="background:#0F"] {
+    color: #F8FAFC !important;
+}
+[data-testid="stMarkdownContainer"] div[style*="background:#0A"] *,
+[data-testid="stMarkdownContainer"] div[style*="background:#05"] *,
+[data-testid="stMarkdownContainer"] div[style*="background:#0F"] * {
+    color: inherit;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -178,6 +193,36 @@ try:
 except Exception:
     _TT_AVAILABLE = False
 
+# ── Paid API health-check services ─────────────────────────────────────────────
+try:
+    from rapidapi_market_service import run_rapidapi_market_health_check as _rapidapi_hc
+    _RAPIDAPI_SVC_AVAILABLE = True
+except Exception:
+    _RAPIDAPI_SVC_AVAILABLE = False
+    def _rapidapi_hc(**kwargs):
+        return {
+            "called": False, "endpoint": "", "http_status": 0,
+            "total_count": None, "top_symbols": [], "key_present": False,
+            "role": "market_intelligence_health_check",
+            "used_in_prediction_context": False,
+            "error": "rapidapi_market_service import failed",
+        }
+
+try:
+    from tastytrade_service import run_tastytrade_health_check as _tastytrade_hc
+    _TASTYTRADE_SVC_AVAILABLE = True
+except Exception:
+    _TASTYTRADE_SVC_AVAILABLE = False
+    def _tastytrade_hc():
+        return {
+            "called": False, "endpoint": "", "http_status": 0, "latency_ms": None,
+            "token_refreshed": False, "customer_verified": False,
+            "refresh_present": False,
+            "role": "authentication_and_account_health_check",
+            "used_in_stock_mode": False, "used_in_options_mode": True,
+            "error": "tastytrade_service import failed",
+        }
+
 
 # ── Session keys cleared on every new run ────────────────────────────────────
 _RUN_KEYS = (
@@ -185,6 +230,7 @@ _RUN_KEYS = (
     "opts_result", "opts_params", "backtest_payload",
     "saved", "save_msg", "input_hash", "run_id", "run_ts",
     "error_msg", "active_mode", "run_type",
+    "rapidapi_health", "tastytrade_health",
 )
 
 
@@ -319,6 +365,88 @@ def _err_color(v, suffix=""):
         )
     except Exception:
         return str(v)
+
+
+def _render_decision_distribution_diagnostics():
+    """Show decision distribution from past eval records. Warns if HOLD% is too high."""
+    from pathlib import Path
+    import json as _json
+    eval_file = Path(__file__).resolve().parent / "stock_prediction_evaluation_runs.jsonl"
+    records: list = []
+    if eval_file.exists():
+        try:
+            with open(eval_file, "r", encoding="utf-8") as _fh:
+                for _ln in _fh:
+                    _ln = _ln.strip()
+                    if _ln:
+                        try:
+                            records.append(_json.loads(_ln))
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+    total = len(records)
+    if total == 0:
+        _info_card("No past evaluation records yet — decision distribution will appear after first validated run.")
+        return
+
+    dec_counts: Dict[str, int] = {"BUY": 0, "SELL": 0, "HOLD": 0, "REVIEW": 0, "OTHER": 0}
+    dec_ok = dir_ok = 0
+    ret_errs: List[float] = []
+
+    for r in records:
+        ai_pred = r.get("ai_prediction", {}) or {}
+        cmp_r   = r.get("comparison", {}) or {}
+        dec = str(ai_pred.get("decision", "OTHER") or "OTHER").upper()
+        dec_counts[dec if dec in dec_counts else "OTHER"] += 1
+        if cmp_r.get("decision_match") is True:
+            dec_ok += 1
+        if cmp_r.get("directional_match") is True:
+            dir_ok += 1
+        if cmp_r.get("abs_return_error_pct") is not None:
+            try:
+                ret_errs.append(float(cmp_r["abs_return_error_pct"]))
+            except Exception:
+                pass
+
+    hold_pct  = round(dec_counts["HOLD"] / total * 100, 1)
+    dec_match = round(dec_ok / total * 100, 1) if total else 0
+    dir_match = round(dir_ok / total * 100, 1) if total else 0
+    avg_err   = round(sum(ret_errs) / len(ret_errs), 2) if ret_errs else None
+
+    hold_color = "#EF4444" if hold_pct > 60 else ("#F59E0B" if hold_pct > 45 else "#10B981")
+    dm_color   = "#10B981" if dec_match >= 60 else ("#F59E0B" if dec_match >= 45 else "#EF4444")
+    dr_color   = "#10B981" if dir_match >= 55 else ("#F59E0B" if dir_match >= 40 else "#EF4444")
+    err_color  = "#10B981" if (avg_err is not None and avg_err <= 10) else ("#F59E0B" if (avg_err is not None and avg_err <= 15) else "#EF4444")
+
+    with st.expander("Decision Distribution Diagnostics (HOLD bias check)", expanded=(hold_pct > 45)):
+        st.markdown(
+            _table([
+                ("Total validated records",  str(total)),
+                ("BUY decisions",            f'{dec_counts["BUY"]} ({round(dec_counts["BUY"]/total*100,1)}%)'),
+                ("SELL decisions",           f'{dec_counts["SELL"]} ({round(dec_counts["SELL"]/total*100,1)}%)'),
+                ("HOLD decisions",           f'<span style="color:{hold_color};font-weight:700">{dec_counts["HOLD"]} ({hold_pct}%)</span>'),
+                ("REVIEW decisions",         f'{dec_counts["REVIEW"]} ({round(dec_counts["REVIEW"]/total*100,1)}%)'),
+                ("Decision Match %",         f'<span style="color:{dm_color};font-weight:700">{dec_match}%</span>'),
+                ("Direction Match %",        f'<span style="color:{dr_color};font-weight:700">{dir_match}%</span>'),
+                ("Avg Return Error (pp)",    f'<span style="color:{err_color};font-weight:700">{avg_err if avg_err is not None else "---"}</span>'),
+            ]),
+            unsafe_allow_html=True,
+        )
+        if hold_pct > 60:
+            st.error(f"HOLD% is {hold_pct}% — severely above 60% threshold. Signal score engine + Gemini prompt calibration needed.")
+        elif hold_pct > 45:
+            st.warning(f"HOLD% is {hold_pct}% — above 45% caution threshold. Model may be over-cautious.")
+        else:
+            st.success(f"HOLD% is {hold_pct}% — within acceptable range.")
+
+        if dec_match < 50 or dir_match < 50 or (avg_err is not None and avg_err > 15):
+            st.warning(
+                f"CALIBRATION WARNING: Decision Match={dec_match}%, Direction Match={dir_match}%, "
+                f"Avg Return Error={avg_err}pp. "
+                "Model accuracy is below acceptable thresholds — predictions should be treated as experimental."
+            )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -761,6 +889,13 @@ def _run_all(
     st.session_state["price_hist"]  = hist
     st.session_state["ctx_summary"] = get_context_summary(hist, ctx_start, origin_date)
 
+    # ── Paid API health checks (proof of live API calls) ─────────────────────
+    with st.spinner("Calling paid APIs (RapidAPI + Tastytrade health check)..."):
+        _rapi_result = _rapidapi_hc()
+        _tt_result   = _tastytrade_hc()
+    st.session_state["rapidapi_health"]   = _rapi_result
+    st.session_state["tastytrade_health"] = _tt_result
+
     # Strict two-bound context filter: AI sees ONLY [ctx_start, origin_date]
     ctx_bars = [b for b in hist if ctx_start <= b["date"] <= origin_date]
     if not ctx_bars:
@@ -916,6 +1051,13 @@ def _run_options_all(
     st.session_state["price_hist"]  = hist
     st.session_state["ctx_summary"] = get_context_summary(hist, ctx_start, origin_date)
 
+    # ── Paid API health checks (proof of live API calls) ─────────────────────
+    with st.spinner("Calling paid APIs (RapidAPI + Tastytrade health check)..."):
+        _rapi_result2 = _rapidapi_hc()
+        _tt_result2   = _tastytrade_hc()
+    st.session_state["rapidapi_health"]   = _rapi_result2
+    st.session_state["tastytrade_health"] = _tt_result2
+
     # Strict two-bound context filter
     ctx_bars = [b for b in hist if ctx_start <= b["date"] <= origin_date]
     if not ctx_bars:
@@ -1015,12 +1157,36 @@ def _run_options_all(
                     end_date=target_date,     # TARGET DATE
                     legs=[leg],
                 )
-                st.session_state["backtest_payload"] = payload  # stored for debug
+                st.session_state["backtest_payload"] = payload.to_dict()  # store as plain dict for debug display
                 backtest_id, err = _tt_create_backtest(payload)
                 if backtest_id:
                     bt_data, poll_err = _tt_poll_backtest(backtest_id)
                     if bt_data:
-                        stats = (bt_data.get("statistics") or bt_data.get("data", {}).get("statistics") or {})
+                        # Stats are nested under bt_data["results"] not top-level
+                        _res_obj = bt_data.get("results") or {}
+                        stats    = _res_obj.get("statistics") or {}
+                        _trials  = _res_obj.get("trials") or []
+                        # Map the API's human-readable stat keys to opts_result fields
+                        _win_pct_raw = (
+                            stats.get("Win percentage") or stats.get("winRate")
+                            or stats.get("win_rate") or 0
+                        )
+                        _win_pct = float(_win_pct_raw or 0)
+                        if _win_pct > 1.0:
+                            _win_pct = _win_pct / 100.0
+                        _total_pl = (
+                            stats.get("Total profit/loss") or stats.get("totalProfitLoss")
+                            or stats.get("profit_loss") or 0
+                        )
+                        _avg_pnl = (
+                            stats.get("Avg. profit/loss per trade")
+                            or stats.get("Avg. return per trade")
+                            or stats.get("avgProfitLoss") or stats.get("avg_pnl") or 0
+                        )
+                        _n_trades = int(
+                            stats.get("Number of trades") or stats.get("numTrades")
+                            or stats.get("total_trades") or len(_trials) or 0
+                        )
                         opts_result = {
                             "status":         "SUCCESS",
                             "backtest_id":    backtest_id,
@@ -1030,10 +1196,10 @@ def _run_options_all(
                             "quantity":       options_params.get("quantity", 1),
                             "delta":          options_params.get("delta", 30),
                             "dte":            options_params.get("dte", 45),
-                            "win_rate":       stats.get("winRate") or stats.get("win_rate"),
-                            "profit_loss":    stats.get("profitLoss") or stats.get("profit_loss"),
-                            "avg_pnl":        stats.get("avgProfitLoss") or stats.get("avg_pnl"),
-                            "total_trades":   stats.get("totalTrades") or stats.get("total_trades"),
+                            "win_rate":       _win_pct,
+                            "profit_loss":    float(_total_pl or 0),
+                            "avg_pnl":        float(_avg_pnl or 0),
+                            "total_trades":   _n_trades,
                             "raw_stats":      stats,
                         }
                     else:
@@ -1049,17 +1215,22 @@ def _run_options_all(
         opts_result["error"] = "Tastytrade backtester not available (import failed)"
 
     st.session_state["opts_result"] = opts_result
+    _backtest_succeeded = opts_result.get("status") == "SUCCESS"
 
-    # Stock price validation for section 4 (use same window: origin → target)
-    with st.spinner(f"Fetching actual price on {target_date}..."):
+    # Underlying stock reference — always fetch, but used for display only
+    with st.spinner(f"Fetching underlying stock price on {target_date} (reference only)..."):
         val_result = run_stock_validation(spi, ai_result, hist)
     st.session_state["val_result"] = val_result
 
-    # Save record if both stock val succeeded
-    if val_result.get("status") == "SUCCESS":
+    # Save options accuracy ONLY if options backtest succeeded
+    # Do NOT compare AI options prediction against stock price — different comparables
+    if _backtest_succeeded:
         saved, save_msg = save_stock_prediction_record(spi, ai_result, val_result)
+        if not val_result.get("status") == "SUCCESS":
+            saved, save_msg = False, "Options backtest succeeded but underlying stock validation failed — not saved"
     else:
-        saved, save_msg = False, f"Stock validation failed: {val_result.get('error', '')}"
+        saved  = False
+        save_msg = f"Options backtest {opts_result.get('status', 'FAILED')} — accuracy record not saved"
 
     st.session_state["saved"]    = saved
     st.session_state["save_msg"] = save_msg
@@ -1169,7 +1340,16 @@ def _render_results():
     }.get(_etp_hist_src, _etp_hist_src)
     _etp_tt_used       = False  # Stock mode never uses tastytrade
     _etp_rapidapi_hist = "Unavailable (subscription plan)"
-    _etp_rapidapi_used = "NO — market snapshot only (/market/get-movers)"
+    _etp_rapi_hc_etp   = st.session_state.get("rapidapi_health") or {}
+    _etp_tt_hc_etp     = st.session_state.get("tastytrade_health") or {}
+    _etp_rapi_called   = _etp_rapi_hc_etp.get("called", False)
+    _etp_rapi_ok       = _etp_rapi_hc_etp.get("http_status") == 200
+    _etp_tt_verified   = _etp_tt_hc_etp.get("customer_verified", False)
+    _etp_rapidapi_used = (
+        f'YES — HTTP {_etp_rapi_hc_etp.get("http_status")} ({_etp_rapi_hc_etp.get("total_count","?")}'
+        f' movers)'
+        if _etp_rapi_called else "NOT YET CALLED (run a prediction)"
+    )
     _etp_gemini_badge  = (
         '<span style="color:#10B981;font-weight:800">YES</span>'
         if _etp_gemini_used else
@@ -1202,15 +1382,17 @@ def _render_results():
         f'Prediction Source: <b style="color:{"#10B981" if _etp_source=="gemini_stock_prediction_agent" else "#EF4444"}">{_etp_source}</b><br>'
         f'Model Version: <b>{_etp_mv}</b></div>'
         # Market data values
-        f'<div style="color:#F1F5F9">RapidAPI Used: <b>NO</b><br>'
-        f'RapidAPI Movers: <b>Available</b><br>'
+        f'<div style="color:#F1F5F9">RapidAPI Called: <b style="color:{"#10B981" if _etp_rapi_called else "#F59E0B"}">'
+        f'{"YES — HTTP " + str(_etp_rapi_hc_etp.get("http_status","?")) if _etp_rapi_called else "Not yet (run prediction first)"}</b><br>'
+        f'RapidAPI Status: <b>{"200 OK" if _etp_rapi_ok else ("Error" if _etp_rapi_called else "---")}</b><br>'
         f'RapidAPI OHLCV: <b style="color:#F59E0B">{_etp_rapidapi_hist}</b><br>'
         f'Historical Bars: <b>{_etp_hist_label}</b><br>'
         f'Historical Source: <b>{_etp_hist_src}</b></div>'
         # Validation values
         f'<div style="color:#F1F5F9">Mode: <b>Stock Price Validation</b><br>'
+        f'Tastytrade Called: <b style="color:{"#10B981" if _etp_tt_verified else "#F59E0B"}">'
+        f'{"YES — customer verified" if _etp_tt_verified else "Called (not verified in stock mode)"}</b><br>'
         f'Tastytrade Used: <b>NO — stock mode uses price validation</b><br>'
-        f'Tastytrade Token: <b>Not required in stock mode</b><br>'
         f'Validation Engine: <b>historical_stock_price_validation</b></div>'
         f'</div>'
         + (
@@ -1221,6 +1403,71 @@ def _render_results():
             if _etp_wrong_source else ""
         )
         + f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Paid API Usage Proof ──────────────────────────────────────────────────
+    _rapi_hc_r = st.session_state.get("rapidapi_health") or {}
+    _tt_hc_r   = st.session_state.get("tastytrade_health") or {}
+    _rapi_called   = _rapi_hc_r.get("called", False)
+    _rapi_status   = _rapi_hc_r.get("http_status", 0)
+    _rapi_ok       = _rapi_called and _rapi_status == 200
+    _rapi_endpoint = _rapi_hc_r.get("endpoint", "---")
+    _rapi_count    = _rapi_hc_r.get("total_count")
+    _rapi_syms     = _rapi_hc_r.get("top_symbols", [])
+    _rapi_err      = _rapi_hc_r.get("error")
+    _rapi_key_ok   = _rapi_hc_r.get("key_present", False)
+    _rapi_leakage  = _rapi_hc_r.get("used_in_prediction_context", False)
+    _tt_called     = _tt_hc_r.get("called", False)
+    _tt_status     = _tt_hc_r.get("http_status", 0)
+    _tt_ok         = _tt_hc_r.get("customer_verified", False)
+    _tt_endpoint   = _tt_hc_r.get("endpoint", "---")
+    _tt_refreshed  = _tt_hc_r.get("token_refreshed", False)
+    _tt_err        = _tt_hc_r.get("error")
+    _tt_ref_ok     = _tt_hc_r.get("refresh_present", False)
+
+    def _api_badge(ok: bool, label_yes: str = "YES", label_no: str = "NO") -> str:
+        col = "#10B981" if ok else "#EF4444"
+        lbl = label_yes if ok else label_no
+        return f'<span style="color:{col};font-weight:800">{lbl}</span>'
+
+    st.markdown(
+        f'<div style="background:#0A1628;border:1px solid #2563EB;'
+        f'border-radius:8px;padding:.7rem 1.1rem;margin:.6rem 0">'
+        f'<div style="color:#93C5FD;font-weight:800;font-size:.82rem;margin-bottom:.5rem">'
+        f'PAID API USAGE PROOF</div>'
+        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem 1.2rem;font-size:.71rem">'
+        # RapidAPI column
+        f'<div style="color:#FCD34D;font-weight:700;margin-bottom:.2rem">RAPIDAPI (TradingView)</div>'
+        f'<div style="color:#FCD34D;font-weight:700;margin-bottom:.2rem">TASTYTRADE (OAuth)</div>'
+        f'<div style="color:#F1F5F9">'
+        f'API Key Present: {_api_badge(_rapi_key_ok)}<br>'
+        f'Called This Run: {_api_badge(_rapi_called)}<br>'
+        f'HTTP Status: <b>{_rapi_status if _rapi_called else "---"}</b><br>'
+        f'Endpoint: <code style="font-size:.66rem">{_rapi_endpoint.replace("https://","")}</code><br>'
+        f'Total Movers: <b>{_rapi_count if _rapi_count is not None else "---"}</b><br>'
+        f'Top Symbols: <b>{", ".join(_rapi_syms[:3]) if _rapi_syms else "---"}</b><br>'
+        f'Role: <b>market intelligence health check</b><br>'
+        f'Data To Gemini: {_api_badge(not _rapi_leakage, "NO (leakage-safe)", "YES (LEAK!)")}<br>'
+        f'Used In Stock Mode: {_api_badge(True, "YES — health check", "NO")}<br>'
+        f'Used In Options Mode: {_api_badge(True, "YES — health check", "NO")}<br>'
+        + (f'Error: <span style="color:#EF4444">{_rapi_err}</span>' if _rapi_err else "")
+        + f'</div>'
+        # Tastytrade column
+        f'<div style="color:#F1F5F9">'
+        f'Refresh Token: {_api_badge(_tt_ref_ok, "PRESENT", "MISSING")}<br>'
+        f'Token Refreshed: {_api_badge(_tt_refreshed)}<br>'
+        f'Called This Run: {_api_badge(_tt_called)}<br>'
+        f'HTTP Status: <b>{_tt_status if _tt_called else "---"}</b><br>'
+        f'Endpoint: <code style="font-size:.66rem">{_tt_endpoint.replace("https://","")}</code><br>'
+        f'Customer Verified: {_api_badge(_tt_ok)}<br>'
+        f'Role: <b>auth &amp; account health check</b><br>'
+        f'Used In Stock Mode: {_api_badge(False, "YES", "NO — stock uses price validation")}<br>'
+        f'Used In Options Mode: {_api_badge(True, "YES — backtester", "NO")}<br>'
+        + (f'Error: <span style="color:#EF4444">{_tt_err}</span>' if _tt_err else "")
+        + f'</div>'
+        f'</div>'
+        f'</div>',
         unsafe_allow_html=True,
     )
 
@@ -1595,6 +1842,25 @@ def _render_results():
         st.json(cmp)
     with st.expander("Momentum Signals Used by AI"):
         st.json(fu)
+    _sig = ai.get("signal_scores", {})
+    if _sig:
+        with st.expander("Signal Score Engine (bull/bear/uncertainty)"):
+            _bull = _sig.get("bullish_score", 0)
+            _bear = _sig.get("bearish_score", 0)
+            _unc  = _sig.get("uncertainty_score", 0)
+            _dom  = _sig.get("dominant", "---")
+            _doms = _sig.get("dominant_score", 0)
+            st.markdown(
+                _table([
+                    ("Bullish Score",    f'<b style="color:#10B981">{_bull}/100</b>'),
+                    ("Bearish Score",    f'<b style="color:#EF4444">{_bear}/100</b>'),
+                    ("Uncertainty Score",f'<b style="color:#F59E0B">{_unc}/100</b>'),
+                    ("Dominant Signal",  f'<b>{_dom.upper()} ({_doms}/100)</b>'),
+                ]),
+                unsafe_allow_html=True,
+            )
+
+    _render_decision_distribution_diagnostics()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1701,6 +1967,73 @@ def _render_options_results():
             ]),
             unsafe_allow_html=True,
         )
+
+    # ── Paid API Usage Proof (options mode) ──────────────────────────────────
+    _rapi_hc_o = st.session_state.get("rapidapi_health") or {}
+    _tt_hc_o   = st.session_state.get("tastytrade_health") or {}
+    _ro_called   = _rapi_hc_o.get("called", False)
+    _ro_status   = _rapi_hc_o.get("http_status", 0)
+    _ro_endpoint = _rapi_hc_o.get("endpoint", "---")
+    _ro_count    = _rapi_hc_o.get("total_count")
+    _ro_syms     = _rapi_hc_o.get("top_symbols", [])
+    _ro_err      = _rapi_hc_o.get("error")
+    _ro_key_ok   = _rapi_hc_o.get("key_present", False)
+    _ro_leakage  = _rapi_hc_o.get("used_in_prediction_context", False)
+    _to_called   = _tt_hc_o.get("called", False)
+    _to_status   = _tt_hc_o.get("http_status", 0)
+    _to_ok       = _tt_hc_o.get("customer_verified", False)
+    _to_endpoint = _tt_hc_o.get("endpoint", "---")
+    _to_refreshed = _tt_hc_o.get("token_refreshed", False)
+    _to_err      = _tt_hc_o.get("error")
+    _to_ref_ok   = _tt_hc_o.get("refresh_present", False)
+
+    def _ab(ok: bool, y: str = "YES", n: str = "NO") -> str:
+        c = "#10B981" if ok else "#EF4444"
+        return f'<span style="color:{c};font-weight:800">{y if ok else n}</span>'
+
+    st.markdown(
+        f'<div style="background:#0A1628;border:1px solid #2563EB;'
+        f'border-radius:8px;padding:.7rem 1.1rem;margin:.6rem 0">'
+        f'<div style="color:#93C5FD;font-weight:800;font-size:.82rem;margin-bottom:.5rem">'
+        f'PAID API USAGE PROOF</div>'
+        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem 1.2rem;font-size:.71rem">'
+        f'<div style="color:#FCD34D;font-weight:700;margin-bottom:.2rem">RAPIDAPI (TradingView)</div>'
+        f'<div style="color:#FCD34D;font-weight:700;margin-bottom:.2rem">TASTYTRADE (OAuth)</div>'
+        f'<div style="color:#F1F5F9">'
+        f'API Key Present: {_ab(_ro_key_ok)}<br>'
+        f'Called This Run: {_ab(_ro_called)}<br>'
+        f'HTTP Status: <b>{_ro_status if _ro_called else "---"}</b><br>'
+        f'Endpoint: <code style="font-size:.66rem">{_ro_endpoint.replace("https://","")}</code><br>'
+        f'Total Movers: <b>{_ro_count if _ro_count is not None else "---"}</b><br>'
+        f'Top Symbols: <b>{", ".join(_ro_syms[:3]) if _ro_syms else "---"}</b><br>'
+        f'Data To Gemini: {_ab(not _ro_leakage, "NO (leakage-safe)", "YES (LEAK!)")}<br>'
+        + (f'Error: <span style="color:#EF4444">{_ro_err}</span>' if _ro_err else "")
+        + f'</div>'
+        f'<div style="color:#F1F5F9">'
+        f'Refresh Token: {_ab(_to_ref_ok, "PRESENT", "MISSING")}<br>'
+        f'Token Refreshed: {_ab(_to_refreshed)}<br>'
+        f'Customer Verified: {_ab(_to_ok)}<br>'
+        f'Auth Endpoint: <code style="font-size:.66rem">{_to_endpoint.replace("https://","")}</code><br>'
+        f'Auth HTTP Status: <b>{_to_status if _to_called else "---"}</b><br>'
+        + (f'Auth Error: <span style="color:#EF4444">{_to_err}</span><br>' if _to_err else "")
+        + f'<br><b style="color:#FCD34D">OPTIONS BACKTEST:</b><br>'
+        f'Backtest Status: <b style="color:{"#10B981" if opts_status == "SUCCESS" else "#EF4444"}">'
+        f'{opts_status}</b><br>'
+        f'Backtest ID: <b>{opts.get("backtest_id","---")}</b><br>'
+        + (
+            f'Options P&L: <b style="color:{"#10B981" if float(opts.get("profit_loss",0) or 0)>=0 else "#EF4444"}">'
+            f'${float(opts.get("profit_loss",0) or 0):+,.2f}</b><br>'
+            f'Win Rate: <b>{f"{float(opts.get("win_rate",0) or 0)*100:.1f}%" if (opts.get("win_rate") is not None and float(opts.get("win_rate",0) or 0) <= 1) else f"{float(opts.get("win_rate",0) or 0):.1f}%"}</b><br>'
+            f'Trials / Trades: <b>{opts.get("total_trades","---")}</b><br>'
+            if opts_status == "SUCCESS" else ""
+        )
+        + f'Accuracy Saved: {_ab(st.session_state.get("saved", False))}<br>'
+        + (f'Backtest Error: <span style="color:#EF4444">{opts.get("error","")}</span>' if opts_status != "SUCCESS" else "")
+        + f'</div>'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
     # ── Section 3 (left) | Section 4 (right) — options side-by-side ──────────
     st.markdown(
@@ -1814,164 +2147,187 @@ def _render_options_results():
             unsafe_allow_html=True,
         )
 
-    # ── Numeric Closeness (AI vs Actual Stock) ───────────────────────────────
+    # ── Options Backtest Numeric Summary ─────────────────────────────────────
     _section_header(
-        None, "Numeric Closeness",
-        "AI predicted return vs actual stock movement",
+        None, "Options Backtest Summary",
+        "Tastytrade backtest result — AI options prediction vs actual options P&L",
     )
 
-    if cmp_ok:
-        dec_match  = cmp.get("decision_match", False)
-        dir_match  = cmp.get("directional_match", False)
-        ret_err    = float(cmp.get("return_error_pct") or 0)
-        cap_err    = float(cmp.get("capital_error") or 0)
-        cap_err_pct = cmp.get("capital_error_pct")
-        pl_err     = float(cmp.get("pl_error") or 0)
-        price_err  = float(cmp.get("target_price_error") or 0)
+    if opts_status == "SUCCESS":
+        pnl_v      = float(opts.get("profit_loss") or 0)
+        win_rate_v = float(opts.get("win_rate") or 0)
+        avg_pnl_v  = float(opts.get("avg_pnl") or 0)
+        n_trades_v = int(opts.get("total_trades") or 0)
+        wr_str     = f"{win_rate_v*100:.1f}%" if win_rate_v <= 1 else f"{win_rate_v:.1f}%"
 
-        mc = st.columns(5)
-        mc[0].metric("Decision Match",   "YES" if dec_match else "NO")
-        mc[1].metric("Direction Match",  "YES" if dir_match else "NO")
-        mc[2].metric("Return Error",     f"{ret_err:+.2f}pp")
-        mc[3].metric("Capital Error",    f"${cap_err:+,.0f}")
-        mc[4].metric("P&L Error",        f"${pl_err:+,.0f}")
+        mc = st.columns(4)
+        mc[0].metric("Options Total P&L",  f"${pnl_v:+,.2f}")
+        mc[1].metric("Win Rate",           wr_str)
+        mc[2].metric("Avg P&L / Trade",    f"${avg_pnl_v:+,.2f}")
+        mc[3].metric("Total Trades",       str(n_trades_v))
 
-        c4a, c4b, c4c = st.columns([5, 5, 4])
-        with c4a:
+        ob1, ob2 = st.columns(2)
+        with ob1:
             st.markdown("**AI OPTIONS PREDICTION**")
             st.markdown(
                 _table([
-                    ("Decision",      _decision_badge(cmp.get("ai_decision", "---"))),
-                    ("Target Price",  _fmt(cmp.get("ai_predicted_price"), "$")),
-                    ("Return %",      _fmt(cmp.get("ai_predicted_return_pct"), suffix="%")),
-                    ("Final Capital", _fmt(cmp.get("ai_predicted_capital"), "$")),
-                    ("Total P&L",     _sign_fmt(ai.get("predicted_total_pl"))),
+                    ("AI Decision",       _decision_badge(ai.get("decision", "---"))),
+                    ("Predicted Return %", _sign_fmt(ai.get("predicted_return_pct"), suffix="%")),
+                    ("Confidence",         f"{ai.get('confidence_score','---')}/100"),
+                    ("Risk Score",         f"{ai.get('risk_score','---')}/100"),
                 ]),
                 unsafe_allow_html=True,
             )
-        with c4b:
-            st.markdown("**ACTUAL STOCK (GROUND TRUTH)**")
-            orig_p = float(val.get("origin_price") or 0)
-            tgt_p  = float(val.get("target_price") or 0)
-            ret_p  = float(val.get("actual_return_pct") or 0)
-            cap_v  = float(val.get("actual_final_capital") or cap)
-            pl_v   = float(val.get("actual_total_pl") or 0)
+        with ob2:
+            st.markdown("**TASTYTRADE OPTIONS BACKTEST ACTUAL**")
             st.markdown(
                 _table([
-                    ("Decision",     _decision_badge(cmp.get("actual_decision", "---"))),
-                    ("Target Price", _fmt(cmp.get("actual_price"), "$")),
-                    ("Return %",     _fmt(cmp.get("actual_return_pct"), suffix="%")),
-                    ("Final Capital",_fmt(cmp.get("actual_capital"), "$")),
-                    ("Total P&L",    _sign_fmt(pl_v)),
+                    ("Backtest Status",  "SUCCESS"),
+                    ("Total P&L",        f"${pnl_v:+,.2f}"),
+                    ("Win Rate",         wr_str),
+                    ("Avg P&L / Trade",  f"${avg_pnl_v:+,.2f}"),
+                    ("Number of Trades", str(n_trades_v)),
+                    ("Backtest ID",      opts.get("backtest_id", "---")),
+                    ("Backtest Window",  f"{origin}  →  {target}"),
                 ]),
                 unsafe_allow_html=True,
             )
-        with c4c:
-            st.markdown("**ERROR (AI minus Actual)**")
-            st.markdown(
-                _table([
-                    ("Decision Match",   "YES" if dec_match else "NO"),
-                    ("Direction Match",  "YES" if dir_match else "NO"),
-                    ("Price Error ($)",  _err_color(price_err)),
-                    ("Return Error pp",  _err_color(ret_err, "pp")),
-                    ("Capital Error $",  _err_color(cap_err)),
-                    ("Capital Error %",  _err_color(cap_err_pct, "%") if cap_err_pct is not None else "---"),
-                    ("P&L Error $",      _err_color(pl_err)),
-                ]),
-                unsafe_allow_html=True,
-            )
+    else:
+        _err_card(
+            f"<b>Options Backtest {opts_status} — cannot compare AI vs backtest.</b><br>"
+            f"{opts.get('error', 'Unknown error')}.<br>"
+            "<b>Comparison and accuracy save are BLOCKED until backtest succeeds.</b>"
+        )
 
-        # Actual formula proof
+    # ── Underlying Stock Reference (informational only) ───────────────────────
+    _section_header(
+        None, "Underlying Stock Reference",
+        "INFORMATIONAL ONLY — NOT used for options agreement or accuracy",
+    )
+    st.markdown(
+        '<div style="background:#1E293B;border-left:4px solid #F59E0B;'
+        'padding:.5rem 1rem;border-radius:4px;font-size:.73rem;color:#FCD34D;margin:.3rem 0">'
+        'The underlying stock price movement is shown here for context only. '
+        'It does NOT drive the options final decision or accuracy record. '
+        'Options accuracy requires a successful Tastytrade options backtest.</div>',
+        unsafe_allow_html=True,
+    )
+    if val_ok:
         orig_p = float(val.get("origin_price") or 0)
         tgt_p  = float(val.get("target_price") or 0)
         ret_p  = float(val.get("actual_return_pct") or 0)
         cap_v  = float(val.get("actual_final_capital") or cap)
+        pl_v   = float(val.get("actual_total_pl") or 0)
+        act_dec_ref = val.get("actual_decision", "---")
         st.markdown(
-            f'<div style="background:#F0FFF4;border:1px solid #6EE7B7;border-radius:6px;'
-            f'padding:.6rem 1.2rem;font-size:.74rem;color:#065F46;margin:.4rem 0;font-family:monospace">'
-            f"<b>Exact Formula Proof (actual stock):</b><br>"
-            f"actual_return_pct    = (({tgt_p:,.6f} - {orig_p:,.6f}) / {orig_p:,.6f}) × 100 = <b>{ret_p:,.6f}%</b><br>"
-            f"actual_final_capital = {cap:,.2f} × ({tgt_p:,.6f} / {orig_p:,.6f}) = <b>${cap_v:,.6f}</b>"
-            f"</div>",
+            _table([
+                ("Underlying Stock Decision", _decision_badge(act_dec_ref)),
+                ("Origin Price",             _fmt(orig_p, "$")),
+                ("Target Price",             _fmt(tgt_p, "$")),
+                ("Actual Stock Return %",    _sign_fmt(ret_p, suffix="%")),
+                ("Stock Final Capital",      _fmt(cap_v, "$")),
+                ("Stock Total P&L",          _sign_fmt(pl_v)),
+                ("Note",                     "Reference only — not options accuracy"),
+            ]),
             unsafe_allow_html=True,
         )
     else:
-        _warn_card(
-            "Actual stock validation did not succeed — numeric closeness unavailable. "
-            "This may happen if the target date has no trading data."
-        )
+        _warn_card("Underlying stock reference unavailable — stock validation did not succeed.")
 
-    # ── Final Decision Board ─────────────────────────────────────────────────
+    # ── Final Decision Board ──────────────────────────────────────────────────
     _section_header(None, "Final Decision Board")
 
-    ai_dec    = ai.get("decision", "---")
-    act_dec   = cmp.get("actual_decision", "---") if cmp_ok else "---"
-    agreement = cmp.get("agreement", "UNVERIFIED") if cmp_ok else "UNVERIFIED"
-    final_dec = cmp.get("final_decision", "REVIEW") if cmp_ok else "REVIEW"
+    ai_dec = ai.get("decision", "---")
+
+    if opts_status == "SUCCESS":
+        # Options backtest succeeded — derive agreement from P&L
+        bt_pnl  = float(opts.get("profit_loss") or 0)
+        bt_dec  = "BUY" if bt_pnl > 0 else ("SELL" if bt_pnl < 0 else "HOLD")
+        ai_dir  = "positive" if ai.get("predicted_return_pct", 0) >= 2 else (
+                  "negative" if ai.get("predicted_return_pct", 0) <= -2 else "neutral")
+        bt_dir  = "positive" if bt_pnl > 0 else ("negative" if bt_pnl < 0 else "neutral")
+        bt_agree = ai_dir == bt_dir
+        agreement  = "MATCH" if bt_agree else "CONFLICT"
+        final_dec  = ai_dec if bt_agree else "REVIEW"
+    else:
+        agreement  = "BACKTEST_FAILED"
+        final_dec  = "REVIEW"
+        bt_dec     = "FAILED"
+
+    # Options strategy decision labels (ENTER / SKIP / WAIT / REVIEW)
+    _opts_label_map = {"BUY": "ENTER", "SELL": "SKIP", "HOLD": "WAIT", "REVIEW": "REVIEW"}
+    _ai_opts_label  = _opts_label_map.get(str(ai_dec).upper(), ai_dec)
+    _bt_opts_label  = {"BUY": "ENTER_WORKED", "SELL": "STRATEGY_LOST", "HOLD": "FLAT", "FAILED": "FAILED"}.get(str(bt_dec).upper(), bt_dec)
+    _final_opts_label = {"BUY": "ENTER", "SELL": "SKIP", "HOLD": "WAIT", "REVIEW": "REVIEW"}.get(str(final_dec).upper(), final_dec)
 
     c5a, c5b, c5c, c5d = st.columns(4)
     with c5a:
         st.markdown(
-            '<div style="background:#0A2540;padding:.6rem 1rem;border-radius:6px;'
-            'text-align:center">'
-            '<div style="color:#8BA9C4;font-size:.7rem;margin-bottom:.3rem">AI DECISION</div>'
+            '<div style="background:#0A2540;padding:.6rem 1rem;border-radius:6px;text-align:center">'
+            '<div style="color:#8BA9C4;font-size:.7rem;margin-bottom:.3rem">AI STRATEGY SIGNAL</div>'
             f'<div style="font-size:1.6rem;font-weight:900">{_decision_badge(ai_dec)}</div>'
-            f'<div style="color:#8BA9C4;font-size:.66rem;margin-top:.2rem">'
+            f'<div style="color:#8BA9C4;font-size:.62rem;margin-top:.15rem">Options: <b style="color:#FCD34D">{_ai_opts_label}</b></div>'
+            f'<div style="color:#8BA9C4;font-size:.66rem;margin-top:.1rem">'
             f"Return: {_sign_fmt(ai.get('predicted_return_pct'), suffix='%')}"
             f"</div></div>",
             unsafe_allow_html=True,
         )
     with c5b:
+        _bt_badge = (
+            f'<span style="color:#EF4444;font-weight:900">FAILED</span>'
+            if opts_status != "SUCCESS" else _decision_badge(bt_dec)
+        )
+        _bt_note = (
+            f"P&L: ${float(opts.get('profit_loss') or 0):+,.2f}"
+            if opts_status == "SUCCESS" else opts_status
+        )
         st.markdown(
-            '<div style="background:#0A2540;padding:.6rem 1rem;border-radius:6px;'
-            'text-align:center">'
-            '<div style="color:#8BA9C4;font-size:.7rem;margin-bottom:.3rem">ACTUAL / BACKTEST</div>'
-            f'<div style="font-size:1.6rem;font-weight:900">{_decision_badge(act_dec)}</div>'
-            f'<div style="color:#8BA9C4;font-size:.66rem;margin-top:.2rem">'
-            f"Return: {_sign_fmt(val.get('actual_return_pct') if val_ok else None, suffix='%')}"
-            f"</div></div>",
+            '<div style="background:#0A2540;padding:.6rem 1rem;border-radius:6px;text-align:center">'
+            '<div style="color:#8BA9C4;font-size:.7rem;margin-bottom:.3rem">OPTIONS BACKTEST</div>'
+            f'<div style="font-size:1.6rem;font-weight:900">{_bt_badge}</div>'
+            f'<div style="color:#8BA9C4;font-size:.62rem;margin-top:.15rem">Result: <b style="color:#FCD34D">{_bt_opts_label}</b></div>'
+            f'<div style="color:#8BA9C4;font-size:.66rem;margin-top:.1rem">{_bt_note}</div></div>',
             unsafe_allow_html=True,
         )
     with c5c:
-        agree_color = "#00875A" if agreement == "MATCH" else ("#DF1B41" if agreement == "CONFLICT" else "#D97706")
+        agree_color = (
+            "#00875A" if agreement == "MATCH"
+            else ("#DF1B41" if agreement == "CONFLICT"
+            else "#D97706")
+        )
         st.markdown(
-            '<div style="background:#0A2540;padding:.6rem 1rem;border-radius:6px;'
-            'text-align:center">'
+            '<div style="background:#0A2540;padding:.6rem 1rem;border-radius:6px;text-align:center">'
             '<div style="color:#8BA9C4;font-size:.7rem;margin-bottom:.3rem">AGREEMENT</div>'
             f'<div style="font-size:1.4rem;font-weight:900;color:{agree_color}">{agreement}</div>'
             f'<div style="color:#8BA9C4;font-size:.66rem;margin-top:.2rem">'
-            f"{'Decision match' if agreement == 'MATCH' else 'AI was wrong'}"
+            f"{'AI vs backtest match' if agreement == 'MATCH' else ('Backtest failed' if agreement == 'BACKTEST_FAILED' else 'Directions differ')}"
             f"</div></div>",
             unsafe_allow_html=True,
         )
     with c5d:
         st.markdown(
-            '<div style="background:#0A2540;padding:.6rem 1rem;border-radius:6px;'
-            'text-align:center">'
+            '<div style="background:#0A2540;padding:.6rem 1rem;border-radius:6px;text-align:center">'
             '<div style="color:#8BA9C4;font-size:.7rem;margin-bottom:.3rem">FINAL VERIFIED</div>'
             f'<div style="font-size:1.6rem;font-weight:900">{_decision_badge(final_dec)}</div>'
-            f'<div style="color:#8BA9C4;font-size:.66rem;margin-top:.2rem">'
-            f"{'Conflict → human review' if agreement == 'CONFLICT' else 'Confirmed'}"
+            f'<div style="color:#8BA9C4;font-size:.62rem;margin-top:.15rem">Options: <b style="color:#FCD34D">{_final_opts_label}</b></div>'
+            f'<div style="color:#8BA9C4;font-size:.66rem;margin-top:.1rem">'
+            f"{'Confirmed' if agreement == 'MATCH' else 'Human review required'}"
             f"</div></div>",
             unsafe_allow_html=True,
         )
 
     if agreement == "MATCH":
-        st.success(
-            f"MATCH — AI predicted {ai_dec}, actual was {act_dec}. "
-            + (f"Capital error: ${abs(float(cmp.get('capital_error') or 0)):,.2f}. "
-               f"Return error: {abs(float(cmp.get('return_error_pct') or 0)):.2f}pp." if cmp_ok else "")
-        )
+        st.success(f"MATCH — AI predicted {ai_dec} ({_ai_opts_label}), options backtest P&L direction agrees.")
     elif agreement == "CONFLICT":
-        st.error(
-            f"CONFLICT — AI predicted {ai_dec} but actual was {act_dec}. "
-            "Conflict record saved for accuracy metrics. Final decision: REVIEW."
-        )
+        st.error(f"CONFLICT — AI predicted {ai_dec} ({_ai_opts_label}) but backtest result was {_bt_opts_label}.")
     else:
-        st.warning(f"{agreement} — Actual stock validation did not complete.")
+        st.warning(
+            f"BACKTEST FAILED — {opts.get('error', opts_status)}. "
+            "Agreement cannot be determined. Options accuracy NOT saved."
+        )
 
     if saved:
-        st.success(f"Record saved to accuracy log. {save_msg}")
+        st.success(f"Options accuracy record saved. {save_msg}")
     else:
         st.info(f"Record not saved: {save_msg}")
 
@@ -2043,6 +2399,25 @@ def _render_options_results():
             "target":    target,
             "note":      "target-date price was NOT in these bars",
         })
+    _opts_sig = ai.get("signal_scores", {})
+    if _opts_sig:
+        with st.expander("Signal Score Engine (bull/bear/uncertainty)"):
+            _bull = _opts_sig.get("bullish_score", 0)
+            _bear = _opts_sig.get("bearish_score", 0)
+            _unc  = _opts_sig.get("uncertainty_score", 0)
+            _dom  = _opts_sig.get("dominant", "---")
+            _doms = _opts_sig.get("dominant_score", 0)
+            st.markdown(
+                _table([
+                    ("Bullish Score",    f'<b style="color:#10B981">{_bull}/100</b>'),
+                    ("Bearish Score",    f'<b style="color:#EF4444">{_bear}/100</b>'),
+                    ("Uncertainty Score",f'<b style="color:#F59E0B">{_unc}/100</b>'),
+                    ("Dominant Signal",  f'<b>{_dom.upper()} ({_doms}/100)</b>'),
+                ]),
+                unsafe_allow_html=True,
+            )
+
+    _render_decision_distribution_diagnostics()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2215,7 +2590,7 @@ def _sidebar_rolling():
 
 
 def _run_demo_health_check():
-    """Test Gemini key + data provider + demo symbols. Reports READY / DEGRADED / FAILED."""
+    """Test Gemini key + RapidAPI + Tastytrade + data symbols. Reports READY / DEGRADED / FAILED."""
     import os as _os
     demo_symbols = ["AAPL", "MSFT", "AMZN", "GOOGL", "TSLA"]
     results = {}
@@ -2230,6 +2605,29 @@ def _run_demo_health_check():
             st.sidebar.write("✗ Gemini API key MISSING — set GEMINI_API_KEY in .env")
             gemini_ok = False
 
+        # RapidAPI health check
+        st.sidebar.write("Checking RapidAPI...")
+        rapi_hc = _rapidapi_hc()
+        if rapi_hc.get("http_status") == 200:
+            cnt = rapi_hc.get("total_count", "?")
+            st.sidebar.write(f"✓ RapidAPI /market/get-movers — {cnt} movers returned")
+            rapidapi_ok = True
+        else:
+            err_msg = rapi_hc.get("error") or f"HTTP {rapi_hc.get('http_status', 0)}"
+            st.sidebar.write(f"✗ RapidAPI failed — {err_msg}")
+            rapidapi_ok = False
+
+        # Tastytrade health check
+        st.sidebar.write("Checking Tastytrade...")
+        tt_hc = _tastytrade_hc()
+        if tt_hc.get("customer_verified"):
+            st.sidebar.write("✓ Tastytrade /customers/me — token refreshed, customer verified")
+            tastytrade_ok = True
+        else:
+            tt_err = tt_hc.get("error") or "customer_verified=False"
+            st.sidebar.write(f"✗ Tastytrade failed — {tt_err}")
+            tastytrade_ok = False
+
         # Data provider check per symbol
         for sym in demo_symbols:
             bars, err = fetch_price_history(sym, min_days=400)
@@ -2243,17 +2641,24 @@ def _run_demo_health_check():
 
     ok_syms = [s for s, r in results.items() if r["ok"]]
     data_ok = len(ok_syms) >= 3
+    paid_ok = rapidapi_ok and tastytrade_ok
 
-    if data_ok and gemini_ok:
+    if data_ok and gemini_ok and paid_ok:
         overall = "READY"
-        st.sidebar.success(f"Demo Status: {overall} — Gemini OK + {len(ok_syms)}/{len(demo_symbols)} symbols OK")
-    elif ok_syms:
+        st.sidebar.success(
+            f"Demo Status: {overall} — Gemini OK + RapidAPI OK + Tastytrade OK + "
+            f"{len(ok_syms)}/{len(demo_symbols)} symbols OK"
+        )
+    elif ok_syms and gemini_ok:
         overall = "DEGRADED"
-        extra = "" if gemini_ok else " | Gemini key missing"
-        st.sidebar.warning(f"Demo Status: {overall} — {len(ok_syms)}/{len(demo_symbols)} symbols OK{extra}")
+        issues = []
+        if not rapidapi_ok: issues.append("RapidAPI failed")
+        if not tastytrade_ok: issues.append("Tastytrade failed")
+        if not issues: issues.append(f"only {len(ok_syms)}/{len(demo_symbols)} symbols OK")
+        st.sidebar.warning(f"Demo Status: {overall} — {' | '.join(issues)}")
     else:
         overall = "FAILED"
-        st.sidebar.error(f"Demo Status: {overall} — no symbols returned data")
+        st.sidebar.error(f"Demo Status: {overall} — critical checks failed")
 
     if ok_syms:
         st.sidebar.info(f"Recommended demo symbols: {', '.join(ok_syms)}")
