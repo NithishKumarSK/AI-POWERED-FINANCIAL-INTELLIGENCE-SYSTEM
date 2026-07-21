@@ -435,17 +435,95 @@ def build_calibration_summary(symbol: str = "", horizon_days: int = 0) -> dict:
     else:
         bias_note = "No strong directional bias detected."
 
-    return {
+    # ── Failure category analysis ─────────────────────────────────────────
+    hold_count  = sum(1 for r in records
+                      if (r.get("ai_prediction", {}).get("decision") or "").upper() == "HOLD")
+    hold_rate   = round(hold_count / total * 100, 1)
+
+    false_buy_count  = 0
+    false_sell_count = 0
+    over_hold_count  = 0
+    wrong_magnitude  = 0
+    trend_reversal   = 0
+
+    for r in records:
+        ai_dec  = (r.get("ai_prediction", {}).get("decision") or "").upper()
+        act_dec = (r.get("actual_validation", {}).get("actual_decision") or "").upper()
+        if ai_dec == act_dec:
+            continue
+        if ai_dec == "HOLD" and act_dec in ("BUY", "SELL"):
+            over_hold_count += 1
+        elif ai_dec == "BUY" and act_dec == "SELL":
+            actual_ret = r.get("actual_validation", {}).get("actual_return_pct")
+            if actual_ret is not None and float(actual_ret) < -5:
+                trend_reversal += 1
+            else:
+                false_buy_count += 1
+        elif ai_dec == "SELL" and act_dec == "BUY":
+            false_sell_count += 1
+
+    top_failure = "NONE"
+    failure_counts = {
+        "OVER_HOLD":      over_hold_count,
+        "FALSE_BUY":      false_buy_count,
+        "FALSE_SELL":     false_sell_count,
+        "WRONG_MAGNITUDE":wrong_magnitude,
+        "TREND_REVERSAL_MISSED": trend_reversal,
+    }
+    if any(v > 0 for v in failure_counts.values()):
+        top_failure = max(failure_counts, key=failure_counts.get)
+
+    hold_warning = ""
+    if hold_rate > 55:
+        hold_warning = (
+            f"CRITICAL: HOLD rate is {hold_rate}% — you are severely over-selecting HOLD. "
+            "Commit to BUY or SELL when indicators clearly agree."
+        )
+    elif hold_rate > 45:
+        hold_warning = (
+            f"CAUTION: HOLD rate is {hold_rate}% — you are over-selecting HOLD. "
+            "Commit to BUY or SELL when indicators clearly agree."
+        )
+
+    cal_summary = {
         "total_validated_records": total,
         "decision_match_pct":     round(dec_ok / total * 100, 1),
         "direction_match_pct":    round(dir_ok / total * 100, 1),
         "avg_return_error_pp":    avg_ret_err,
         "overprediction_rate":    round(overpred / total * 100, 1),
         "underprediction_rate":   round(underpred / total * 100, 1),
+        "hold_rate_pct":          hold_rate,
+        "false_buy_count":        false_buy_count,
+        "false_sell_count":       false_sell_count,
+        "over_hold_count":        over_hold_count,
+        "trend_reversal_missed":  trend_reversal,
+        "top_failure_reason":     top_failure,
         "symbol_record_count":    len(sym_records),
         "recent_conflicts":       recent_conflicts,
         "bias_note":              bias_note,
+        "hold_rate_warning":      hold_warning,
     }
+    # Enrich with per-symbol calibration profile if available
+    cal_profile_path = STOCK_EVAL_FILE.parent / "calibration_profiles.json"
+    if cal_profile_path.exists() and symbol:
+        try:
+            cal_profiles = json.loads(cal_profile_path.read_text(encoding="utf-8"))
+            sym_profile  = cal_profiles.get("profiles", {}).get(symbol, {})
+            if sym_profile.get("calibration_available"):
+                cal_summary["symbol_calibration"] = {
+                    "match_pct":            sym_profile.get("match_pct"),
+                    "hold_rate_pct":        sym_profile.get("hold_rate_pct"),
+                    "false_buy_rate_pct":   sym_profile.get("false_buy_rate_pct"),
+                    "false_sell_rate_pct":  sym_profile.get("false_sell_rate_pct"),
+                    "avg_return_error_pp":  sym_profile.get("avg_return_error_pp"),
+                    "top_failure_categories": sym_profile.get("top_failure_categories", []),
+                    "volatility_warning":   sym_profile.get("volatility_warning"),
+                    "news_earnings_warning":sym_profile.get("news_earnings_warning"),
+                    "calibration_summary":  sym_profile.get("calibration_summary", ""),
+                }
+        except Exception:
+            pass
+    return cal_summary
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -586,54 +664,80 @@ def _apply_guardrails(
     horizon_days: int = 30,
     signal_scores: Optional[dict] = None,
 ) -> Tuple[str, str]:
-    """Deterministic post-Gemini guardrails with horizon-calibrated thresholds.
-    Risk score NEVER creates SELL. HOLD can be overridden by strong signal consensus.
-    """
+    """Deterministic post-Gemini guardrails — signal scores now gate BUY/SELL."""
+    # Gate 1: data quality
     if data_quality_score < 60:
         return "REVIEW", f"Data quality too low ({data_quality_score}/100) — insufficient data."
-    if confidence_score < 50:
+
+    # Gate 2: confidence (raised from 50 to 55)
+    if confidence_score < 55:
         return "REVIEW", f"Confidence too low ({confidence_score}/100) — mixed signals."
 
+    # Gate 3: high uncertainty blocks directional decisions
+    uncert_s = (signal_scores or {}).get("uncertainty_score", 50)
+    if uncert_s > 70 and confidence_score < 65:
+        return "REVIEW", f"Uncertainty too high ({uncert_s}/100) — needs human review."
+
     buy_thr, sell_thr = _get_horizon_thresholds(horizon_days)
+    bull_s = (signal_scores or {}).get("bullish_score", 50)
+    bear_s = (signal_scores or {}).get("bearish_score", 50)
 
     if predicted_return_pct >= buy_thr:
-        decision, reason = "BUY",  (
-            f"Predicted return {predicted_return_pct:+.2f}% >= +{buy_thr}% BUY threshold "
-            f"({horizon_days}d horizon)."
-        )
-    elif predicted_return_pct <= sell_thr:
-        decision, reason = "SELL", (
-            f"Predicted return {predicted_return_pct:+.2f}% <= {sell_thr}% SELL threshold "
-            f"({horizon_days}d horizon)."
-        )
-    else:
-        decision, reason = "HOLD", (
-            f"Return {predicted_return_pct:+.2f}% in HOLD band (±{abs(sell_thr):.2f}% "
-            f"for {horizon_days}d horizon)."
-        )
-
-    # Post-Gemini HOLD override: strong signal consensus + confidence overrides weak HOLD
-    if decision == "HOLD" and signal_scores and confidence_score >= 60:
-        dominant   = signal_scores.get("dominant", "uncertain")
-        dom_score  = signal_scores.get("dominant_score", 0)
-        near_thr   = abs(predicted_return_pct) >= abs(sell_thr) * 0.75
-        if dominant == "bullish" and dom_score >= 65 and near_thr:
+        # BUY requires signal confirmation
+        if signal_scores and bull_s >= 60 and (bull_s - bear_s) >= 12 and uncert_s <= 65:
             decision = "BUY"
             reason   = (
-                f"HOLD→BUY override: bullish signals {dom_score}/100, "
-                f"return {predicted_return_pct:+.2f}% near threshold. "
-                f"[was: {reason}]"
+                f"Predicted return {predicted_return_pct:+.2f}% >= +{buy_thr}% BUY threshold "
+                f"({horizon_days}d). Bullish score {bull_s}/100 confirms."
             )
-        elif dominant == "bearish" and dom_score >= 65 and near_thr:
+        else:
+            decision = "HOLD"
+            reason   = (
+                f"Return {predicted_return_pct:+.2f}% above buy threshold but signal scores "
+                f"insufficient (bull={bull_s}, bear={bear_s}, uncert={uncert_s})."
+            )
+    elif predicted_return_pct <= sell_thr:
+        # SELL requires signal confirmation
+        if signal_scores and bear_s >= 60 and (bear_s - bull_s) >= 12 and uncert_s <= 65:
             decision = "SELL"
             reason   = (
-                f"HOLD→SELL override: bearish signals {dom_score}/100, "
-                f"return {predicted_return_pct:+.2f}% near threshold. "
-                f"[was: {reason}]"
+                f"Predicted return {predicted_return_pct:+.2f}% <= {sell_thr}% SELL threshold "
+                f"({horizon_days}d). Bearish score {bear_s}/100 confirms."
+            )
+        else:
+            decision = "HOLD"
+            reason   = (
+                f"Return {predicted_return_pct:+.2f}% below sell threshold but signal scores "
+                f"insufficient (bull={bull_s}, bear={bear_s}, uncert={uncert_s})."
+            )
+    else:
+        decision = "HOLD"
+        reason   = (
+            f"Return {predicted_return_pct:+.2f}% in HOLD band "
+            f"(±{abs(sell_thr):.2f}% for {horizon_days}d horizon)."
+        )
+
+    # HOLD override: strong signal consensus overrides neutral return (lowered threshold 65→60)
+    if decision == "HOLD" and signal_scores and confidence_score >= 60:
+        dominant  = signal_scores.get("dominant", "uncertain")
+        dom_score = signal_scores.get("dominant_score", 0)
+        near_thr  = abs(predicted_return_pct) >= abs(sell_thr) * 0.70
+        if dominant == "bullish" and dom_score >= 60 and near_thr:
+            decision = "BUY"
+            reason   = (
+                f"HOLD→BUY override: bullish {dom_score}/100, "
+                f"return {predicted_return_pct:+.2f}% near threshold. [{reason}]"
+            )
+        elif dominant == "bearish" and dom_score >= 60 and near_thr:
+            decision = "SELL"
+            reason   = (
+                f"HOLD→SELL override: bearish {dom_score}/100, "
+                f"return {predicted_return_pct:+.2f}% near threshold. [{reason}]"
             )
 
+    # Risk gates (risk alone never creates SELL)
     if risk_score >= _HIGH_RISK_CUTOFF and decision == "BUY":
-        return "HOLD",   f"BUY downgraded to HOLD: high risk ({risk_score}/100) despite positive return."
+        return "HOLD", f"BUY downgraded to HOLD: high risk ({risk_score}/100) despite positive return."
     if risk_score >= _HIGH_RISK_CUTOFF and decision == "SELL":
         return "REVIEW", f"SELL → REVIEW: high uncertainty ({risk_score}/100) — needs human review."
 
@@ -644,13 +748,45 @@ def _apply_guardrails(
 # GEMINI PROMPT BUILDER
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _build_symbol_calibration_section(calibration_summary: dict) -> str:
+    """Build per-symbol calibration section for Gemini prompt if available."""
+    sym_cal = calibration_summary.get("symbol_calibration", {})
+    if not sym_cal:
+        return ""
+    lines = [
+        "SYMBOL-SPECIFIC CALIBRATION PROFILE (highest priority — this symbol's known failure patterns):",
+        f"  Decision match rate:    {sym_cal.get('match_pct', 'N/A')}%",
+        f"  Hold rate:              {sym_cal.get('hold_rate_pct', 'N/A')}%",
+        f"  False BUY rate:         {sym_cal.get('false_buy_rate_pct', 'N/A')}%",
+        f"  False SELL rate:        {sym_cal.get('false_sell_rate_pct', 'N/A')}%",
+        f"  Avg return error:       {sym_cal.get('avg_return_error_pp', 'N/A')} pp",
+        f"  Top failure categories: {', '.join(sym_cal.get('top_failure_categories', [])) or 'NONE'}",
+    ]
+    if sym_cal.get("volatility_warning"):
+        lines.append("  WARNING: Volatility shifts frequently missed on this symbol — weight ATR/BB heavily.")
+    if sym_cal.get("news_earnings_warning"):
+        lines.append("  WARNING: Earnings/news events caused AI errors — check calendar context.")
+    if sym_cal.get("calibration_summary"):
+        lines.append(f"  Summary: {sym_cal['calibration_summary']}")
+    # Specific guidance from hold rate
+    hold_r = sym_cal.get("hold_rate_pct") or 0
+    if hold_r > 50:
+        lines.append(
+            f"  CRITICAL: This symbol has a {hold_r}% HOLD rate — you over-hold on it. "
+            "When trend + momentum agree, COMMIT to BUY or SELL. Do NOT default to HOLD."
+        )
+    return "\n".join(lines) + "\n\n"
+
+
 def _build_gemini_prompt(
     normalized_input: dict,
     feature_packet: dict,
     calibration_summary: dict,
+    signal_scores: dict = None,
 ) -> str:
     fp_json  = json.dumps(feature_packet, indent=2, default=str)
     cal_json = json.dumps(calibration_summary, indent=2, default=str)
+    signal_scores_for_prompt = signal_scores or {}
     horizon_days = int(normalized_input.get("decision_horizon_days") or 30)
     buy_thr, sell_thr = _get_horizon_thresholds(horizon_days)
     inp_json = json.dumps({
@@ -666,13 +802,47 @@ def _build_gemini_prompt(
         "sell_threshold_pct":            sell_thr,
     }, indent=2)
 
+    # Build failure category note for prompt
+    hold_rate    = calibration_summary.get("hold_rate_pct", 0) or 0
+    top_failure  = calibration_summary.get("top_failure_reason", "NONE") or "NONE"
+    hold_warning = calibration_summary.get("hold_rate_warning", "") or ""
+    over_hold_n  = calibration_summary.get("over_hold_count", 0) or 0
+    false_buy_n  = calibration_summary.get("false_buy_count", 0) or 0
+    false_sell_n = calibration_summary.get("false_sell_count", 0) or 0
+    match_pct    = calibration_summary.get("decision_match_pct", 0) or 0
+
+    failure_guidance = ""
+    if top_failure == "OVER_HOLD":
+        failure_guidance = (
+            f"CRITICAL — OVER_HOLD is the top failure ({over_hold_n} cases). "
+            "You have been refusing to commit to BUY/SELL when indicators were clear. "
+            "When trend + RSI + MACD all agree, COMMIT to BUY or SELL — do not hide in HOLD."
+        )
+    elif top_failure == "FALSE_BUY":
+        failure_guidance = (
+            f"CAUTION — FALSE_BUY occurred {false_buy_n} times. "
+            "You predicted BUY but market fell. Add reversal_risk check before committing BUY. "
+            "If price is near resistance AND RSI>70, use REVIEW instead of BUY."
+        )
+    elif top_failure == "FALSE_SELL":
+        failure_guidance = (
+            f"CAUTION — FALSE_SELL occurred {false_sell_n} times. "
+            "You predicted SELL but market rose. When RSI<35 and price near support, avoid SELL. "
+            "Use REVIEW or HOLD when oversold signals conflict with bearish trend."
+        )
+    elif top_failure == "TREND_REVERSAL_MISSED":
+        failure_guidance = (
+            "CAUTION — Trend reversals were missed. When RSI diverges from price trend direction, "
+            "this often signals an impending reversal. Weight reversal_signals heavily."
+        )
+
     return f"""You are a financial decision-support reasoning agent for a walk-forward backtesting system.
 
 STRICT RULES:
-1. You must analyze ONLY the structured data provided below.
-2. You must NOT invent prices, news events, earnings, or external facts not in the data.
-3. You are NOT giving investment advice. This is a model prediction for validation/research only.
-4. You must return ONLY valid JSON — no text before or after the JSON.
+1. Analyze ONLY the structured data provided below.
+2. Do NOT invent prices, news events, earnings, or external facts not in the data.
+3. NOT investment advice — this is a model prediction for validation/research only.
+4. Return ONLY valid JSON — no text before or after the JSON.
 5. The target_date price is UNKNOWN to you — do NOT reference any price after the origin date.
 6. Do NOT use calibration accuracy stats to fake a better prediction. Use them to avoid known failure patterns.
 
@@ -705,20 +875,32 @@ Horizon-calibrated thresholds for this prediction:
 If meaningful positive return ({buy_thr}%+) is predicted WITH bullish trend AND positive MACD → commit to BUY.
 If meaningful negative return ({sell_thr}% or worse) WITH bearish trend AND negative MACD → commit to SELL.
 
+CALIBRATION FAILURE CONTEXT (learn from these to avoid repeating the same mistakes):
+- Current decision match rate: {match_pct}%
+- Hold rate: {hold_rate}% {('(TOO HIGH — commit more)' if hold_rate > 45 else '')}
+- Top failure reason: {top_failure}
+- Over-hold cases: {over_hold_n} | False-buy cases: {false_buy_n} | False-sell cases: {false_sell_n}
+{f'- {hold_warning}' if hold_warning else ''}
+{f'- {failure_guidance}' if failure_guidance else ''}
+
 NORMALIZED INPUT:
 {inp_json}
 
 FEATURE PACKET (computed from real historical bars — no future data):
 {fp_json}
 
-CALIBRATION SUMMARY (past model performance — use to avoid known failure patterns):
+CALIBRATION SUMMARY (full past performance — use to avoid known failure patterns):
 {cal_json}
 
+{_build_symbol_calibration_section(calibration_summary)}
 DATA LIMITATIONS:
 - Historical bars come from external_historical_provider (NASDAQ public API)
 - Approximately 16 months of history available
 - No real-time news, earnings, or macro data
 - RapidAPI market movers data NOT available for historical origins (would be future leakage)
+
+SIGNAL SCORES (deterministic, computed from feature packet — these are the objective indicators):
+{json.dumps(signal_scores_for_prompt, indent=2)}
 
 REQUIRED JSON RESPONSE (return ONLY this JSON, no other text):
 {{
@@ -727,6 +909,10 @@ REQUIRED JSON RESPONSE (return ONLY this JSON, no other text):
   "predicted_return_pct": <float, clamped to -20.0 to +20.0>,
   "confidence_score": <integer 0-100>,
   "risk_score": <integer 0-100>,
+  "decision_threshold_used": {{"buy_threshold": {buy_thr}, "sell_threshold": {sell_thr}}},
+  "bullish_score_assessment": <integer 0-100, your assessment of bullish evidence>,
+  "bearish_score_assessment": <integer 0-100, your assessment of bearish evidence>,
+  "primary_signal": "<single most important indicator driving your prediction>",
   "trend_assessment": "<1-2 sentences on trend regime>",
   "momentum_assessment": "<1-2 sentences on RSI/MACD/momentum>",
   "volatility_assessment": "<1-2 sentences on ATR/BB/vol regime>",
@@ -734,7 +920,10 @@ REQUIRED JSON RESPONSE (return ONLY this JSON, no other text):
   "bull_case": "<1 sentence on best-case scenario>",
   "bear_case": "<1 sentence on worst-case scenario>",
   "main_reason": "<2-3 sentences explaining the prediction direction>",
+  "hold_reason": "<only if decision is HOLD — explain why no directional edge>",
   "why_not_opposite_decision": "<1-2 sentences on why opposite direction was rejected>",
+  "invalidating_conditions": ["<list of conditions that would invalidate this prediction>"],
+  "calibration_notes": "<one sentence on what you learned from past failures>",
   "key_features_used": ["list of top 3-5 features that most influenced this prediction"],
   "data_limitations": ["list of 1-3 known data gaps that could affect accuracy"],
   "needs_human_review": <true if confidence < 60 or strong reversal risk, else false>
@@ -784,7 +973,8 @@ def _call_gemini(
             "gemini_latency_ms": 0,
         }
 
-    prompt_content = _build_gemini_prompt(normalized_input, feature_packet, calibration_summary)
+    sig_scores     = _compute_signal_scores(feature_packet)
+    prompt_content = _build_gemini_prompt(normalized_input, feature_packet, calibration_summary, signal_scores=sig_scores)
     prompt_hash    = hashlib.sha256(prompt_content.encode()).hexdigest()[:16]
 
     try:
@@ -834,7 +1024,6 @@ def _call_gemini(
         dq    = feature_packet.get("data_quality_score", 70)
         h_days = int(normalized_input.get("decision_horizon_days") or 30)
 
-        sig_scores = _compute_signal_scores(feature_packet)
         decision, decision_reason = _apply_guardrails(
             pred_return, conf, risk, dq,
             horizon_days=h_days,
@@ -945,6 +1134,11 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
     leakage = _validate_no_leakage(history, origin_str, ctx_start)
     if leakage["status"] == "LEAKAGE_DETECTED":
         return _error_result(spi, input_hash, f"Leakage detected: {leakage}")
+
+    # Pre-flight assertion: block if any bar date is after origin date
+    _target_in_history = any(b["date"] > origin_str for b in history)
+    if _target_in_history:
+        return _error_result(spi, input_hash, "LEAKAGE_BLOCKED: bars after origin date detected in history.")
 
     # Origin price
     origin_price, eff_origin_date, price_err = get_price_on_date(history, origin_str)

@@ -233,15 +233,23 @@ def test_validate_no_leakage_clean():
 # DECISION GUARDRAIL TESTS
 # ══════════════════════════════════════════════════════════════════════════════
 
+_BULL_SCORES = {"bullish_score": 70, "bearish_score": 35, "uncertainty_score": 40,
+                "dominant": "bullish", "dominant_score": 70}
+_BEAR_SCORES = {"bullish_score": 30, "bearish_score": 75, "uncertainty_score": 40,
+                "dominant": "bearish", "dominant_score": 75}
+
+
 def test_guardrail_buy():
+    """BUY requires signal confirmation — pass bullish scores for expected BUY."""
     from gemini_stock_prediction_agent import _apply_guardrails
-    d, r = _apply_guardrails(5.0, 70, 40, 80)
+    d, r = _apply_guardrails(5.0, 70, 40, 80, signal_scores=_BULL_SCORES)
     assert d == "BUY"
 
 
 def test_guardrail_sell():
+    """SELL requires signal confirmation — pass bearish scores for expected SELL."""
     from gemini_stock_prediction_agent import _apply_guardrails
-    d, r = _apply_guardrails(-4.0, 70, 40, 80)
+    d, r = _apply_guardrails(-4.0, 70, 40, 80, signal_scores=_BEAR_SCORES)
     assert d == "SELL"
 
 
@@ -258,20 +266,23 @@ def test_guardrail_review_low_quality():
 
 
 def test_guardrail_review_low_confidence():
+    """Confidence < 55 triggers REVIEW — threshold raised from 50 to 55."""
     from gemini_stock_prediction_agent import _apply_guardrails
-    d, r = _apply_guardrails(5.0, 40, 40, 80)
+    d, r = _apply_guardrails(5.0, 50, 40, 80)
     assert d == "REVIEW"
 
 
 def test_guardrail_high_risk_buy_becomes_hold():
+    """High risk downgrades BUY to HOLD even with valid signal scores."""
     from gemini_stock_prediction_agent import _apply_guardrails
-    d, r = _apply_guardrails(5.0, 70, 85, 80)
+    d, r = _apply_guardrails(5.0, 70, 85, 80, signal_scores=_BULL_SCORES)
     assert d == "HOLD"
 
 
 def test_guardrail_high_risk_sell_becomes_review():
+    """High risk + bearish signal confirms SELL → REVIEW path."""
     from gemini_stock_prediction_agent import _apply_guardrails
-    d, r = _apply_guardrails(-4.0, 70, 85, 80)
+    d, r = _apply_guardrails(-4.0, 70, 85, 80, signal_scores=_BEAR_SCORES)
     assert d == "REVIEW"
 
 

@@ -560,10 +560,11 @@ def test_app_no_dark_theme_css():
 
 
 def test_build_active_banner_present():
-    """App must render a BUILD ACTIVE banner showing AI_PROVIDER and build timestamp."""
+    """App must render a build banner showing AI_PROVIDER and build timestamp."""
     text = _read(ROOT / "stock_prediction_app.py")
-    assert "BUILD ACTIVE" in text, "Build Active banner must exist in app"
-    assert "_BUILD_TS" in text, "Build timestamp variable must exist"
+    # Banner was renamed to ACTIVE BUILD: TRUTH_GATE_V4
+    assert "BUILD ACTIVE" in text or "ACTIVE BUILD" in text, "Build banner must exist in app"
+    assert "_BUILD_FILE" in text or "_BUILD_TS" in text, "Build timestamp/file variable must exist"
     assert "AI_PROVIDER" in text
 
 
