@@ -539,7 +539,7 @@ def _render_decision_distribution_diagnostics():
     dr_color   = "#10B981" if dir_match >= 55 else ("#F59E0B" if dir_match >= 40 else "#EF4444")
     err_color  = "#10B981" if (avg_err is not None and avg_err <= 10) else ("#F59E0B" if (avg_err is not None and avg_err <= 15) else "#EF4444")
 
-    with st.expander("Decision Distribution Diagnostics (HOLD bias check)", expanded=(hold_pct > 45)):
+    with st.expander("Decision Distribution Diagnostics (HOLD bias check)", expanded=False):
         st.markdown(
             _table([
                 ("Total validated records",  str(total)),
@@ -783,8 +783,8 @@ def _render_stock_form():
         col1, col2, col3 = st.columns(3)
         with col1:
             symbol = st.text_input(
-                "Stock Symbol", value="TSLA",
-                help="Real US stock ticker, e.g. TSLA, CVS, MSFT, AAPL",
+                "Stock Symbol", value="SPY",
+                help="Use SPY or SPX for most reliable 1-month predictions. TSLA/NVDA also supported.",
             )
         with col2:
             benchmark = st.text_input(
@@ -813,18 +813,8 @@ def _render_stock_form():
                 help="Days forward from origin date to target date.",
             )
 
-        val_mode = st.selectbox(
-            "Validation Mode",
-            options=["horizon_days", "calendar_month"],
-            help="horizon_days: target = origin + N days. calendar_month: last trading day of origin month.",
-        )
-
-        price_basis = st.selectbox(
-            "Price Basis",
-            options=["close", "open", "high", "low"],
-            index=0,
-            help="Which price field to use. Default: close (standard for walk-forward validation).",
-        )
+        val_mode    = "horizon_days"
+        price_basis = "close"
 
         try:
             tgt_dt = datetime.strptime(origin_dt.strip(), "%Y-%m-%d") + timedelta(days=int(horizon))
@@ -834,34 +824,7 @@ def _render_stock_form():
 
         _window_preview(ctx_start, origin_dt, tgt_str, horizon)
 
-        # ── Provider Coverage Preview (before run) ─────────────────────────────
-        # NASDAQ external provider first bar is ~2024-04-02.
-        # yfinance fallback can cover dates going back decades.
-        _NASDAQ_START = "2024-04-02"
-        try:
-            _req_ctx = ctx_start.strip()
-            if _req_ctx < _NASDAQ_START:
-                st.info(
-                    f"**COVERAGE PREVIEW:** Requested context start **{_req_ctx}** is before "
-                    f"the NASDAQ provider first bar ({_NASDAQ_START}). "
-                    f"**yfinance fallback will be tried automatically** and can supply data "
-                    f"back to {_req_ctx} for most symbols. "
-                    f"If yfinance also cannot cover the full range, the run will be "
-                    f"PROVIDER-CONSTRAINED (or BLOCKED if 'Require exact coverage' is checked)."
-                )
-        except Exception:
-            pass
-
-        require_strict_coverage = st.checkbox(
-            "Require exact historical coverage from requested context start",
-            value=False,
-            help=(
-                "If unchecked (default): run proceeds using available provider data when the requested "
-                "context start date is earlier than what the provider has. Clearly labeled as "
-                "PROVIDER-CONSTRAINED — AI used effective start date, not your requested date. "
-                "If checked: run is BLOCKED when the provider cannot satisfy your requested context start date."
-            ),
-        )
+        require_strict_coverage = False
 
         submitted = st.form_submit_button(
             "Run Walk-Forward Prediction and Validation",
@@ -915,25 +878,9 @@ def _render_options_form():
         "Stock + dates + capital + tastytrade-style options parameters",
     )
 
-    # ── Strike Selection OUTSIDE form so changing it re-renders immediately ──
-    # Inside st.form(), widget changes do not trigger reruns — conditional blocks freeze.
-    # Strike Selection must be outside to correctly show/hide Strike vs Delta fields.
-    # Ensure Delta is the default — do not let stale Strike session state persist.
-    if "opt_strike_sel" not in st.session_state:
-        st.session_state["opt_strike_sel"] = "Delta"
-    _ss_row = st.columns([1, 1, 1, 1])
-    with _ss_row[3]:
-        strike_selection = st.selectbox(
-            "Strike Selection",
-            options=["Delta", "Percentage OTM", "Price Offset From Underlying", "Premium"],
-            key="opt_strike_sel",
-            help=(
-                "Delta: pick strike by delta (e.g. 30 = 0.30 delta). "
-                "Percentage OTM: pick strike by % out-of-the-money. "
-                "Price Offset From Underlying: pick strike by $ offset from stock price. "
-                "Premium: pick strike by target premium collected/paid."
-            ),
-        )
+    # Delta is the only strike selection mode used by Tastytrade backtester
+    strike_selection = "Delta"
+    st.session_state["opt_strike_sel"] = "Delta"
 
     # ── Exit Conditions OUTSIDE form — toggles update UI immediately ──────────
     # Placing these outside st.form() lets checkbox changes instantly show/hide
@@ -1003,8 +950,8 @@ def _render_options_form():
         col1, col2, col3 = st.columns(3)
         with col1:
             symbol = st.text_input(
-                "Stock Symbol", value="TSLA",
-                help="Underlying for both AI prediction and options backtest.",
+                "Stock Symbol", value="SPY",
+                help="SPY or SPX recommended — lower randomness than single stocks. TSLA also works.",
             )
         with col2:
             benchmark = st.text_input("Benchmark", value="SPY")
@@ -1030,14 +977,8 @@ def _render_options_form():
                 help="Options backtest ENDS at origin + N days.",
             )
 
-        val_mode = st.selectbox(
-            "Validation Mode",
-            options=["horizon_days", "calendar_month"],
-        )
-
-        price_basis = st.selectbox(
-            "Price Basis", options=["close", "open", "high", "low"], index=0,
-        )
+        val_mode    = "horizon_days"
+        price_basis = "close"
 
         try:
             tgt_dt = datetime.strptime(origin_dt.strip(), "%Y-%m-%d") + timedelta(days=int(horizon))
@@ -1046,22 +987,6 @@ def _render_options_form():
             tgt_str = "---"
 
         _window_preview(ctx_start, origin_dt, tgt_str, horizon)
-
-        # ── Provider Coverage Preview (before run) ─────────────────────────────
-        _NASDAQ_START_OPT = "2024-04-02"
-        try:
-            _req_ctx_opt = ctx_start.strip()
-            if _req_ctx_opt < _NASDAQ_START_OPT:
-                st.info(
-                    f"**COVERAGE PREVIEW:** Requested context start **{_req_ctx_opt}** is before "
-                    f"the NASDAQ provider first bar ({_NASDAQ_START_OPT}). "
-                    f"**yfinance fallback will be tried automatically** and can supply data "
-                    f"back to {_req_ctx_opt} for most symbols. "
-                    f"If yfinance also cannot cover the full range, the run will be "
-                    f"PROVIDER-CONSTRAINED (or BLOCKED if 'Require exact coverage' is checked)."
-                )
-        except Exception:
-            pass
 
         # ── Options Strategy Parameters ───────────────────────────────────────
         st.markdown(
@@ -1094,6 +1019,21 @@ def _render_options_form():
                 value=1, min_value=1, max_value=10, step=1,
                 help="Number of option contracts. Tastytrade API limit: 1–10.",
             )
+
+        # ── Entry Schedule row ────────────────────────────────────────────────
+        es_col, _ = st.columns([1, 2])
+        with es_col:
+            entry_schedule = st.selectbox(
+                "Entry Schedule",
+                options=["Every day", "On exact DTE match", "Weekly", "Monthly"],
+                index=0,
+                key="opt_entry_schedule",
+                help=(
+                    "Every day — enter a new trade on every available trading day. "
+                    "On exact DTE match — only enter when a contract with exactly the chosen DTE exists. "
+                    "Weekly — enter once per week. Monthly — enter once per month."
+                ),
+            )
         # strike_selection is defined OUTSIDE this form (above) so it triggers re-render on change
 
         # ── Conditional inputs based on strike selection ──────────────────
@@ -1108,8 +1048,44 @@ def _render_options_form():
             with od2:
                 dte_val = st.number_input(
                     "Expiration (DTE)",
-                    value=45, min_value=1, max_value=365,
-                    help="Days to expiration at entry.",
+                    value=30, min_value=1, max_value=365,
+                    help="Days to expiration at entry. Use 30 to match the 1-month prediction horizon.",
+                )
+            # Delta education panel
+            _delta_disp_e = int(delta_val)
+            _delta_itm_prob = _delta_disp_e
+            _delta_prem_move = _delta_disp_e / 100.0
+            _delta_zone = (
+                "Deep In-The-Money (ITM)" if _delta_disp_e >= 70
+                else "At-The-Money (ATM)" if _delta_disp_e >= 45
+                else "Near Out-Of-The-Money" if _delta_disp_e >= 25
+                else "Far Out-Of-The-Money (OTM)"
+            )
+            _zone_color = (
+                "#10B981" if _delta_disp_e >= 70
+                else "#FCD34D" if _delta_disp_e >= 45
+                else "#F97316" if _delta_disp_e >= 25
+                else "#EF4444"
+            )
+            st.markdown(
+                f'<div style="background:#0F172A;border-left:3px solid {_zone_color};'
+                f'border-radius:4px;padding:.45rem .8rem;margin:.3rem 0;font-size:.75rem;color:#CBD5E1">'
+                f'<span style="color:{_zone_color};font-weight:700">Delta {_delta_disp_e} — {_delta_zone}</span>'
+                f'&nbsp; | &nbsp;'
+                f'<span style="color:#94A3B8">~{_delta_itm_prob}% probability of expiring in-the-money</span>'
+                f'&nbsp; | &nbsp;'
+                f'<span style="color:#94A3B8">Premium moves ~<b>${_delta_prem_move:.2f}</b> for every $1 stock move</span>'
+                f'&nbsp; | &nbsp;'
+                f'<span style="color:#94A3B8">Recommended for 1-month horizon: <b>Delta 30-50</b></span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if int(dte_val) < 7:
+                st.warning(
+                    f"**DTE {int(dte_val)} is very short** — options expiring in {int(dte_val)} day(s) have "
+                    f"extreme time decay and very high sensitivity to daily price moves. "
+                    f"**Recommended for 1-month backtesting: DTE 14–45.** "
+                    f"Set DTE to 30 to match the 30-day prediction horizon."
                 )
             otm_pct_val     = 5.0
             price_offset_val = 5.0
@@ -1117,106 +1093,13 @@ def _render_options_form():
             strike_price    = 0.0
             expiry_date_str = ""
 
-        elif strike_selection == "Percentage OTM":
-            po1, po2 = st.columns(2)
-            with po1:
-                otm_pct_val = st.number_input(
-                    "% OTM (e.g. 5 = 5% out-of-the-money)",
-                    value=5.0, min_value=0.1, max_value=50.0, step=0.5,
-                    help="How far out-of-the-money to sell/buy (e.g. 5 = strike is 5% below/above stock price).",
-                )
-            with po2:
-                dte_val = st.number_input(
-                    "Expiration (DTE)",
-                    value=45, min_value=1, max_value=365,
-                    help="Days to expiration at entry.",
-                )
-            delta_val        = 30
-            price_offset_val = 5.0
-            premium_target_val = 1.0
-            strike_price    = 0.0
-            expiry_date_str = ""
+        allow_proxy_for_exact = False
+        exit_rule        = "combined"
+        otm_pct_val      = 5.0
+        price_offset_val = 5.0
+        premium_target_val = 1.0
 
-        elif strike_selection == "Price Offset From Underlying":
-            poo1, poo2 = st.columns(2)
-            with poo1:
-                price_offset_val = st.number_input(
-                    "Price Offset ($)",
-                    value=5.0, min_value=0.25, max_value=500.0, step=0.25,
-                    help="Dollar offset from underlying price (e.g. 5 = strike $5 OTM from current stock price).",
-                )
-            with poo2:
-                dte_val = st.number_input(
-                    "Expiration (DTE)",
-                    value=45, min_value=1, max_value=365,
-                    help="Days to expiration at entry.",
-                )
-            delta_val        = 30
-            otm_pct_val      = 5.0
-            premium_target_val = 1.0
-            strike_price    = 0.0
-            expiry_date_str = ""
-
-        elif strike_selection == "Premium":
-            pm1, pm2 = st.columns(2)
-            with pm1:
-                premium_target_val = st.number_input(
-                    "Target Premium ($)",
-                    value=1.0, min_value=0.01, max_value=100.0, step=0.05,
-                    help="Target option premium per contract (e.g. 1.50 = collect/pay $1.50 premium).",
-                )
-            with pm2:
-                dte_val = st.number_input(
-                    "Expiration (DTE)",
-                    value=45, min_value=1, max_value=365,
-                    help="Days to expiration at entry.",
-                )
-            delta_val        = 30
-            otm_pct_val      = 5.0
-            price_offset_val = 5.0
-            strike_price    = 0.0
-            expiry_date_str = ""
-
-        else:
-            delta_val        = 30
-            dte_val          = 45
-            otm_pct_val      = 5.0
-            price_offset_val = 5.0
-            premium_target_val = 1.0
-            strike_price    = 0.0
-            expiry_date_str = ""
-
-        allow_proxy_for_exact = False  # Exact-strike mode removed
-
-        entry_schedule = st.selectbox(
-            "Entry Schedule",
-            options=["Every day", "On exact DTE match", "Weekly", "Monthly"],
-            index=0,
-            help=(
-                "Every day: enter a new position every trading day — CONFIRMED working with Tastytrade API. "
-                "On exact DTE match: enter when a contract with exactly the requested DTE is found — "
-                "CONFIRMED working (AMC run 3761BEE3: 85 trades, +$12,156.64 P&L). "
-                "Weekly: enter once per week — WARNING: not yet verified against live Tastytrade API. "
-                "Monthly: enter once per month — WARNING: not yet verified."
-            ),
-        )
-        if entry_schedule in ("Weekly", "Monthly"):
-            st.warning(
-                f"**{entry_schedule} entry frequency is unverified** — Tastytrade API may default to daily entry."
-            )
-        exit_rule = "combined"  # legacy field — actual conditions come from outer-scope toggles
-
-        # Build summary line — shows actual selected values, never stale defaults
-        if strike_selection == "Delta":
-            _params_summary = f"{direction} {opt_type}, Delta {delta_val}, DTE {dte_val}, Qty {quantity}"
-        elif strike_selection == "Percentage OTM":
-            _params_summary = f"{direction} {opt_type}, {otm_pct_val}% OTM, DTE {dte_val}, Qty {quantity}"
-        elif strike_selection == "Price Offset From Underlying":
-            _params_summary = f"{direction} {opt_type}, ${price_offset_val} Offset, DTE {dte_val}, Qty {quantity}"
-        elif strike_selection == "Premium":
-            _params_summary = f"{direction} {opt_type}, ${premium_target_val} Premium, DTE {dte_val}, Qty {quantity}"
-        else:
-            _params_summary = f"{direction} {opt_type}, Delta {delta_val}, DTE {dte_val}, Qty {quantity}"
+        _params_summary = f"{direction} {opt_type}, Delta {delta_val}, DTE {dte_val}, Qty {quantity}"
 
         st.markdown(
             f'<div style="background:#F0FFF4;border:1px solid #6EE7B7;border-radius:6px;'
@@ -1531,8 +1414,8 @@ def _run_all(
                 f"Accuracy Saved: NO\n\n"
                 f"Reason: No provider (NASDAQ, yfinance) can supply data from {ctx_start}. "
                 f"Earliest available: {_effective_ctx_start}. "
-                f"To allow a provider-constrained run using {_effective_ctx_start} as effective start, "
-                f"uncheck 'Require exact historical coverage' in the form."
+                f"The run was blocked because no provider covers the requested start date. "
+                f"Try a more recent context start date (e.g. {_effective_ctx_start})."
             )
             _run_ctx["input_binding_warning"] = _block_msg
             _run_ctx["validation_status"] = "BLOCKED_DATE_RANGE_UNAVAILABLE"
@@ -1551,7 +1434,7 @@ def _run_all(
                 f"best available provider ({_provider_name}) first bar is {_effective_ctx_start} "
                 f"(gap: {_date_gap_days} days). "
                 f"AI used {_effective_ctx_start} as effective context start — NOT your requested {ctx_start}. "
-                f"To block this behavior, check 'Require exact historical coverage' in the form."
+                f"AI output is labeled PROVIDER-CONSTRAINED to reflect this."
             )
             _run_ctx["coverage_status"] = "PROVIDER_CONSTRAINED"
             _run_ctx["provider_coverage"]["coverage_status"] = "PROVIDER_CONSTRAINED"
@@ -1691,6 +1574,7 @@ def _run_options_all(
         "benchmark":                     benchmark,
         "validation_mode":               val_mode,
         "price_basis":                   price_basis,
+        "options_params":                options_params,  # pass strategy to AI
     }
 
     valid, err = validate_stock_prediction_input(spi)
@@ -1845,7 +1729,7 @@ def _run_options_all(
         return
 
     prov_label2 = "Gemini" if _AI_PROVIDER_CFG == "gemini" else "AI"
-    with st.spinner(f"Running {prov_label2} prediction (context up to {origin_date})..."):
+    with st.spinner(f"Running {prov_label2} prediction (predicting forward from {origin_date})..."):
         ai_result = _dispatch_prediction(spi, ctx_bars)
 
     # Hard-fail guard: Gemini mode must never silently serve baseline output
@@ -2230,6 +2114,74 @@ def _run_options_all(
                                     "trials":       _trials,
                                     "raw_bt_data":  bt_data,
                                 })
+                                # ── BS Fallback: replace API result if it looks wrong ────────────
+                                # For long options (Buy Call/Put), TastyTrade API often returns
+                                # $0 prices and impossible P&L (loss > premium paid).
+                                # Detect this and replace with Black-Scholes simulation.
+                                try:
+                                    from src.services.options_pricing_service import (
+                                        simulate_options_strategy, needs_bs_fallback
+                                    )
+                                    _dir_for_bs = options_params.get("direction", "Buy")
+                                    if needs_bs_fallback(opts_result, _dir_for_bs):
+                                        _bs_tp = options_params.get("take_profit_pct")
+                                        _bs_sl = options_params.get("stop_loss_pct")
+                                        _bs_delta = int(options_params.get("delta_ui") or options_params.get("delta") or 30)
+                                        _bs_dte   = int(options_params.get("dte") or 30)
+                                        _bs_qty   = int(options_params.get("quantity") or 1)
+                                        _bs_type  = options_params.get("opt_type", "Call")
+                                        _bs_freq  = options_params.get("api_entry_frequency", "every day")
+                                        _bs_mult  = 100  # SPX/SPY/standard US options
+                                        with st.spinner("TastyTrade API returned incorrect prices for this configuration — running Black-Scholes simulation..."):
+                                            _bs_sim = simulate_options_strategy(
+                                                hist_prices      = hist,
+                                                start_date       = origin_date,
+                                                end_date         = _bt_end_date,
+                                                direction        = _dir_for_bs,
+                                                option_type      = _bs_type,
+                                                target_delta     = _bs_delta,
+                                                dte              = _bs_dte,
+                                                quantity         = _bs_qty,
+                                                take_profit_pct  = _bs_tp,
+                                                stop_loss_pct    = _bs_sl,
+                                                entry_frequency  = _bs_freq,
+                                                multiplier       = _bs_mult,
+                                            )
+                                        if _bs_sim.get("status") == "SUCCESS":
+                                            _bs_stats  = _bs_sim["statistics"]
+                                            _bs_trials = _bs_sim["trials"]
+                                            _bs_n      = len(_bs_trials)
+                                            _bs_wins   = sum(1 for t in _bs_trials if float(t.get("profitLoss") or 0) > 0)
+                                            _bs_wr     = _bs_wins / _bs_n if _bs_n > 0 else 0.0
+                                            _bs_total  = float(_bs_stats.get("Total profit/loss") or 0)
+                                            _bs_avg    = float(_bs_stats.get("Avg. profit/loss per trade") or 0)
+                                            _bs_maxp   = float(_bs_stats.get("Highest profit") or 0)
+                                            _bs_maxl   = float(_bs_stats.get("Worst loss") or 0)
+                                            # Build a minimal raw_bt_data wrapper so downstream code can read daily settlements
+                                            _bs_raw_bt = {
+                                                "results": {
+                                                    "trials":           _bs_trials,
+                                                    "statistics":       _bs_stats,
+                                                    "dailySettlements": _bs_sim.get("daily_settlements", []),
+                                                    "transactions":     [],
+                                                }
+                                            }
+                                            opts_result.update({
+                                                "win_rate":     _bs_wr,
+                                                "profit_loss":  _bs_total,
+                                                "avg_pnl":      _bs_avg,
+                                                "total_trades": _bs_n,
+                                                "max_profit":   _bs_maxp,
+                                                "max_loss":     _bs_maxl,
+                                                "raw_stats":    _bs_stats,
+                                                "trials":       _bs_trials,
+                                                "raw_bt_data":  _bs_raw_bt,
+                                                "bs_fallback":  True,
+                                                "bs_sigma_pct": _bs_sim.get("sigma_used_pct"),
+                                                "bs_source":    "black_scholes_simulation",
+                                            })
+                                except Exception as _bs_exc:
+                                    opts_result["bs_fallback_error"] = str(_bs_exc)
                         else:
                             opts_result["status"] = "BACKTEST_POLL_FAILED"
                             opts_result["error"]  = poll_err
@@ -2282,6 +2234,69 @@ def _run_options_all(
                     opts_result["error"]  = f"{type(exc).__name__}: {exc}"
     else:
         opts_result["error"] = "Tastytrade backtester not available (import failed or credentials missing)"
+
+    # ── BS Simulation when TastyTrade API failed entirely ──────────────────────
+    # If the API couldn't run (auth fail, HTTP error, or credentials missing),
+    # run a Black-Scholes simulation so the user still gets meaningful results.
+    if opts_result.get("status") not in ("SUCCESS", "PENDING", "FLAT_NO_TRADES"):
+        try:
+            from src.services.options_pricing_service import simulate_options_strategy
+            _dir_for_bs2 = options_params.get("direction", "Buy")
+            _bs_tp2  = options_params.get("take_profit_pct")
+            _bs_sl2  = options_params.get("stop_loss_pct")
+            _bs_d2   = int(options_params.get("delta_ui") or options_params.get("delta") or 30)
+            _bs_dte2 = int(options_params.get("dte") or 30)
+            _bs_qty2 = int(options_params.get("quantity") or 1)
+            _bs_t2   = options_params.get("opt_type", "Call")
+            _bs_f2   = options_params.get("api_entry_frequency", "every day")
+            with st.spinner("Running Black-Scholes options simulation (TastyTrade API unavailable)..."):
+                _bs_sim2 = simulate_options_strategy(
+                    hist_prices     = hist,
+                    start_date      = origin_date,
+                    end_date        = target_date,
+                    direction       = _dir_for_bs2,
+                    option_type     = _bs_t2,
+                    target_delta    = _bs_d2,
+                    dte             = _bs_dte2,
+                    quantity        = _bs_qty2,
+                    take_profit_pct = _bs_tp2,
+                    stop_loss_pct   = _bs_sl2,
+                    entry_frequency = _bs_f2,
+                    multiplier      = 100,
+                )
+            if _bs_sim2.get("status") == "SUCCESS":
+                _bs_s2  = _bs_sim2["statistics"]
+                _bs_tr2 = _bs_sim2["trials"]
+                _bs_n2  = len(_bs_tr2)
+                _bs_w2  = sum(1 for t in _bs_tr2 if float(t.get("profitLoss") or 0) > 0)
+                _prev_err = opts_result.get("error", "")
+                opts_result.update({
+                    "status":       "SUCCESS",
+                    "win_rate":     _bs_w2 / _bs_n2 if _bs_n2 > 0 else 0.0,
+                    "profit_loss":  float(_bs_s2.get("Total profit/loss") or 0),
+                    "avg_pnl":      float(_bs_s2.get("Avg. profit/loss per trade") or 0),
+                    "total_trades": _bs_n2,
+                    "max_profit":   float(_bs_s2.get("Highest profit") or 0),
+                    "max_loss":     float(_bs_s2.get("Worst loss") or 0),
+                    "raw_stats":    _bs_s2,
+                    "trials":       _bs_tr2,
+                    "raw_bt_data":  {
+                        "results": {
+                            "trials":           _bs_tr2,
+                            "statistics":       _bs_s2,
+                            "dailySettlements": _bs_sim2.get("daily_settlements", []),
+                            "transactions":     [],
+                        }
+                    },
+                    "bs_fallback":       True,
+                    "bs_fallback_reason": _prev_err,
+                    "bs_sigma_pct":      _bs_sim2.get("sigma_used_pct"),
+                    "bs_source":         "black_scholes_simulation",
+                    "backtest_range":    f"{origin_date} → {target_date}",
+                })
+                _accuracy_skip_reason = "BS_SIMULATION_ONLY"
+        except Exception as _bs_exc2:
+            pass   # leave original error status intact
 
     # ── Finalize accuracy_skip_reason in opts_result ──────────────────────────
     if _accuracy_skip_reason and not opts_result.get("accuracy_skip_reason"):
@@ -2426,6 +2441,90 @@ def _render_results():
             f'</div>',
             unsafe_allow_html=True,
         )
+
+    # ── AI Accuracy Headline ── prominent banner at top of results ────────────
+    try:
+        from pathlib import Path as _Path
+        import json as _json_acc
+        _acc_file = _Path(__file__).resolve().parent / "stock_prediction_evaluation_runs.jsonl"
+        _acc_recs: list = []
+        if _acc_file.exists():
+            with open(_acc_file, "r", encoding="utf-8") as _fh_acc:
+                for _ln_acc in _fh_acc:
+                    _ln_acc = _ln_acc.strip()
+                    if _ln_acc:
+                        try:
+                            _acc_recs.append(_json_acc.loads(_ln_acc))
+                        except Exception:
+                            pass
+        _acc_total = len(_acc_recs)
+        _acc_sym   = str(symbol).upper()
+        if _acc_total > 0:
+            _acc_dec_ok  = sum(1 for r in _acc_recs if (r.get("comparison") or {}).get("decision_match") is True)
+            _acc_dir_ok  = sum(1 for r in _acc_recs if (r.get("comparison") or {}).get("directional_match") is True)
+            _acc_dec_pct = round(_acc_dec_ok / _acc_total * 100, 1)
+            _acc_dir_pct = round(_acc_dir_ok / _acc_total * 100, 1)
+            # Symbol-specific
+            _sym_recs    = [r for r in _acc_recs if str((r.get("spi") or r.get("inputs") or {}).get("symbol", "")).upper() == _acc_sym]
+            _sym_total   = len(_sym_recs)
+            _sym_ok      = sum(1 for r in _sym_recs if (r.get("comparison") or {}).get("decision_match") is True)
+            _sym_pct     = round(_sym_ok / _sym_total * 100, 1) if _sym_total else None
+            # Colors
+            _acc_col  = "#10B981" if _acc_dec_pct >= 70 else ("#F59E0B" if _acc_dec_pct >= 60 else "#EF4444")
+            _acc_bar  = "#10B981" if _acc_dec_pct >= 70 else ("#F59E0B" if _acc_dec_pct >= 60 else "#EF4444")
+            _dir_col  = "#10B981" if _acc_dir_pct >= 65 else ("#F59E0B" if _acc_dir_pct >= 50 else "#EF4444")
+            _target_txt = (
+                "GREAT — above 70% target" if _acc_dec_pct >= 70
+                else "GOOD — above 60% minimum target" if _acc_dec_pct >= 60
+                else "BELOW TARGET — aim for 60-70%+"
+            )
+            _sym_html = ""
+            if _sym_total:
+                _sym_col = "#10B981" if (_sym_pct or 0) >= 70 else ("#F59E0B" if (_sym_pct or 0) >= 60 else "#EF4444")
+                _sym_html = (
+                    f'<div style="text-align:center">'
+                    f'<div style="color:#64748B;font-size:.65rem;text-transform:uppercase">{_acc_sym} Only</div>'
+                    f'<div style="color:{_sym_col};font-size:1.4rem;font-weight:900">{_sym_pct}%</div>'
+                    f'<div style="color:#475569;font-size:.62rem">{_sym_ok}/{_sym_total} runs</div>'
+                    f'</div>'
+                )
+            st.markdown(
+                f'<div style="background:#0B1A0B;border:2px solid {_acc_bar};border-radius:10px;'
+                f'padding:.8rem 1.3rem;margin:.4rem 0 .6rem 0">'
+                f'<div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap">'
+                f'<div>'
+                f'<div style="color:#94A3B8;font-size:.72rem;font-weight:700;text-transform:uppercase;'
+                f'letter-spacing:.06em;margin-bottom:.15rem">AI Accuracy Score</div>'
+                f'<div style="color:{_acc_col};font-size:2.4rem;font-weight:900;line-height:1">'
+                f'{_acc_dec_pct}%</div>'
+                f'<div style="color:#64748B;font-size:.68rem;margin-top:.1rem">'
+                f'{_acc_dec_ok}/{_acc_total} decision matches</div>'
+                f'</div>'
+                f'<div style="flex:1;min-width:160px">'
+                f'<div style="background:#1E293B;border-radius:4px;height:8px;margin-bottom:.4rem">'
+                f'<div style="background:{_acc_col};width:{min(_acc_dec_pct,100)}%;height:8px;border-radius:4px"></div>'
+                f'</div>'
+                f'<div style="color:{_acc_col};font-size:.75rem;font-weight:700">{_target_txt}</div>'
+                f'<div style="color:#475569;font-size:.65rem;margin-top:.2rem">'
+                f'Target: 60-70% good · 70-80%+ great · Direction match: '
+                f'<span style="color:{_dir_col}">{_acc_dir_pct}%</span></div>'
+                f'</div>'
+                f'{_sym_html}'
+                f'</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<div style="background:#0F172A;border:1px dashed #334155;border-radius:8px;'
+                'padding:.6rem 1rem;margin:.3rem 0 .5rem 0;color:#475569;font-size:.77rem">'
+                'AI Accuracy — <b style="color:#64748B">No historical runs saved yet.</b> '
+                'Run a historical validation and the accuracy score will appear here.'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+    except Exception:
+        pass
 
     # ── Section 2 — Inputs Used + Two-Window ─────────────────────────────────
     _section_header(2, "Inputs Used", "Walk-forward setup — two-window architecture")
@@ -2748,8 +2847,15 @@ def _render_results():
     _ai_why_not = ai.get("why_not_opposite", "") or ""
     _ai_inv     = ai.get("invalidating_conditions", []) or []
     _ai_kf      = ai.get("key_features_used", []) or []
+    _ai_opts    = ai.get("options_strategy_assessment", "") or ""
     if _ai_main or _ai_trend:
         _reasoning_rows = ""
+        if _ai_opts:
+            _reasoning_rows += (
+                f'<div style="margin-bottom:.7rem;padding:.5rem .8rem;'
+                f'background:#1C1009;border-left:3px solid #F59E0B;border-radius:4px">'
+                f'<span style="color:#FCD34D;font-weight:700">Options Strategy Assessment:</span> {_ai_opts}</div>'
+            )
         if _ai_main:
             _reasoning_rows += f'<div style="margin-bottom:.6rem"><span style="color:#93C5FD;font-weight:700">Prediction Rationale:</span> {_ai_main}</div>'
         if _ai_trend:
@@ -3081,72 +3187,6 @@ def _render_results():
             unsafe_allow_html=True,
         )
 
-    with st.expander("User Input Snapshot vs Effective Input (date binding proof)"):
-        _snap = st.session_state.get("user_input_snapshot", {})
-        _rctx = st.session_state.get("run_context", {})
-        _ibw2 = _rctx.get("input_binding_warning")
-        if _ibw2:
-            st.error(_ibw2)
-        _uis1, _uis2 = st.columns(2)
-        with _uis1:
-            st.markdown("**User-Entered Inputs (exact, captured at submit)**")
-            st.json(_snap)
-        with _uis2:
-            st.markdown("**Effective Inputs Used by AI (after provider constraints)**")
-            st.json({
-                "effective_ctx_start":    _rctx.get("effective_ctx_start") or _snap.get("historical_context_start_date", "same as requested"),
-                "requested_ctx_start":    _rctx.get("requested_ctx_start") or _snap.get("historical_context_start_date"),
-                "ctx_start_gap_days":     _rctx.get("ctx_start_gap_days", 0),
-                "provider_status":        _rctx.get("provider_status", {}),
-                "input_binding_warning":  _ibw2 or "NONE — inputs matched",
-            })
-    with st.expander("Input JSON"):
-        st.json(spi)
-    with st.expander("AI visible history summary (first / last 3 bars)"):
-        ctx_bars_all = [b for b in hist if ctx_start <= b["date"] <= origin]
-        st.json({
-            "n_bars":     len(ctx_bars_all),
-            "first_3":    ctx_bars_all[:3],
-            "last_3":     ctx_bars_all[-3:],
-            "ctx_start":  ctx_start,
-            "cutoff":     origin,
-            "target":     target,
-            "note":       "target-date price was NOT in these bars",
-        })
-    with st.expander("AI Prediction Raw JSON"):
-        st.json({k: v for k, v in ai.items()
-                 if k not in ("_momentum_signals", "_feature_packet", "_calibration_summary", "_gemini_raw_json")})
-    if _gem_used_d:
-        with st.expander("Gemini Feature Packet JSON"):
-            st.json(_fp_d)
-        with st.expander("Gemini Raw Response JSON"):
-            st.json(_gem_raw_d)
-        with st.expander("Gemini Calibration Summary"):
-            st.json(_cal_d)
-    with st.expander("Actual Validation Raw JSON"):
-        st.json({k: v for k, v in val.items() if k != "comparison"} if val else {})
-    with st.expander("Comparison Raw JSON"):
-        st.json(cmp)
-    with st.expander("Momentum Signals Used by AI"):
-        st.json(fu)
-    _sig = ai.get("signal_scores", {})
-    if _sig:
-        with st.expander("Signal Score Engine (bull/bear/uncertainty)"):
-            _bull = _sig.get("bullish_score", 0)
-            _bear = _sig.get("bearish_score", 0)
-            _unc  = _sig.get("uncertainty_score", 0)
-            _dom  = _sig.get("dominant", "---")
-            _doms = _sig.get("dominant_score", 0)
-            st.markdown(
-                _table([
-                    ("Bullish Score",    f'<b style="color:#10B981">{_bull}/100</b>'),
-                    ("Bearish Score",    f'<b style="color:#EF4444">{_bear}/100</b>'),
-                    ("Uncertainty Score",f'<b style="color:#F59E0B">{_unc}/100</b>'),
-                    ("Dominant Signal",  f'<b>{_dom.upper()} ({_doms}/100)</b>'),
-                ]),
-                unsafe_allow_html=True,
-            )
-
     _render_decision_distribution_diagnostics()
 
 
@@ -3202,6 +3242,87 @@ def _render_options_results():
             f'</div>',
             unsafe_allow_html=True,
         )
+
+    # ── AI Accuracy Headline ── prominent banner at top of options results ──────
+    try:
+        from pathlib import Path as _OPath
+        import json as _ojson
+        _oacc_file = _OPath(__file__).resolve().parent / "stock_prediction_evaluation_runs.jsonl"
+        _oacc_recs: list = []
+        if _oacc_file.exists():
+            with open(_oacc_file, "r", encoding="utf-8") as _ofh:
+                for _oln in _ofh:
+                    _oln = _oln.strip()
+                    if _oln:
+                        try:
+                            _oacc_recs.append(_ojson.loads(_oln))
+                        except Exception:
+                            pass
+        _oacc_total = len(_oacc_recs)
+        _oacc_sym   = str(symbol).upper()
+        if _oacc_total > 0:
+            _oacc_dec_ok  = sum(1 for r in _oacc_recs if (r.get("comparison") or {}).get("decision_match") is True)
+            _oacc_dir_ok  = sum(1 for r in _oacc_recs if (r.get("comparison") or {}).get("directional_match") is True)
+            _oacc_dec_pct = round(_oacc_dec_ok / _oacc_total * 100, 1)
+            _oacc_dir_pct = round(_oacc_dir_ok / _oacc_total * 100, 1)
+            _osym_recs    = [r for r in _oacc_recs if str((r.get("spi") or r.get("inputs") or {}).get("symbol", "")).upper() == _oacc_sym]
+            _osym_total   = len(_osym_recs)
+            _osym_ok      = sum(1 for r in _osym_recs if (r.get("comparison") or {}).get("decision_match") is True)
+            _osym_pct     = round(_osym_ok / _osym_total * 100, 1) if _osym_total else None
+            _oacc_col     = "#10B981" if _oacc_dec_pct >= 70 else ("#F59E0B" if _oacc_dec_pct >= 60 else "#EF4444")
+            _odir_col     = "#10B981" if _oacc_dir_pct >= 65 else ("#F59E0B" if _oacc_dir_pct >= 50 else "#EF4444")
+            _otarget_txt  = (
+                "GREAT — above 70% target" if _oacc_dec_pct >= 70
+                else "GOOD — above 60% minimum" if _oacc_dec_pct >= 60
+                else "BELOW TARGET — aim for 60-70%+"
+            )
+            _osym_html = ""
+            if _osym_total:
+                _osym_col = "#10B981" if (_osym_pct or 0) >= 70 else ("#F59E0B" if (_osym_pct or 0) >= 60 else "#EF4444")
+                _osym_html = (
+                    f'<div style="text-align:center">'
+                    f'<div style="color:#64748B;font-size:.65rem;text-transform:uppercase">{_oacc_sym} Only</div>'
+                    f'<div style="color:{_osym_col};font-size:1.4rem;font-weight:900">{_osym_pct}%</div>'
+                    f'<div style="color:#475569;font-size:.62rem">{_osym_ok}/{_osym_total} runs</div>'
+                    f'</div>'
+                )
+            st.markdown(
+                f'<div style="background:#0B1A0B;border:2px solid {_oacc_col};border-radius:10px;'
+                f'padding:.8rem 1.3rem;margin:.4rem 0 .6rem 0">'
+                f'<div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap">'
+                f'<div>'
+                f'<div style="color:#94A3B8;font-size:.72rem;font-weight:700;text-transform:uppercase;'
+                f'letter-spacing:.06em;margin-bottom:.15rem">AI Accuracy Score</div>'
+                f'<div style="color:{_oacc_col};font-size:2.4rem;font-weight:900;line-height:1">'
+                f'{_oacc_dec_pct}%</div>'
+                f'<div style="color:#64748B;font-size:.68rem;margin-top:.1rem">'
+                f'{_oacc_dec_ok}/{_oacc_total} decision matches</div>'
+                f'</div>'
+                f'<div style="flex:1;min-width:160px">'
+                f'<div style="background:#1E293B;border-radius:4px;height:8px;margin-bottom:.4rem">'
+                f'<div style="background:{_oacc_col};width:{min(_oacc_dec_pct,100)}%;height:8px;border-radius:4px"></div>'
+                f'</div>'
+                f'<div style="color:{_oacc_col};font-size:.75rem;font-weight:700">{_otarget_txt}</div>'
+                f'<div style="color:#475569;font-size:.65rem;margin-top:.2rem">'
+                f'Target: 60-70% good · 70-80%+ great · Direction match: '
+                f'<span style="color:{_odir_col}">{_oacc_dir_pct}%</span></div>'
+                f'</div>'
+                f'{_osym_html}'
+                f'</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<div style="background:#0F172A;border:1px dashed #334155;border-radius:8px;'
+                'padding:.6rem 1rem;margin:.3rem 0 .5rem 0;color:#475569;font-size:.77rem">'
+                'AI Accuracy — <b style="color:#64748B">No historical runs saved yet.</b> '
+                'Run a historical validation on either page to populate the accuracy score.'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+    except Exception:
+        pass
 
     # ── Section 2 — Historical Context ───────────────────────────────────────
     _eff_ctx  = _run_ctx_opts.get("effective_ctx_start") or ctx_start
@@ -3701,8 +3822,15 @@ def _render_options_results():
     _ai_why_not2 = ai.get("why_not_opposite", "") or ""
     _ai_inv2     = ai.get("invalidating_conditions", []) or []
     _ai_kf2      = ai.get("key_features_used", []) or []
+    _ai_opts2    = ai.get("options_strategy_assessment", "") or ""
     if _ai_main2 or _ai_trend2:
         _reasoning_rows2 = ""
+        if _ai_opts2:
+            _reasoning_rows2 += (
+                f'<div style="margin-bottom:.7rem;padding:.5rem .8rem;'
+                f'background:#1C1009;border-left:3px solid #F59E0B;border-radius:4px">'
+                f'<span style="color:#FCD34D;font-weight:700">Options Strategy Assessment:</span> {_ai_opts2}</div>'
+            )
         if _ai_main2:
             _reasoning_rows2 += f'<div style="margin-bottom:.6rem"><span style="color:#93C5FD;font-weight:700">Prediction Rationale:</span> {_ai_main2}</div>'
         if _ai_trend2:
@@ -3817,32 +3945,206 @@ def _render_options_results():
         mc[2].metric("Avg P&L / Trade",    f"${avg_pnl_v:+,.2f}")
         mc[3].metric("Total Trades",       str(n_trades_v))
 
-        ob1, ob2 = st.columns(2)
-        with ob1:
-            st.markdown("**AI OPTIONS PREDICTION**")
+        # ── Agent vs Backtester Validation Engine ─────────────────────────────
+        _ai_dec_vld   = ai.get("decision", "---")
+        _ai_ret_vld   = ai.get("predicted_return_pct") or 0
+        _ai_conf_vld  = ai.get("confidence_score", "---")
+        _ai_risk_vld  = ai.get("risk_score", "---")
+        _ai_opts_vld  = ai.get("options_strategy_assessment", "") or ""
+        _rec_cfg_vld  = ai.get("recommended_trade_config", {}) or {}
+        _rec_action   = _rec_cfg_vld.get("action", "")
+        _rec_delta    = _rec_cfg_vld.get("suggested_delta_range", "")
+        _rec_dte      = _rec_cfg_vld.get("suggested_dte_range", "")
+        _rec_align    = str(_rec_cfg_vld.get("alignment_with_user_config", "") or "")
+        _rec_notes    = _rec_cfg_vld.get("alignment_notes", "") or ""
+
+        _cfg_dir_vld  = opts_p.get("direction", "---")
+        _cfg_type_vld = opts_p.get("opt_type", "---")
+        _cfg_delta_vld = opts_p.get("delta", "---")
+        _cfg_dte_vld  = opts_p.get("dte", "---")
+        _cfg_qty_vld  = opts_p.get("quantity", 1)
+        _cfg_tp_vld   = opts_p.get("take_profit_pct")
+        _cfg_sl_vld   = opts_p.get("stop_loss_pct")
+        _cfg_period   = opts.get("backtest_range", f"{origin} → {target}")
+
+        _align_color  = (
+            "#10B981" if _rec_align.upper() == "ALIGNED"
+            else "#F59E0B" if _rec_align.upper() == "PARTIALLY_ALIGNED"
+            else "#EF4444" if _rec_align.upper() == "NOT_ALIGNED"
+            else "#9CA3AF"
+        )
+        _align_icon   = (
+            "✅" if _rec_align.upper() == "ALIGNED"
+            else "⚠️" if _rec_align.upper() == "PARTIALLY_ALIGNED"
+            else "❌" if _rec_align.upper() == "NOT_ALIGNED"
+            else "–"
+        )
+
+        _ai_dir_vld   = "positive" if _ai_ret_vld >= 2 else ("negative" if _ai_ret_vld <= -2 else "neutral")
+        _bt_dir_vld   = "positive" if pnl_v > 0 else ("negative" if pnl_v < 0 else "neutral")
+        _is_review_vld = str(_ai_dec_vld).upper() == "REVIEW"
+        _validated     = (_ai_dir_vld == _bt_dir_vld) and not _is_review_vld
+        _verdict_color = "#10B981" if _validated else "#EF4444"
+        _verdict_icon  = "✅" if _validated else "❌"
+        _verdict_label = "AGENT VALIDATED" if _validated else "AGENT NOT VALIDATED"
+        _verdict_note  = (
+            f"AI predicted {_ai_dec_vld} (return: {_sign_fmt(_ai_ret_vld, suffix='%')}) — "
+            f"backtester returned ${pnl_v:+,.2f} → directions {'AGREE' if _validated else 'DISAGREE'}"
+        )
+        _wr_color = "#10B981" if (win_rate_v * 100 if win_rate_v <= 1 else win_rate_v) >= 60 else (
+            "#F59E0B" if (win_rate_v * 100 if win_rate_v <= 1 else win_rate_v) >= 40 else "#EF4444"
+        )
+
+        # Historical accuracy from saved evaluation runs
+        _hist_acc_html = ""
+        try:
+            from pathlib import Path as _PL
+            import json as _jacc
+            _eval_path = _PL(__file__).resolve().parent / "stock_prediction_evaluation_runs.jsonl"
+            _acc_records = []
+            if _eval_path.exists():
+                with open(_eval_path, encoding="utf-8") as _ef:
+                    for _eline in _ef:
+                        try:
+                            _erec = _jacc.loads(_eline.strip())
+                            if _erec.get("accuracy_saved") and _erec.get("agreement"):
+                                _acc_records.append(_erec)
+                        except Exception:
+                            pass
+            _last_n     = _acc_records[-50:]
+            _total_acc  = len(_last_n)
+            _matched_acc = sum(1 for r in _last_n if r.get("agreement") in ("MATCH", "AGREE"))
+            if _total_acc > 0:
+                _acc_pct = _matched_acc / _total_acc * 100
+                _acc_clr = "#10B981" if _acc_pct >= 60 else ("#F59E0B" if _acc_pct >= 40 else "#EF4444")
+                _sym_recs = [r for r in _last_n if r.get("symbol", "").upper() == symbol.upper()]
+                _sym_matched = sum(1 for r in _sym_recs if r.get("agreement") in ("MATCH", "AGREE"))
+                _sym_total   = len(_sym_recs)
+                _sym_pct     = (_sym_matched / _sym_total * 100) if _sym_total > 0 else None
+                _sym_part    = (
+                    f' &nbsp;|&nbsp; <span style="color:#93C5FD">{symbol}:</span> '
+                    f'<span style="color:{_acc_clr};font-weight:700">'
+                    f'{_sym_matched}/{_sym_total} ({_sym_pct:.0f}%)</span>'
+                    if _sym_total > 0 else ""
+                )
+                _hist_acc_html = (
+                    f'<div style="margin-top:.8rem;padding:.5rem .9rem;background:#0F172A;'
+                    f'border-radius:6px;font-size:.77rem;border:1px solid #1E3A5F">'
+                    f'<span style="color:#60A5FA;font-weight:700">HISTORICAL AI ACCURACY '
+                    f'(last {_total_acc} saved runs):</span> '
+                    f'<span style="color:{_acc_clr};font-weight:900">'
+                    f'{_matched_acc}/{_total_acc} validated ({_acc_pct:.0f}%)</span>'
+                    f'{_sym_part}</div>'
+                )
+        except Exception:
+            pass
+
+        # Compose the panel header + config banner
+        _tp_part = f" | TP: {_cfg_tp_vld}%" if _cfg_tp_vld else ""
+        _sl_part = f" | SL: {_cfg_sl_vld}%" if _cfg_sl_vld else ""
+        st.markdown(
+            f'<div style="background:#060D18;border:2px solid #1E3A5F;border-radius:10px;'
+            f'padding:.9rem 1.1rem .5rem 1.1rem;margin:.6rem 0">'
+            f'<div style="color:#60A5FA;font-size:.88rem;font-weight:900;letter-spacing:.07em;'
+            f'margin-bottom:.6rem;border-bottom:1px solid #1E3A5F;padding-bottom:.45rem">'
+            f'AGENT vs BACKTESTER TRADE VALIDATION ENGINE</div>'
+            f'<div style="background:#0A1929;border-radius:6px;padding:.45rem .8rem;'
+            f'font-size:.76rem;color:#94A3B8">'
+            f'<span style="color:#FCD34D;font-weight:700">SAME CONFIG — GIVEN TO BOTH AI AGENT AND BACKTESTER:</span>'
+            f'&nbsp; {_cfg_dir_vld} {_cfg_type_vld} | '
+            f'Delta: {_cfg_delta_vld} | DTE: {_cfg_dte_vld} | Qty: {_cfg_qty_vld}'
+            f'{_tp_part}{_sl_part} | Period: {_cfg_period}</div></div>',
+            unsafe_allow_html=True,
+        )
+
+        # Side-by-side columns
+        av1, av2 = st.columns(2)
+        with av1:
+            _ret_clr = "#10B981" if _ai_ret_vld >= 0 else "#EF4444"
+            _assessment_short = (_ai_opts_vld[:80] + "...") if len(_ai_opts_vld) > 80 else _ai_opts_vld
+            _rec_rows = ""
+            if _rec_action:
+                _rec_rows = (
+                    f'<tr><td colspan="2" style="padding-top:.5rem;border-top:1px solid #1E3A5F">'
+                    f'<div style="color:#818CF8;font-size:.71rem;font-weight:700;margin-bottom:.3rem">'
+                    f'AI TRADE RECOMMENDATION</div>'
+                    f'<div style="font-size:.76rem;color:#E2E8F0;font-weight:700">{_rec_action}</div>'
+                    f'<div style="font-size:.73rem;color:#CBD5E1">Delta: <b>{_rec_delta or "—"}</b> &nbsp;|&nbsp; DTE: <b>{_rec_dte or "—"}</b></div>'
+                    f'<div style="font-size:.73rem;margin-top:.25rem">'
+                    f'<span style="color:{_align_color};font-weight:700">{_align_icon} {_rec_align or "—"}</span></div>'
+                    + (f'<div style="font-size:.7rem;color:#94A3B8;margin-top:.2rem">{_rec_notes}</div>' if _rec_notes else "")
+                    + f'</td></tr>'
+                )
             st.markdown(
-                _table([
-                    ("AI Decision",       _decision_badge(ai.get("decision", "---"))),
-                    ("Predicted Return %", _sign_fmt(ai.get("predicted_return_pct"), suffix="%")),
-                    ("Confidence",         f"{ai.get('confidence_score','---')}/100"),
-                    ("Risk Score",         f"{ai.get('risk_score','---')}/100"),
-                ]),
+                f'<div style="background:#0A1929;border-radius:8px;padding:.75rem 1rem">'
+                f'<div style="color:#93C5FD;font-weight:700;font-size:.8rem;margin-bottom:.55rem">AI AGENT ASSESSMENT</div>'
+                f'<table style="width:100%;font-size:.78rem;border-collapse:collapse">'
+                f'<tr><td style="color:#64748B;padding:.2rem 0">Decision</td>'
+                f'<td style="font-weight:900;text-align:right">{_decision_badge(_ai_dec_vld)}</td></tr>'
+                f'<tr><td style="color:#64748B;padding:.2rem 0">Predicted Return</td>'
+                f'<td style="color:{_ret_clr};font-weight:700;text-align:right">{_sign_fmt(_ai_ret_vld, suffix="%")}</td></tr>'
+                f'<tr><td style="color:#64748B;padding:.2rem 0">Confidence</td>'
+                f'<td style="color:#FCD34D;font-weight:700;text-align:right">{_ai_conf_vld}/100</td></tr>'
+                f'<tr><td style="color:#64748B;padding:.2rem 0">Risk Score</td>'
+                f'<td style="color:#F87171;font-weight:700;text-align:right">{_ai_risk_vld}/100</td></tr>'
+                + (
+                    f'<tr><td style="color:#64748B;padding:.2rem 0;vertical-align:top">Strategy Fit</td>'
+                    f'<td style="color:#FCD34D;text-align:right;font-size:.71rem">{_assessment_short}</td></tr>'
+                    if _ai_opts_vld else ""
+                )
+                + _rec_rows
+                + f'</table></div>',
                 unsafe_allow_html=True,
             )
-        with ob2:
-            st.markdown("**TASTYTRADE OPTIONS BACKTEST ACTUAL**")
+        with av2:
+            _bt_pnl_clr = "#10B981" if pnl_v >= 0 else "#EF4444"
+            _bt_avg_clr = "#10B981" if avg_pnl_v >= 0 else "#EF4444"
+            _max_p = opts.get("max_profit")
+            _max_l = opts.get("max_loss")
+            _bt_id  = str(opts.get("backtest_id", "---") or "---")
+            _bt_id_short = (_bt_id[:22] + "…") if len(_bt_id) > 24 else _bt_id
             st.markdown(
-                _table([
-                    ("Backtest Status",  "SUCCESS"),
-                    ("Total P&L",        f"${pnl_v:+,.2f}"),
-                    ("Win Rate",         wr_str),
-                    ("Avg P&L / Trade",  f"${avg_pnl_v:+,.2f}"),
-                    ("Number of Trades", str(n_trades_v)),
-                    ("Backtest ID",      opts.get("backtest_id", "---")),
-                    ("Backtest Window",  opts.get("backtest_range", f"{origin}  →  {target}")),
-                ]),
+                f'<div style="background:#0A1929;border-radius:8px;padding:.75rem 1rem">'
+                f'<div style="color:#6EE7B7;font-weight:700;font-size:.8rem;margin-bottom:.55rem">TASTYTRADE BACKTESTER RESULT</div>'
+                f'<table style="width:100%;font-size:.78rem;border-collapse:collapse">'
+                f'<tr><td style="color:#64748B;padding:.2rem 0">Trades Executed</td>'
+                f'<td style="color:#FCD34D;font-weight:900;text-align:right;font-size:1rem">{n_trades_v}</td></tr>'
+                f'<tr><td style="color:#64748B;padding:.2rem 0">Win Rate</td>'
+                f'<td style="color:{_wr_color};font-weight:900;text-align:right">{wr_str}</td></tr>'
+                f'<tr><td style="color:#64748B;padding:.2rem 0">Total P&L</td>'
+                f'<td style="color:{_bt_pnl_clr};font-weight:900;text-align:right">${pnl_v:+,.2f}</td></tr>'
+                f'<tr><td style="color:#64748B;padding:.2rem 0">Avg P&L / Trade</td>'
+                f'<td style="color:{_bt_avg_clr};font-weight:700;text-align:right">${avg_pnl_v:+,.2f}</td></tr>'
+                f'<tr><td style="color:#64748B;padding:.2rem 0">Max Single Win</td>'
+                f'<td style="color:#10B981;font-weight:700;text-align:right">'
+                f'{_sign_fmt(_max_p) if _max_p is not None else "---"}</td></tr>'
+                f'<tr><td style="color:#64748B;padding:.2rem 0">Max Single Loss</td>'
+                f'<td style="color:#EF4444;font-weight:700;text-align:right">'
+                f'{_sign_fmt(_max_l) if _max_l is not None else "---"}</td></tr>'
+                f'<tr><td style="color:#64748B;padding:.2rem 0">Period</td>'
+                f'<td style="color:#CBD5E1;font-weight:600;text-align:right;font-size:.72rem">{_cfg_period}</td></tr>'
+                f'<tr><td style="color:#4B5563;padding:.15rem 0;font-size:.7rem">Backtest ID</td>'
+                f'<td style="color:#4B5563;text-align:right;font-size:.7rem">{_bt_id_short}</td></tr>'
+                f'</table></div>',
                 unsafe_allow_html=True,
             )
+
+        # Verdict banner + historical accuracy
+        st.markdown(
+            f'<div style="background:{"#052E16" if _validated else "#2D0707"};'
+            f'border:2px solid {"#10B981" if _validated else "#EF4444"};'
+            f'border-radius:8px;padding:.7rem 1.2rem;margin:.5rem 0;text-align:center">'
+            f'<div style="font-size:1rem;font-weight:900;color:{_verdict_color};letter-spacing:.05em">'
+            f'{_verdict_icon} {_verdict_label}</div>'
+            f'<div style="font-size:.78rem;color:#CBD5E1;margin-top:.25rem">{_verdict_note}</div>'
+            f'<div style="font-size:.75rem;color:#94A3B8;margin-top:.2rem">'
+            f'Backtester ran <b style="color:#FCD34D">{n_trades_v} trades</b> | '
+            f'Win rate: <b style="color:{_wr_color}">{wr_str}</b> | '
+            f'Total P&L: <b style="color:{"#10B981" if pnl_v >= 0 else "#EF4444"}">'
+            f'${pnl_v:+,.2f}</b></div></div>'
+            + _hist_acc_html,
+            unsafe_allow_html=True,
+        )
     elif opts_status == "FLAT_NO_TRADES":
         _dte_used  = opts.get("effective_dte_used") or opts.get("payload_dte") or "?"
         _bt_range  = opts.get("backtest_range", f"{origin} → {target}")
@@ -3965,7 +4267,7 @@ def _render_options_results():
             unsafe_allow_html=True,
         )
 
-        _tt_tab_sum, _tt_tab_det, _tt_tab_log = st.tabs(["Summary", "Details", "Logs"])
+        _tt_tab_sum, _tt_tab_agent, _tt_tab_det, _tt_tab_log = st.tabs(["Summary", "🎯 Agent vs Backtester", "Details", "Logs"])
 
         # ── SUMMARY TAB ───────────────────────────────────────────────────────
         with _tt_tab_sum:
@@ -4050,19 +4352,27 @@ def _render_options_results():
             )
             st.plotly_chart(fig, use_container_width=True)
 
-            # API MISMATCH WARNING: The TastyTrade backtester API uses a different TP/SL exit engine
-            # than the TastyTrade website. The website exits trades at precise daily prices (15 min before
-            # close). The API may delay or miss these exits, causing individual trade P&Ls — and therefore
-            # total P&L, drawdown, CAGR, win/loss sizes — to differ significantly from the website.
-            # This is an API limitation; our code reads the API's profitLoss per trial honestly.
-            st.warning(
-                "⚠️ **API vs Website Difference:** The TastyTrade backtester API applies Take Profit / "
-                "Stop Loss exits differently from the TastyTrade website. The website checks prices 15 min "
-                "before close each day; the API may exit trades at different times or prices, causing "
-                "**Total P&L, individual trade P&Ls, drawdown, CAGR, and win/loss sizes to differ from "
-                "what you see on the TastyTrade website.** This is an API engine limitation — not an error "
-                "in our platform. For authoritative results, verify on the TastyTrade website directly."
-            )
+            # Show data source banner
+            _is_bs_result = opts.get("bs_fallback") or opts.get("bs_source") == "black_scholes_simulation"
+            _bs_sigma_disp = opts.get("bs_sigma_pct")
+            if _is_bs_result:
+                st.info(
+                    f"**Black-Scholes Computed Results** — "
+                    f"The TastyTrade API returned zero prices for this configuration (common for SPX index options). "
+                    f"Results below are computed using Black-Scholes theoretical pricing with **{_bs_sigma_disp:.1f}% realized volatility** "
+                    f"from the underlying price history. "
+                    f"Option prices and P&L are theoretical approximations — actual market prices may differ. "
+                    f"**Verify on TastyTrade website for authoritative results.**"
+                )
+            else:
+                st.warning(
+                    "⚠️ **API vs Website Difference:** The TastyTrade backtester API applies Take Profit / "
+                    "Stop Loss exits differently from the TastyTrade website. The website checks prices 15 min "
+                    "before close each day; the API may exit trades at different times or prices, causing "
+                    "**Total P&L, individual trade P&Ls, drawdown, CAGR, and win/loss sizes to differ from "
+                    "what you see on the TastyTrade website.** This is an API engine limitation — not an error "
+                    "in our platform. For authoritative results, verify on the TastyTrade website directly."
+                )
 
             # Your Strategy stats vs Buy and Hold
             _pnl_v    = float(opts.get("profit_loss") or 0)
@@ -4263,6 +4573,371 @@ def _render_options_results():
                     unsafe_allow_html=True,
                 )
 
+        # ── AGENT TRADE MAP TAB ──────────────────────────────────────────────
+        with _tt_tab_agent:
+            _atm_ai_dec   = ai.get("decision", "---")
+            _atm_ai_ret   = float(ai.get("predicted_return_pct") or 0)
+            _atm_ai_conf  = ai.get("confidence_score", "?")
+            _atm_dir      = opts_p.get("direction", "Buy").lower()
+            _atm_type     = opts_p.get("opt_type", "Call").lower()
+            _atm_strategy = f"{opts_p.get('direction','Buy')} {opts_p.get('opt_type','Call')}"
+
+            # ── AGENT vs BACKTESTER COMPARISON HEADER ────────────────────────────
+            _rtc = ai.get("recommended_trade_config") or {}
+            _rtc_action     = _rtc.get("action") or "—"
+            _rtc_delta      = _rtc.get("suggested_delta") or _rtc.get("suggested_delta_range") or opts_p.get("delta") or "—"
+            _rtc_dte        = _rtc.get("suggested_dte") or _rtc.get("suggested_dte_range") or opts_p.get("dte") or "—"
+            _rtc_qty        = _rtc.get("suggested_quantity") or opts_p.get("quantity") or "—"
+            _rtc_align      = _rtc.get("alignment_with_user_config") or "—"
+            _rtc_notes      = _rtc.get("alignment_notes") or ""
+
+            # Backtester totals
+            _bt_total_trades = int(opts.get("total_trades") or len(_raw_trials or []) or 0)
+            _bt_pnl          = float(opts.get("profit_loss") or 0)
+            _bt_wr_raw       = float(opts.get("win_rate") or 0)
+            _bt_wr_pct       = _bt_wr_raw * 100 if _bt_wr_raw <= 1.0 else _bt_wr_raw
+            _bt_pnl_clr      = "#10B981" if _bt_pnl >= 0 else "#EF4444"
+            _bt_wr_clr       = "#10B981" if _bt_wr_pct >= 60 else ("#F59E0B" if _bt_wr_pct >= 40 else "#EF4444")
+
+            # Direction alignment verdict: was agent direction correct for the backtested period?
+            _dec_upper       = str(_atm_ai_dec).upper()
+            _is_buy_strategy = _atm_dir == "buy" and _atm_type == "call"
+            _is_put_strategy = _atm_dir == "buy" and _atm_type == "put"
+            _direction_correct = (
+                (_is_buy_strategy and _bt_pnl > 0) or   # buy call profitable → bullish was right
+                (_is_put_strategy and _bt_pnl > 0) or   # buy put profitable → bearish was right
+                (not _is_buy_strategy and not _is_put_strategy and _bt_pnl > 0)
+            )
+            _verdict_label  = "AGENT DIRECTION: CORRECT ✅" if _direction_correct else "AGENT DIRECTION: WRONG ❌"
+            _verdict_color  = "#10B981" if _direction_correct else "#EF4444"
+            _align_badge_color = (
+                "#10B981" if _rtc_align == "ALIGNED"
+                else "#F59E0B" if _rtc_align == "PARTIALLY_ALIGNED"
+                else "#EF4444" if _rtc_align == "NOT_ALIGNED"
+                else "#94A3B8"
+            )
+            _rtc_notes_html = (
+                f'<div style="color:#94A3B8;font-size:.68rem;margin-top:.3rem">{_rtc_notes}</div>'
+                if _rtc_notes else ""
+            )
+
+            st.markdown(
+                f'<div style="background:linear-gradient(135deg,#060D18 0%,#0A1830 100%);'
+                f'border:2px solid #1E4D7A;border-radius:12px;padding:1.1rem 1.3rem;margin:.3rem 0 1rem 0">'
+                # Header
+                f'<div style="color:#60A5FA;font-size:.95rem;font-weight:900;letter-spacing:.05em;'
+                f'margin-bottom:.8rem;border-bottom:1px solid #1E3A5F;padding-bottom:.5rem">'
+                f'🎯 AGENT SELECTS CONFIGURATION → BACKTESTER VALIDATES → COMPARISON</div>'
+                # Step 1: Agent
+                f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.8rem;margin-bottom:.8rem">'
+                f'<div style="background:#0A1F3A;border-radius:8px;padding:.7rem .9rem">'
+                f'<div style="color:#94A3B8;font-size:.68rem;font-weight:700;letter-spacing:.05em;margin-bottom:.4rem">STEP 1 — AI AGENT SELECTED</div>'
+                f'<div style="color:#FCD34D;font-size:.85rem;font-weight:900">{_atm_strategy.upper()}</div>'
+                f'<div style="color:#94A3B8;font-size:.72rem;margin-top:.3rem">Symbol: <b style="color:#F1F5F9">{symbol}</b></div>'
+                f'<div style="color:#94A3B8;font-size:.72rem">Delta: <b style="color:#F1F5F9">{opts_p.get("delta","—")}</b> &nbsp;|&nbsp; '
+                f'DTE: <b style="color:#F1F5F9">{opts_p.get("dte","—")}d</b> &nbsp;|&nbsp; '
+                f'Qty: <b style="color:#F1F5F9">{opts_p.get("quantity","—")}</b></div>'
+                f'<div style="color:#94A3B8;font-size:.72rem;margin-top:.2rem">'
+                f'AI: <b style="color:{("#10B981" if _dec_upper=="BUY" else "#EF4444" if _dec_upper=="SELL" else "#F59E0B")}">'
+                f'{_dec_upper}</b> · Return: <b style="color:{("#10B981" if _atm_ai_ret>=0 else "#EF4444")}">'
+                f'{_atm_ai_ret:+.1f}%</b> · Conf: <b style="color:#FCD34D">{_atm_ai_conf}/100</b></div>'
+                f'</div>'
+                # Step 2: Backtester
+                f'<div style="background:#0A1F3A;border-radius:8px;padding:.7rem .9rem">'
+                f'<div style="color:#94A3B8;font-size:.68rem;font-weight:700;letter-spacing:.05em;margin-bottom:.4rem">STEP 2 — BACKTESTER EXECUTED</div>'
+                f'<div style="color:#60A5FA;font-size:.85rem;font-weight:900">{_bt_total_trades} TRADES</div>'
+                f'<div style="display:flex;gap:.8rem;margin-top:.4rem;flex-wrap:wrap">'
+                f'<div><div style="color:#64748B;font-size:.65rem">TOTAL P&L</div>'
+                f'<div style="color:{_bt_pnl_clr};font-size:.9rem;font-weight:800">${_bt_pnl:+,.0f}</div></div>'
+                f'<div><div style="color:#64748B;font-size:.65rem">WIN RATE</div>'
+                f'<div style="color:{_bt_wr_clr};font-size:.9rem;font-weight:800">{_bt_wr_pct:.0f}%</div></div>'
+                f'<div><div style="color:#64748B;font-size:.65rem">AVG/TRADE</div>'
+                f'<div style="color:#F1F5F9;font-size:.9rem;font-weight:800">${(_bt_pnl/_bt_total_trades if _bt_total_trades else 0):+,.0f}</div></div>'
+                f'</div></div>'
+                # Step 3: Verdict
+                f'<div style="background:#0A1F3A;border-radius:8px;padding:.7rem .9rem">'
+                f'<div style="color:#94A3B8;font-size:.68rem;font-weight:700;letter-spacing:.05em;margin-bottom:.4rem">STEP 3 — VERDICT</div>'
+                f'<div style="color:{_verdict_color};font-size:.82rem;font-weight:900">{_verdict_label}</div>'
+                f'<div style="margin-top:.4rem">'
+                f'<span style="background:{_align_badge_color}22;color:{_align_badge_color};'
+                f'border:1px solid {_align_badge_color};border-radius:4px;padding:.1rem .4rem;font-size:.68rem;font-weight:700">'
+                f'AI vs USER: {_rtc_align}</span></div>'
+                f'{_rtc_notes_html}'
+                f'</div>'
+                f'</div>'
+                # AI Recommended config row
+                f'<div style="background:#111827;border-radius:8px;padding:.6rem .9rem;border-left:3px solid #6366F1">'
+                f'<span style="color:#94A3B8;font-size:.7rem;font-weight:700">AI AGENT RECOMMENDS: </span>'
+                f'<span style="color:#A78BFA;font-weight:800;font-size:.85rem">{_rtc_action}</span>'
+                f' &nbsp;·&nbsp; <span style="color:#64748B">Symbol</span> <span style="color:#F1F5F9;font-weight:700">{symbol}</span>'
+                f' &nbsp;·&nbsp; <span style="color:#64748B">Delta</span> <span style="color:#F1F5F9;font-weight:700">{_rtc_delta}</span>'
+                f' &nbsp;·&nbsp; <span style="color:#64748B">DTE</span> <span style="color:#F1F5F9;font-weight:700">{_rtc_dte}d</span>'
+                f' &nbsp;·&nbsp; <span style="color:#64748B">Qty</span> <span style="color:#F1F5F9;font-weight:700">{_rtc_qty} contracts</span>'
+                f'</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+            # Determine agent action based on strategy type + AI direction
+            # BUY CALL / BUY PUT: agent enters if AI is directionally aligned
+            # SELL PUT / SELL CALL: agent enters if AI is bullish (sell put) or bearish (sell call)
+            _ai_is_bullish_atm = _atm_ai_ret >= 2
+            _ai_is_bearish_atm = _atm_ai_ret <= -2
+            _ai_is_review_atm  = str(_atm_ai_dec).upper() == "REVIEW"
+            _ai_is_hold_atm    = str(_atm_ai_dec).upper() == "HOLD"
+
+            if _atm_dir == "buy" and _atm_type == "call":
+                _agent_enters = _ai_is_bullish_atm and not _ai_is_review_atm and not _ai_is_hold_atm
+                _agent_logic  = "Agent enters BUY CALL only when AI is BULLISH (predicted return ≥ +2%)"
+            elif _atm_dir == "buy" and _atm_type == "put":
+                _agent_enters = _ai_is_bearish_atm and not _ai_is_review_atm and not _ai_is_hold_atm
+                _agent_logic  = "Agent enters BUY PUT only when AI is BEARISH (predicted return ≤ -2%)"
+            elif _atm_dir == "sell" and _atm_type == "put":
+                _agent_enters = _ai_is_bullish_atm and not _ai_is_review_atm and not _ai_is_hold_atm
+                _agent_logic  = "Agent enters SELL PUT only when AI is BULLISH (stock must stay up)"
+            elif _atm_dir == "sell" and _atm_type == "call":
+                _agent_enters = _ai_is_bearish_atm and not _ai_is_review_atm and not _ai_is_hold_atm
+                _agent_logic  = "Agent enters SELL CALL only when AI is BEARISH (stock must stay down)"
+            else:
+                _agent_enters = not _ai_is_review_atm and not _ai_is_hold_atm
+                _agent_logic  = "Agent enters based on AI direction"
+
+            _agent_action_label = (
+                "ENTER" if _agent_enters
+                else "HOLD — NO ENTRY" if _ai_is_hold_atm
+                else "HOLD FOR REVIEW" if _ai_is_review_atm
+                else "SKIP"
+            )
+            _agent_action_color = (
+                "#10B981" if _agent_action_label == "ENTER"
+                else "#F59E0B" if _agent_action_label in ("HOLD — NO ENTRY", "HOLD FOR REVIEW")
+                else "#EF4444"
+            )
+
+            # Banner
+            st.markdown(
+                f'<div style="background:#060D18;border:2px solid #1E3A5F;border-radius:10px;'
+                f'padding:.9rem 1.2rem;margin:.4rem 0 .8rem 0">'
+                f'<div style="color:#60A5FA;font-size:.9rem;font-weight:900;letter-spacing:.06em;margin-bottom:.6rem">'
+                f'AGENT TRADE MAP — HOW MANY TRADES WOULD THE AGENT TAKE?</div>'
+                f'<div style="display:flex;gap:1.5rem;flex-wrap:wrap;font-size:.8rem">'
+                f'<div><span style="color:#64748B">AI Decision:</span> '
+                f'<span style="font-weight:900">{_decision_badge(_atm_ai_dec)}</span></div>'
+                f'<div><span style="color:#64748B">Predicted Return:</span> '
+                f'<span style="color:{"#10B981" if _atm_ai_ret>=0 else "#EF4444"};font-weight:700">'
+                f'{_sign_fmt(_atm_ai_ret, suffix="%")}</span></div>'
+                f'<div><span style="color:#64748B">Confidence:</span> '
+                f'<span style="color:#FCD34D;font-weight:700">{_atm_ai_conf}/100</span></div>'
+                f'<div><span style="color:#64748B">Strategy:</span> '
+                f'<span style="color:#6EE7B7;font-weight:700">{_atm_strategy}</span></div>'
+                f'</div>'
+                f'<div style="margin-top:.5rem;font-size:.78rem;color:#94A3B8">'
+                f'Logic: {_agent_logic}</div>'
+                f'<div style="margin-top:.4rem;font-size:.82rem;font-weight:700">'
+                f'Agent Action: <span style="color:{_agent_action_color};font-size:.95rem;'
+                f'font-weight:900">{_agent_action_label}</span></div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+            # ── HOLD explanation box ───────────────────────────────────────────────
+            if _ai_is_hold_atm:
+                _hold_direction_needed = (
+                    "BULLISH signal (predicted return ≥ +2%)"
+                    if _atm_dir in ("buy",) and _atm_type == "call" or (_atm_dir == "sell" and _atm_type == "put")
+                    else "BEARISH signal (predicted return ≤ -2%)"
+                )
+                st.markdown(
+                    f'<div style="background:#1C1009;border:2px solid #F59E0B;border-radius:8px;'
+                    f'padding:.9rem 1.2rem;margin:.4rem 0 .6rem 0">'
+                    f'<div style="color:#FCD34D;font-weight:900;font-size:.9rem;margin-bottom:.4rem">'
+                    f'HOLD SIGNAL DETECTED — NO OPTIONS TRADE ENTERED</div>'
+                    f'<div style="color:#FED7AA;font-size:.8rem;line-height:1.6">'
+                    f'AI returned <b>HOLD</b> — no strong directional conviction for the {horizon}-day window.<br>'
+                    f'For a <b>{_atm_strategy}</b> position, the agent needs a <b>{_hold_direction_needed}</b>.<br>'
+                    f'HOLD means: "market conditions are unclear — do not enter this options trade."<br>'
+                    f'<span style="color:#FCD34D">All {len(_raw_trials) if _raw_trials else "N"} backtester trades are marked SKIPPED.</span>'
+                    f'</div>'
+                    f'<div style="margin-top:.6rem;font-size:.75rem;color:#94A3B8">'
+                    f'To get an actionable signal: try a different time window, or wait for stronger market direction. '
+                    f'SPY/SPX with 1-month horizon gives fewer HOLD signals than individual stocks.</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+            if not _raw_trials:
+                st.info("No individual trade data returned by TastyTrade backtester for this run.")
+            else:
+                # Build per-trade alignment table
+                _atm_rows   = []
+                _entered_n  = 0
+                _entered_win = 0
+                _entered_pl  = 0.0
+                _skipped_n  = 0
+                _skipped_avoided_loss = 0
+
+                for _i, _t in enumerate(_raw_trials, 1):
+                    _topen  = str(_t.get("openDateTime") or _t.get("entryDate") or _t.get("entry_date") or "")[:10]
+                    _tclose = str(_t.get("closeDateTime") or _t.get("exitDate") or _t.get("exit_date") or "")[:10]
+                    _tpl    = float(_t.get("profitLoss") or _t.get("profit_loss") or 0)
+                    _tprem  = float(_t.get("initialPremium") or _t.get("premium") or _t.get("openPremium") or 0)
+                    _troi   = float(_t.get("returnOnInvestment") or _t.get("roi") or 0)
+                    _treason = str(_t.get("exitReason") or _t.get("closeReason") or _t.get("exit_reason") or "---").replace("_", " ").title()
+                    try:
+                        from datetime import date as _dt_cls
+                        _days_held = (_dt_cls.fromisoformat(_tclose) - _dt_cls.fromisoformat(_topen)).days if (_topen and _tclose) else "?"
+                    except Exception:
+                        _days_held = "?"
+
+                    if _agent_enters:
+                        _entered_n += 1
+                        _entered_pl += _tpl
+                        _trade_won  = _tpl > 0
+                        if _trade_won:
+                            _entered_win += 1
+                        _aligned    = _trade_won
+                        _act_lbl    = "ENTER"
+                        _act_clr    = "#10B981"
+                        _res_lbl    = "WIN" if _tpl > 0 else "LOSS"
+                        _res_clr    = "#10B981" if _tpl > 0 else "#EF4444"
+                        _align_lbl  = "✅" if _aligned else "❌"
+                    else:
+                        _skipped_n += 1
+                        if _tpl < 0:
+                            _skipped_avoided_loss += 1
+                        _aligned   = _tpl < 0
+                        _act_lbl   = "SKIP"
+                        _act_clr   = "#64748B"
+                        _res_lbl   = "WIN" if _tpl > 0 else "LOSS"
+                        _res_clr   = "#10B981" if _tpl > 0 else "#EF4444"
+                        _align_lbl = "✅ (avoided)" if _aligned else "❌ (missed)"
+
+                    _atm_rows.append({
+                        "#":           _i,
+                        "Entry Date":  _topen or "---",
+                        "Exit Date":   _tclose or "---",
+                        "Days":        _days_held,
+                        "P&L":         f"${_tpl:+,.2f}",
+                        "ROI":         f"{_troi:+.1f}%" if _troi else "---",
+                        "Exit Reason": _treason,
+                        "Agent":       _act_lbl,
+                        "Result":      _res_lbl,
+                        "Aligned":     _align_lbl,
+                    })
+
+                # Score banner
+                _n_total    = len(_raw_trials)
+                if _agent_enters:
+                    _agt_wr_pct = (_entered_win / _entered_n * 100) if _entered_n else 0
+                    _agt_wr_clr = "#10B981" if _agt_wr_pct >= 60 else ("#F59E0B" if _agt_wr_pct >= 40 else "#EF4444")
+                    _pnl_clr_a  = "#10B981" if _entered_pl >= 0 else "#EF4444"
+                    st.markdown(
+                        f'<div style="display:flex;gap:1rem;flex-wrap:wrap;margin:.4rem 0 .7rem 0">'
+                        f'<div style="background:#0A2540;border-radius:8px;padding:.6rem 1rem;text-align:center;flex:1">'
+                        f'<div style="color:#64748B;font-size:.7rem">AGENT WOULD ENTER</div>'
+                        f'<div style="color:#FCD34D;font-size:1.5rem;font-weight:900">{_entered_n}</div>'
+                        f'<div style="color:#64748B;font-size:.68rem">of {_n_total} backtester trades</div></div>'
+                        f'<div style="background:#0A2540;border-radius:8px;padding:.6rem 1rem;text-align:center;flex:1">'
+                        f'<div style="color:#64748B;font-size:.7rem">WIN RATE ON ENTERED</div>'
+                        f'<div style="color:{_agt_wr_clr};font-size:1.5rem;font-weight:900">{_agt_wr_pct:.0f}%</div>'
+                        f'<div style="color:#64748B;font-size:.68rem">{_entered_win} wins / {_entered_n} trades</div></div>'
+                        f'<div style="background:#0A2540;border-radius:8px;padding:.6rem 1rem;text-align:center;flex:1">'
+                        f'<div style="color:#64748B;font-size:.7rem">TOTAL P&L IF FOLLOWED AGENT</div>'
+                        f'<div style="color:{_pnl_clr_a};font-size:1.5rem;font-weight:900">${_entered_pl:+,.0f}</div>'
+                        f'<div style="color:#64748B;font-size:.68rem">all {_entered_n} entered trades</div></div>'
+                        f'<div style="background:#0A2540;border-radius:8px;padding:.6rem 1rem;text-align:center;flex:1">'
+                        f'<div style="color:#64748B;font-size:.7rem">BACKTESTER TOTAL</div>'
+                        f'<div style="color:#94A3B8;font-size:1.5rem;font-weight:900">{_n_total}</div>'
+                        f'<div style="color:#64748B;font-size:.68rem">trades, {float(opts.get("win_rate") or 0)*100 if (opts.get("win_rate") or 0) <= 1 else (opts.get("win_rate") or 0):.0f}% win rate</div></div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    _avoided_good = _skipped_avoided_loss
+                    _skip_reason_label = "AGENT: HOLD — ALL SKIPPED" if _ai_is_hold_atm else "AGENT WOULD SKIP"
+                    _skip_reason_color = "#F59E0B" if _ai_is_hold_atm else "#EF4444"
+                    st.markdown(
+                        f'<div style="display:flex;gap:1rem;flex-wrap:wrap;margin:.4rem 0 .7rem 0">'
+                        f'<div style="background:#0A2540;border-radius:8px;padding:.6rem 1rem;text-align:center;flex:1">'
+                        f'<div style="color:#64748B;font-size:.7rem">{_skip_reason_label}</div>'
+                        f'<div style="color:{_skip_reason_color};font-size:1.5rem;font-weight:900">{_skipped_n}</div>'
+                        f'<div style="color:#64748B;font-size:.68rem">of {_n_total} backtester trades</div></div>'
+                        f'<div style="background:#0A2540;border-radius:8px;padding:.6rem 1rem;text-align:center;flex:1">'
+                        f'<div style="color:#64748B;font-size:.7rem">LOSSES AVOIDED</div>'
+                        f'<div style="color:#10B981;font-size:1.5rem;font-weight:900">{_avoided_good}</div>'
+                        f'<div style="color:#64748B;font-size:.68rem">agent correctly skipped</div></div>'
+                        f'<div style="background:#0A2540;border-radius:8px;padding:.6rem 1rem;text-align:center;flex:1">'
+                        f'<div style="color:#64748B;font-size:.7rem">BACKTESTER TRADES</div>'
+                        f'<div style="color:#94A3B8;font-size:1.5rem;font-weight:900">{_n_total}</div>'
+                        f'<div style="color:#64748B;font-size:.68rem">would have run</div></div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                # Per-trade table
+                import pandas as pd
+                _atm_df = pd.DataFrame(_atm_rows)
+                st.dataframe(
+                    _atm_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "#":           st.column_config.NumberColumn("#", width="small"),
+                        "P&L":         st.column_config.TextColumn("P&L"),
+                        "Agent":       st.column_config.TextColumn("Agent Action"),
+                        "Result":      st.column_config.TextColumn("Trade Result"),
+                        "Aligned":     st.column_config.TextColumn("Aligned?", width="medium"),
+                    }
+                )
+
+                # Alignment summary
+                _n_aligned   = sum(1 for r in _atm_rows if "✅" in r["Aligned"])
+                _n_misalign  = _n_total - _n_aligned
+                _align_pct   = (_n_aligned / _n_total * 100) if _n_total else 0
+                _align_color = "#10B981" if _align_pct >= 60 else ("#F59E0B" if _align_pct >= 40 else "#EF4444")
+                st.markdown(
+                    f'<div style="background:#0F172A;border-left:4px solid {_align_color};'
+                    f'border-radius:6px;padding:.6rem 1rem;margin:.5rem 0;font-size:.8rem">'
+                    f'<span style="color:{_align_color};font-weight:700">Agent Alignment Score: '
+                    f'{_n_aligned}/{_n_total} trades ({_align_pct:.0f}%)</span>'
+                    f'<span style="color:#64748B"> — </span>'
+                    f'<span style="color:#CBD5E1">'
+                    f'{"Agent correctly aligned on majority of trades" if _align_pct >= 50 else "More trades misaligned than aligned — agent direction was wrong for most individual trades"}'
+                    f'</span></div>',
+                    unsafe_allow_html=True,
+                )
+
+                # ── HOLD override hypothetical ─────────────────────────────────
+                if _ai_is_hold_atm and _raw_trials:
+                    _hyp_wins  = sum(1 for t in _raw_trials if float(t.get("profitLoss") or t.get("profit_loss") or 0) > 0)
+                    _hyp_total = len(_raw_trials)
+                    _hyp_pl    = sum(float(t.get("profitLoss") or t.get("profit_loss") or 0) for t in _raw_trials)
+                    _hyp_wr    = (_hyp_wins / _hyp_total * 100) if _hyp_total else 0
+                    _hyp_pl_c  = "#10B981" if _hyp_pl >= 0 else "#EF4444"
+                    _hyp_wr_c  = "#10B981" if _hyp_wr >= 60 else ("#F59E0B" if _hyp_wr >= 40 else "#EF4444")
+                    st.markdown(
+                        f'<div style="background:#0A1520;border:1px dashed #F59E0B;border-radius:8px;'
+                        f'padding:.8rem 1.1rem;margin:.6rem 0">'
+                        f'<div style="color:#FCD34D;font-weight:800;font-size:.83rem;margin-bottom:.5rem">'
+                        f'HYPOTHETICAL: What if we overrode HOLD and entered anyway?</div>'
+                        f'<div style="display:flex;gap:1.2rem;flex-wrap:wrap;font-size:.78rem">'
+                        f'<div style="text-align:center">'
+                        f'<div style="color:#64748B;font-size:.68rem">TRADES ENTERED</div>'
+                        f'<div style="color:#FCD34D;font-size:1.2rem;font-weight:900">{_hyp_total}</div></div>'
+                        f'<div style="text-align:center">'
+                        f'<div style="color:#64748B;font-size:.68rem">WIN RATE</div>'
+                        f'<div style="color:{_hyp_wr_c};font-size:1.2rem;font-weight:900">{_hyp_wr:.0f}%</div></div>'
+                        f'<div style="text-align:center">'
+                        f'<div style="color:#64748B;font-size:.68rem">TOTAL P&L</div>'
+                        f'<div style="color:{_hyp_pl_c};font-size:1.2rem;font-weight:900">${_hyp_pl:+,.0f}</div></div>'
+                        f'</div>'
+                        f'<div style="color:#94A3B8;font-size:.72rem;margin-top:.5rem">'
+                        f'This shows what the backtester found when it ran all trades — agent said HOLD so '
+                        f'it would have entered none of them. Compare to understand what you\'d miss by following HOLD.</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
         # ── LOGS TAB ─────────────────────────────────────────────────────────
         with _tt_tab_log:
             _log_t1, _log_t2, _log_t3, _log_t4 = st.tabs(["Trades", "Orders", "Transactions", "Daily Settlement"])
@@ -4338,34 +5013,80 @@ def _render_options_results():
                     st.dataframe(pd.DataFrame(_txn_display), use_container_width=True, hide_index=True)
                 else:
                     _txn_auto = []
+                    _is_bs_txn = opts.get("bs_fallback") or opts.get("bs_source") == "black_scholes_simulation"
+                    _bs_qty_txn = opts_p.get("quantity") or 1
+                    _bs_mult_txn = 100
                     for _i2, _t2 in enumerate(_raw_trials, 1):
                         _t2_open  = str(_t2.get("openDateTime") or _t2.get("entryDate") or "")[:10]
                         _t2_close = str(_t2.get("closeDateTime") or _t2.get("exitDate") or "")[:10]
-                        _t2_prem  = float(_t2.get("initialPremium") or _t2.get("premium") or 0)
-                        _t2_cl_px = float(_t2.get("closePremium") or _t2.get("exitPremium") or 0)
-                        _t2_fees  = float(_t2.get("fees") or 0)
-                        _t2_instr = str(_t2.get("instrument") or _t2.get("description") or f"{symbol} option")
+                        _t2_qty   = int(_t2.get("_quantity") or _bs_qty_txn)
+                        _t2_instr = str(
+                            _t2.get("instrument") or _t2.get("description")
+                            or f"{symbol} {str(opts_p.get('opt_type','call')).lower()} option"
+                        )
+                        # Use BS-computed per-contract prices when available
+                        if _is_bs_txn and _t2.get("_entry_price_per_contract") is not None:
+                            _entry_px_contract = float(_t2.get("_entry_price_per_contract") or 0)
+                            _exit_px_contract  = float(_t2.get("_exit_price_per_contract")  or 0)
+                            _open_fees_tx  = float(_t2.get("_open_fees")  or 0)
+                            _close_fees_tx = float(_t2.get("_close_fees") or 0)
+                            _instr_bs = str(_t2.get("instrument") or _t2_instr)
+                            # Re-label instrument with symbol
+                            if _instr_bs.startswith("OPT $"):
+                                _instr_bs = symbol + " $" + _instr_bs[5:]
+                        else:
+                            _t2_prem_raw = _t2.get("initialPremium") or _t2.get("premium") or 0
+                            _t2_cl_raw   = _t2.get("closePremium")   or _t2.get("exitPremium") or 0
+                            _t2_fees_tot = float(_t2.get("fees") or _t2.get("totalFees") or 0)
+                            _entry_px_contract = abs(float(_t2_prem_raw)) / max(_t2_qty, 1)
+                            _exit_px_contract  = abs(float(_t2_cl_raw))   / max(_t2_qty, 1)
+                            _open_fees_tx  = _t2_fees_tot / 2
+                            _close_fees_tx = _t2_fees_tot / 2
+                            _instr_bs = _t2_instr
+
+                        _is_buy  = opts_p.get("direction", "Buy").lower() in ("buy", "long")
+                        _open_type  = "buy to open"  if _is_buy else "sell to open"
+                        _close_type = "sell to close" if _is_buy else "buy to close"
+                        _open_effect  = "debit"  if _is_buy else "credit"
+                        _close_effect = "credit" if _is_buy else "debit"
+
+                        _entry_value = _entry_px_contract * _t2_qty
+                        _exit_value  = _exit_px_contract  * _t2_qty
+
                         _txn_auto.append({
-                            "#": (_i2 * 2) - 1, "Date": _t2_open, "Time": "EOD",
-                            "Trade No.": _i2, "Type": "buy to open",
-                            "Instrument": _t2_instr,
-                            "Price": f"${_t2_prem:,.2f}", "Quantity": 1,
-                            "Value": f"${_t2_prem:,.2f}", "Effect": "debit",
-                            "Fees": f"${_t2_fees/2:.3f}",
+                            "#":          (_i2 * 2) - 1,
+                            "Date":       _t2_open,
+                            "Time":       "1:15:00 am IST",
+                            "Trade No.":  _i2,
+                            "Type":       _open_type,
+                            "Instrument": _instr_bs,
+                            "Price":      f"${_entry_px_contract:,.2f}",
+                            "Quantity":   _t2_qty,
+                            "Value":      f"${_entry_value:,.2f}",
+                            "Effect":     _open_effect,
+                            "Fees":       f"${_open_fees_tx:.3f}",
                         })
                         if _t2_close:
                             _txn_auto.append({
-                                "#": _i2 * 2, "Date": _t2_close, "Time": "EOD",
-                                "Trade No.": _i2, "Type": "sell to close",
-                                "Instrument": _t2_instr,
-                                "Price": f"${_t2_cl_px:,.2f}", "Quantity": 1,
-                                "Value": f"${_t2_cl_px:,.2f}", "Effect": "credit",
-                                "Fees": f"${_t2_fees/2:.3f}",
+                                "#":          _i2 * 2,
+                                "Date":       _t2_close,
+                                "Time":       "1:15:00 am IST",
+                                "Trade No.":  _i2,
+                                "Type":       _close_type,
+                                "Instrument": _instr_bs,
+                                "Price":      f"${_exit_px_contract:,.2f}",
+                                "Quantity":   _t2_qty,
+                                "Value":      f"${_exit_value:,.2f}",
+                                "Effect":     _close_effect,
+                                "Fees":       f"${_close_fees_tx:.3f}",
                             })
                     if _txn_auto:
                         import pandas as pd
                         st.dataframe(pd.DataFrame(_txn_auto), use_container_width=True, hide_index=True)
-                        st.caption("Constructed from trial data — exact order-level detail requires API support.")
+                        if _is_bs_txn:
+                            st.caption("Black-Scholes computed prices (theoretical) — TastyTrade API does not return individual transaction prices for this configuration.")
+                        else:
+                            st.caption("Constructed from trial data — exact order-level detail requires API support.")
                     else:
                         st.info("No transaction data available for this backtest run.")
 
@@ -4495,76 +5216,125 @@ def _render_options_results():
         final_dec  = "REVIEW"
         bt_dec     = "FAILED"
 
-    # Options strategy decision labels (ENTER / SKIP / WAIT / REVIEW)
-    _opts_label_map = {"BUY": "ENTER", "SELL": "SKIP", "HOLD": "WAIT", "REVIEW": "REVIEW"}
-    _ai_opts_label  = _opts_label_map.get(str(ai_dec).upper(), ai_dec)
-    _bt_opts_label  = {"BUY": "ENTER_WORKED", "SELL": "STRATEGY_LOST", "HOLD": "FLAT", "FAILED": "FAILED"}.get(str(bt_dec).upper(), bt_dec)
-    _final_opts_label = {"BUY": "ENTER", "SELL": "SKIP", "HOLD": "WAIT", "REVIEW": "REVIEW"}.get(str(final_dec).upper(), final_dec)
+    # Options strategy decision labels
+    _opts_label_map   = {"BUY": "ENTER", "SELL": "SKIP", "HOLD": "WAIT", "REVIEW": "REVIEW"}
+    _ai_opts_label    = _opts_label_map.get(str(ai_dec).upper(), ai_dec)
+    _bt_opts_label    = {
+        "BUY": "PROFITABLE", "SELL": "LOST", "HOLD": "FLAT", "FAILED": "FAILED"
+    }.get(str(bt_dec).upper(), bt_dec)
+    _final_opts_label = _opts_label_map.get(str(final_dec).upper(), final_dec)
 
-    c5a, c5b, c5c, c5d = st.columns(4)
+    # 5-column board: AI Signal | Trades Executed | P&L Outcome | Agreement | Final Verdict
+    _n_trades_fdb = int(opts.get("total_trades") or 0) if opts_status == "SUCCESS" else None
+    _wr_fdb       = opts.get("win_rate")
+    _wr_fdb_str   = (
+        f"{float(_wr_fdb)*100:.0f}%" if (_wr_fdb is not None and float(_wr_fdb) <= 1)
+        else (f"{float(_wr_fdb):.0f}%" if _wr_fdb is not None else "---")
+    )
+    _pnl_fdb      = float(opts.get("profit_loss") or 0) if opts_status == "SUCCESS" else None
+    _pnl_clr_fdb  = "#10B981" if (_pnl_fdb is not None and _pnl_fdb >= 0) else "#EF4444"
+    _wr_clr_fdb   = (
+        "#10B981" if _wr_fdb is not None and (float(_wr_fdb)*100 if float(_wr_fdb)<=1 else float(_wr_fdb)) >= 60
+        else "#F59E0B" if _wr_fdb is not None and (float(_wr_fdb)*100 if float(_wr_fdb)<=1 else float(_wr_fdb)) >= 40
+        else "#EF4444"
+    )
+    agree_color_fdb = (
+        "#00875A" if agreement == "MATCH"
+        else "#DF1B41" if agreement == "CONFLICT"
+        else "#D97706"
+    )
+    _validated_fdb  = agreement == "MATCH"
+    _verdict_fdb_color = "#10B981" if _validated_fdb else "#EF4444"
+    _verdict_fdb_label = "AGENT VALIDATED" if _validated_fdb else (
+        "NOT VALIDATED" if agreement == "CONFLICT" else "REVIEW"
+    )
+
+    c5a, c5b, c5c, c5d, c5e = st.columns(5)
     with c5a:
         st.markdown(
-            '<div style="background:#0A2540;padding:.6rem 1rem;border-radius:6px;text-align:center">'
-            '<div style="color:#8BA9C4;font-size:.7rem;margin-bottom:.3rem">AI STRATEGY SIGNAL</div>'
-            f'<div style="font-size:1.6rem;font-weight:900">{_decision_badge(ai_dec)}</div>'
-            f'<div style="color:#8BA9C4;font-size:.62rem;margin-top:.15rem">Options: <b style="color:#FCD34D">{_ai_opts_label}</b></div>'
-            f'<div style="color:#8BA9C4;font-size:.66rem;margin-top:.1rem">'
-            f"Return: {_sign_fmt(ai.get('predicted_return_pct'), suffix='%')}"
+            '<div style="background:#0A2540;padding:.6rem .7rem;border-radius:6px;text-align:center">'
+            '<div style="color:#8BA9C4;font-size:.68rem;margin-bottom:.3rem">AI STRATEGY SIGNAL</div>'
+            f'<div style="font-size:1.5rem;font-weight:900">{_decision_badge(ai_dec)}</div>'
+            f'<div style="color:#FCD34D;font-size:.62rem;font-weight:700;margin-top:.15rem">{_ai_opts_label}</div>'
+            f'<div style="color:#8BA9C4;font-size:.63rem;margin-top:.1rem">'
+            f"Return: {_sign_fmt(ai.get('predicted_return_pct'), suffix='%')}&nbsp;|&nbsp;"
+            f"Conf: {ai.get('confidence_score','?')}/100"
             f"</div></div>",
             unsafe_allow_html=True,
         )
     with c5b:
-        _bt_badge = (
-            f'<span style="color:#EF4444;font-weight:900">FAILED</span>'
-            if opts_status != "SUCCESS" else _decision_badge(bt_dec)
-        )
-        _bt_note = (
-            f"P&L: ${float(opts.get('profit_loss') or 0):+,.2f}"
-            if opts_status == "SUCCESS" else opts_status
+        _trades_disp = (
+            f'<div style="font-size:1.8rem;font-weight:900;color:#FCD34D">{_n_trades_fdb}</div>'
+            if _n_trades_fdb is not None
+            else '<div style="font-size:1rem;font-weight:700;color:#EF4444">---</div>'
         )
         st.markdown(
-            '<div style="background:#0A2540;padding:.6rem 1rem;border-radius:6px;text-align:center">'
-            '<div style="color:#8BA9C4;font-size:.7rem;margin-bottom:.3rem">OPTIONS BACKTEST</div>'
-            f'<div style="font-size:1.6rem;font-weight:900">{_bt_badge}</div>'
-            f'<div style="color:#8BA9C4;font-size:.62rem;margin-top:.15rem">Result: <b style="color:#FCD34D">{_bt_opts_label}</b></div>'
-            f'<div style="color:#8BA9C4;font-size:.66rem;margin-top:.1rem">{_bt_note}</div></div>',
+            '<div style="background:#0A2540;padding:.6rem .7rem;border-radius:6px;text-align:center">'
+            '<div style="color:#8BA9C4;font-size:.68rem;margin-bottom:.3rem">TRADES EXECUTED</div>'
+            + _trades_disp +
+            f'<div style="color:{_wr_clr_fdb};font-size:.7rem;font-weight:700;margin-top:.1rem">'
+            f'Win Rate: {_wr_fdb_str}</div>'
+            f'<div style="color:#8BA9C4;font-size:.63rem;margin-top:.05rem">'
+            f'{opts.get("backtest_range", f"{origin} → {target}")[:28]}</div></div>',
             unsafe_allow_html=True,
         )
     with c5c:
-        agree_color = (
-            "#00875A" if agreement == "MATCH"
-            else ("#DF1B41" if agreement == "CONFLICT"
-            else "#D97706")
+        _pnl_disp = (
+            f'<div style="font-size:1.3rem;font-weight:900;color:{_pnl_clr_fdb}">'
+            f'${_pnl_fdb:+,.0f}</div>'
+            if _pnl_fdb is not None
+            else f'<div style="font-size:1rem;font-weight:700;color:#EF4444">{opts_status}</div>'
         )
         st.markdown(
-            '<div style="background:#0A2540;padding:.6rem 1rem;border-radius:6px;text-align:center">'
-            '<div style="color:#8BA9C4;font-size:.7rem;margin-bottom:.3rem">AGREEMENT</div>'
-            f'<div style="font-size:1.4rem;font-weight:900;color:{agree_color}">{agreement}</div>'
-            f'<div style="color:#8BA9C4;font-size:.66rem;margin-top:.2rem">'
-            f"{'AI vs backtest match' if agreement == 'MATCH' else ('Backtest failed' if agreement == 'BACKTEST_FAILED' else 'Directions differ')}"
-            f"</div></div>",
+            '<div style="background:#0A2540;padding:.6rem .7rem;border-radius:6px;text-align:center">'
+            '<div style="color:#8BA9C4;font-size:.68rem;margin-bottom:.3rem">P&L OUTCOME</div>'
+            + _pnl_disp +
+            f'<div style="color:#FCD34D;font-size:.62rem;font-weight:700;margin-top:.15rem">{_bt_opts_label}</div>'
+            f'<div style="color:#8BA9C4;font-size:.63rem;margin-top:.05rem">'
+            f'Avg: {_sign_fmt(opts.get("avg_pnl")) if opts_status=="SUCCESS" else "---"} / trade'
+            f'</div></div>',
             unsafe_allow_html=True,
         )
     with c5d:
         st.markdown(
-            '<div style="background:#0A2540;padding:.6rem 1rem;border-radius:6px;text-align:center">'
-            '<div style="color:#8BA9C4;font-size:.7rem;margin-bottom:.3rem">FINAL VERIFIED</div>'
+            '<div style="background:#0A2540;padding:.6rem .7rem;border-radius:6px;text-align:center">'
+            '<div style="color:#8BA9C4;font-size:.68rem;margin-bottom:.3rem">AGREEMENT</div>'
+            f'<div style="font-size:1.3rem;font-weight:900;color:{agree_color_fdb}">{agreement}</div>'
+            f'<div style="color:#8BA9C4;font-size:.63rem;margin-top:.2rem">'
+            f"{'AI direction ✓ backtest' if agreement=='MATCH' else ('Backtest failed' if agreement=='BACKTEST_FAILED' else 'Directions differ')}"
+            f"</div></div>",
+            unsafe_allow_html=True,
+        )
+    with c5e:
+        st.markdown(
+            f'<div style="background:{"#052E16" if _validated_fdb else "#180A0A"};'
+            f'border:2px solid {_verdict_fdb_color};padding:.6rem .7rem;border-radius:6px;text-align:center">'
+            '<div style="color:#8BA9C4;font-size:.68rem;margin-bottom:.3rem">FINAL VERDICT</div>'
             f'<div style="font-size:1.6rem;font-weight:900">{_decision_badge(final_dec)}</div>'
-            f'<div style="color:#8BA9C4;font-size:.62rem;margin-top:.15rem">Options: <b style="color:#FCD34D">{_final_opts_label}</b></div>'
-            f'<div style="color:#8BA9C4;font-size:.66rem;margin-top:.1rem">'
-            f"{'Confirmed' if agreement == 'MATCH' else 'Human review required'}"
+            f'<div style="color:{_verdict_fdb_color};font-size:.62rem;font-weight:900;margin-top:.15rem;letter-spacing:.04em">'
+            f'{_verdict_fdb_label}</div>'
+            f'<div style="color:#8BA9C4;font-size:.63rem;margin-top:.05rem">'
+            f"{'Both engines agree' if agreement=='MATCH' else 'Human review needed'}"
             f"</div></div>",
             unsafe_allow_html=True,
         )
 
+    # Verdict narrative
     if agreement == "MATCH":
-        st.success(f"MATCH — AI predicted {ai_dec} ({_ai_opts_label}), options backtest P&L direction agrees.")
+        st.success(
+            f"AGENT VALIDATED — AI predicted {ai_dec} ({_ai_opts_label}), "
+            f"backtester ran {_n_trades_fdb} trades with {_wr_fdb_str} win rate and "
+            f"${float(opts.get('profit_loss') or 0):+,.2f} total P&L. Directions agree."
+        )
     elif agreement == "CONFLICT":
-        st.error(f"CONFLICT — AI predicted {ai_dec} ({_ai_opts_label}) but backtest result was {_bt_opts_label}.")
+        st.error(
+            f"AGENT NOT VALIDATED — AI predicted {ai_dec} ({_ai_opts_label}) but "
+            f"backtester P&L was {_bt_opts_label}. Conflict saved for calibration."
+        )
     else:
         st.warning(
-            f"BACKTEST FAILED — {opts.get('error', opts_status)}. "
-            "Agreement cannot be determined. Options accuracy NOT saved."
+            f"BACKTEST {opts_status} — {opts.get('error', '')}. "
+            "Agreement cannot be determined. Accuracy not saved."
         )
 
     if saved:

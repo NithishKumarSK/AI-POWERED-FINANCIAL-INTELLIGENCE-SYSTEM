@@ -45,16 +45,24 @@ _RETURN_CLAMP_MAX  = 20.0
 _RETURN_CLAMP_MIN  = -20.0
 
 
-def _get_horizon_thresholds(horizon_days: int) -> Tuple[float, float]:
-    """Return (buy_threshold, sell_threshold) calibrated to prediction horizon."""
+def _get_horizon_thresholds(horizon_days: int, symbol: str = "") -> Tuple[float, float]:
+    """Return (buy_threshold, sell_threshold) calibrated to prediction horizon.
+
+    1-month (≤30d): tighter thresholds — SPX/SPY positive ~75% of any 1-month window,
+    so committing to BUY at +0.7% is statistically correct far more often than hiding in HOLD.
+    """
+    _is_index = symbol.upper() in ("SPY", "SPX", "QQQ", "IWM", "DIA")
     if horizon_days <= 10:
-        return 1.0, -1.0
+        return (0.7, -0.7) if _is_index else (1.0, -1.0)
     elif horizon_days <= 30:
-        return 1.5, -1.5
+        # CRITICAL FIX: was ±1.5%, lowered to ±0.7% for indexes, ±0.9% for stocks.
+        # Old threshold blocked BUY when AI predicted +1.2% (below 1.5%) → wrong HOLD.
+        # SPX is positive in ~75% of 1-month windows — commit to direction with small signals.
+        return (0.7, -0.7) if _is_index else (0.9, -0.9)
     elif horizon_days <= 60:
-        return 2.0, -2.0
+        return (1.5, -1.5) if _is_index else (2.0, -2.0)
     else:
-        return 2.5, -2.5
+        return (2.0, -2.0) if _is_index else (2.5, -2.5)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -699,22 +707,32 @@ def _apply_guardrails(
     signal_scores: Optional[dict] = None,
     reversal_risk: str = "low",
     rsi: Optional[float] = None,
+    symbol: str = "",
 ) -> Tuple[str, str]:
-    """Deterministic post-Gemini guardrails — signal scores now gate BUY/SELL."""
+    """Deterministic post-Gemini guardrails — signal scores now gate BUY/SELL.
+
+    HOLD bias fix (2026-07-28): lowered all gate thresholds so the AI commits to
+    BUY/SELL more often for 1-month horizon on index symbols (SPX/SPY/QQQ).
+    Old 30-day threshold of ±1.5% blocked obvious BUY signals; now ±0.7-0.9%.
+    """
+    _is_index = symbol.upper() in ("SPY", "SPX", "QQQ", "IWM", "DIA")
+
     # Gate 1: data quality
     if data_quality_score < 60:
         return "REVIEW", f"Data quality too low ({data_quality_score}/100) — insufficient data."
 
-    # Gate 2: confidence
-    if confidence_score < 45:   # was 55
+    # Gate 2: confidence — lowered from 45 to 38 to stop blocking actionable signals
+    _conf_gate = 35 if _is_index else 38
+    if confidence_score < _conf_gate:
         return "REVIEW", f"Confidence too low ({confidence_score}/100) — mixed signals."
 
-    # Gate 3: high uncertainty blocks directional decisions
+    # Gate 3: high uncertainty blocks directional decisions — loosened to >85
     uncert_s = (signal_scores or {}).get("uncertainty_score", 50)
-    if uncert_s > 80 and confidence_score < 50:   # was >70 and <65
+    _uncert_hard_cap = 90 if _is_index else 85
+    if uncert_s > _uncert_hard_cap and confidence_score < 45:
         return "REVIEW", f"Uncertainty too high ({uncert_s}/100) — needs human review."
 
-    buy_thr, sell_thr = _get_horizon_thresholds(horizon_days)
+    buy_thr, sell_thr = _get_horizon_thresholds(horizon_days, symbol)
     bull_s = (signal_scores or {}).get("bullish_score", 50)
     bear_s = (signal_scores or {}).get("bearish_score", 50)
 
@@ -722,13 +740,18 @@ def _apply_guardrails(
     # lower the uncertainty barrier so clear trending markets don't get stuck in HOLD.
     _strong_bear = signal_scores and bear_s >= 70 and (bear_s - bull_s) >= 25
     _strong_bull = signal_scores and bull_s >= 70 and (bull_s - bear_s) >= 25
-    _uncert_limit = 55 if (_strong_bear or _strong_bull) else 75
+    # Raised from 75→82 for normal, 55→60 for strong — allows more signals through
+    _uncert_limit = 60 if (_strong_bear or _strong_bull) else 82
+
+    # Lowered signal gate thresholds: bull_s 45→35, gap 5→3
+    _bull_gate = 32 if _is_index else 35
+    _bear_gate = 32 if _is_index else 35
+    _gap_gate  = 2  if _is_index else 3
 
     if predicted_return_pct >= buy_thr:
         # BUY requires signal confirmation
-        if signal_scores and bull_s >= 45 and (bull_s - bear_s) >= 5 and uncert_s <= _uncert_limit:
+        if signal_scores and bull_s >= _bull_gate and (bull_s - bear_s) >= _gap_gate and uncert_s <= _uncert_limit:
             # Gate 4: overbought reversal block — only for SHORT horizons (≤ 45 days)
-            # For horizons > 45 days overbought conditions in strong trends continue more often than reverse.
             _rsi_str = f"{round(rsi, 1)}" if rsi is not None else "N/A"
             if reversal_risk == "high" and horizon_days <= 45:
                 decision = "REVIEW"
@@ -737,10 +760,10 @@ def _apply_guardrails(
                     f"(RSI={_rsi_str}, overbought+near_resistance, horizon={horizon_days}d ≤ 45). "
                     f"Short-horizon overbought reversal risk overrides bullish signals. Needs human review."
                 )
-            elif reversal_risk == "medium" and rsi is not None and rsi >= 75 and horizon_days <= 45:
+            elif reversal_risk == "medium" and rsi is not None and rsi >= 80 and horizon_days <= 45:
                 decision = "HOLD"
                 reason   = (
-                    f"BUY→HOLD: reversal_risk=medium, RSI={_rsi_str} (>=75). "
+                    f"BUY→HOLD: reversal_risk=medium, RSI={_rsi_str} (>=80). "
                     f"Overbought conditions near resistance require caution."
                 )
             else:
@@ -749,6 +772,13 @@ def _apply_guardrails(
                     f"Predicted return {predicted_return_pct:+.2f}% >= +{buy_thr}% BUY threshold "
                     f"({horizon_days}d). Bullish score {bull_s}/100 confirms."
                 )
+        elif not signal_scores:
+            # No signal scores — fall back to pure return threshold
+            decision = "BUY"
+            reason   = (
+                f"Predicted return {predicted_return_pct:+.2f}% >= +{buy_thr}% BUY threshold "
+                f"({horizon_days}d). No signal scores available — return-only decision."
+            )
         else:
             decision = "HOLD"
             reason   = (
@@ -757,12 +787,18 @@ def _apply_guardrails(
             )
     elif predicted_return_pct <= sell_thr:
         # SELL requires signal confirmation; strong consensus lowers uncertainty requirement.
-        if signal_scores and bear_s >= 45 and (bear_s - bull_s) >= 5 and uncert_s <= _uncert_limit:
+        if signal_scores and bear_s >= _bear_gate and (bear_s - bull_s) >= _gap_gate and uncert_s <= _uncert_limit:
             decision = "SELL"
             reason   = (
                 f"Predicted return {predicted_return_pct:+.2f}% <= {sell_thr}% SELL threshold "
                 f"({horizon_days}d). Bearish score {bear_s}/100 confirms."
                 + (" [STRONG CONSENSUS]" if _strong_bear else "")
+            )
+        elif not signal_scores:
+            decision = "SELL"
+            reason   = (
+                f"Predicted return {predicted_return_pct:+.2f}% <= {sell_thr}% SELL threshold "
+                f"({horizon_days}d). No signal scores — return-only decision."
             )
         else:
             decision = "HOLD"
@@ -778,23 +814,22 @@ def _apply_guardrails(
         )
 
     # HOLD override: strong signal consensus overrides neutral return (reversal risk must be low).
-    # For overwhelming consensus (>=70 score, >=25 gap), apply slightly relaxed thresholds;
-    # otherwise keep original thresholds (confidence>=60, dom_score>=45, near_thr factor 0.50).
-    if decision == "HOLD" and signal_scores and reversal_risk == "low":
+    # Loosened: confidence 60→48, dom_score 45→38, near_thr factor 0.50→0.28.
+    if decision == "HOLD" and signal_scores and reversal_risk in ("low", "medium"):
         dominant   = signal_scores.get("dominant", "uncertain")
         dom_score  = signal_scores.get("dominant_score", 0)
-        _conf_thr  = 55 if (_strong_bear or _strong_bull) else 60
-        _dom_thr   = 42 if (_strong_bear or _strong_bull) else 45
-        _nthr_fac  = 0.40 if (_strong_bear or _strong_bull) else 0.50
-        near_thr   = abs(predicted_return_pct) >= abs(sell_thr) * _nthr_fac
-        if confidence_score >= _conf_thr and near_thr:
-            if dominant == "bullish" and dom_score >= _dom_thr:
+        _conf_thr2 = 45 if (_strong_bear or _strong_bull) else 48
+        _dom_thr2  = 35 if (_strong_bear or _strong_bull) else 38
+        _nthr_fac2 = 0.20 if (_strong_bear or _strong_bull) else 0.28
+        near_thr   = abs(predicted_return_pct) >= abs(sell_thr) * _nthr_fac2
+        if confidence_score >= _conf_thr2 and near_thr:
+            if dominant == "bullish" and dom_score >= _dom_thr2:
                 decision = "BUY"
                 reason   = (
                     f"HOLD→BUY override: bullish {dom_score}/100, "
                     f"return {predicted_return_pct:+.2f}% near threshold. [{reason}]"
                 )
-            elif dominant == "bearish" and dom_score >= _dom_thr:
+            elif dominant == "bearish" and dom_score >= _dom_thr2:
                 decision = "SELL"
                 reason   = (
                     f"HOLD→SELL override: bearish {dom_score}/100, "
@@ -844,6 +879,102 @@ def _build_symbol_calibration_section(calibration_summary: dict) -> str:
     return "\n".join(lines) + "\n\n"
 
 
+def _build_options_context_section(opts: dict, horizon_days: int) -> str:
+    """Build the OPTIONS STRATEGY CONTEXT section injected into the Gemini prompt."""
+    if not opts:
+        return ""
+    _dir  = str(opts.get("direction", "") or "").strip().capitalize()
+    _type = str(opts.get("opt_type", "") or "").strip().capitalize()
+    if not _dir or not _type:
+        return ""
+
+    _delta = opts.get("delta") or opts.get("delta_ui")
+    _dte   = opts.get("dte")
+    _qty   = opts.get("quantity", 1)
+    _tp    = opts.get("take_profit_pct")
+    _sl    = opts.get("stop_loss_pct")
+    _is_buy  = _dir.lower() in ("buy", "long")
+    _is_call = _type.lower() == "call"
+
+    # What the strategy needs to profit
+    if _is_buy and _is_call:
+        _prob_worthless = 100 - (_delta or 12)
+        _need = (
+            f"Stock must RISE fast enough to push the {_delta}-delta call into profit within {_dte} days. "
+            f"A {_delta}-delta call has ~{_prob_worthless}% chance of expiring worthless. "
+            f"Gradual drift is NOT enough — you need a significant upward move, not a slow trend."
+        )
+        _alignment = "BUY direction needed — stock must rise sharply."
+    elif _is_buy and not _is_call:
+        _prob_worthless = 100 - (_delta or 12)
+        _need = (
+            f"Stock must FALL fast enough to push the {_delta}-delta put into profit within {_dte} days. "
+            f"A {_delta}-delta put has ~{_prob_worthless}% chance of expiring worthless. "
+            f"You need a significant downward move quickly."
+        )
+        _alignment = "SELL direction needed — stock must fall sharply."
+    elif not _is_buy and not _is_call:  # Sell Put
+        _prob_profit = 100 - (_delta or 30)
+        _need = (
+            f"Stock must STAY ABOVE the {_delta}-delta put strike for {_dte} days to keep the full premium. "
+            f"Short put has ~{_prob_profit}% probability of being profitable at expiry. "
+            f"Profits from NEUTRAL to BULLISH conditions — stock must not crash."
+        )
+        _alignment = "NEUTRAL to BULLISH needed — stock must stay flat or rise."
+    else:  # Sell Call
+        _prob_profit = 100 - (_delta or 30)
+        _need = (
+            f"Stock must STAY BELOW the {_delta}-delta call strike for {_dte} days to keep the full premium. "
+            f"Short call has ~{_prob_profit}% probability of being profitable at expiry. "
+            f"Profits from NEUTRAL to BEARISH conditions — stock must not surge."
+        )
+        _alignment = "NEUTRAL to BEARISH needed — stock must stay flat or fall."
+
+    # DTE-specific guidance
+    if _dte is not None and _dte <= 5:
+        _dte_note = (
+            f"VERY SHORT DTE ({_dte} days) — this is a VOLATILITY bet, not a direction bet. "
+            f"The option expires in {_dte} days. Your {horizon_days}-day horizon prediction is useful for context "
+            f"but the option cares only about what happens in the NEXT {_dte} DAYS. "
+            f"Assess ATR_14 carefully: is current daily volatility large enough to move a {_delta}-delta strike into profit? "
+            f"A quiet, slow-moving stock will NOT profit a {_dte}-DTE {_delta}-delta option regardless of trend. "
+            f"In your options_strategy_assessment: explicitly state whether ATR supports a large enough single-day move."
+        )
+    elif _dte is not None and _dte <= 21:
+        _dte_note = (
+            f"SHORT DTE ({_dte} days) — short-term momentum is the primary driver. "
+            f"RSI direction, MACD histogram momentum, and 5d/10d returns matter most. "
+            f"The stock must move in the right direction within {_dte} days, not over the full {horizon_days}-day horizon."
+        )
+    else:
+        _dte_note = (
+            f"MEDIUM/LONG DTE ({_dte} days) — your directional BUY/SELL/HOLD prediction maps well to this option. "
+            f"The option has enough time to follow the trend. RSI, MACD, and 20-60d returns are all directly useful."
+        )
+
+    _timeframe_mismatch = ""
+    if _dte is not None and horizon_days > 0 and _dte < horizon_days / 2:
+        _timeframe_mismatch = (
+            f"\nTIMEFRAME MISMATCH WARNING: Option expires in {_dte} days but prediction horizon is {horizon_days} days. "
+            f"These are very different windows. The option is a SHORT-TERM position inside a LONG-TERM prediction. "
+            f"Your directional call covers the full {horizon_days} days, but the option only captures the first {_dte} days."
+        )
+
+    return (
+        f"\nOPTIONS STRATEGY CONTEXT (you are predicting for an options position — factor this into your analysis):\n"
+        f"  Strategy:     {_dir} {_type}\n"
+        f"  Contracts:    {_qty}\n"
+        f"  Delta:        {_delta} (option has ~{_delta}% probability of being in-the-money at expiry)\n"
+        f"  DTE:          {_dte} days (option EXPIRES in {_dte} days)\n"
+        f"  Take Profit:  {str(_tp) + '% of premium' if _tp else 'None'}\n"
+        f"  Stop Loss:    {str(_sl) + '% of premium' if _sl else 'None'}\n"
+        f"\nWHAT THIS STRATEGY NEEDS TO PROFIT:\n{_need}\n"
+        f"\nDIRECTION ALIGNMENT: {_alignment}\n"
+        f"\nDTE GUIDANCE:\n{_dte_note}"
+        f"{_timeframe_mismatch}\n"
+    )
+
+
 def _build_gemini_prompt(
     normalized_input: dict,
     feature_packet: dict,
@@ -857,12 +988,61 @@ def _build_gemini_prompt(
     signal_scores_for_prompt = signal_scores or {}
     horizon_days = int(normalized_input.get("decision_horizon_days") or 30)
 
+    # Build options strategy context section (injected near top of prompt)
+    _opts_section = _build_options_context_section(
+        normalized_input.get("options_params") or {}, horizon_days
+    )
+
+    # Build index/ETF context section for SPY/SPX/QQQ/IWM
+    _sym_upper = str(normalized_input.get("symbol") or "").upper().strip()
+    _INDEX_ETF_MAP = {
+        "SPY":  ("S&P 500 ETF (SPDR)", "tracks 500 largest US companies by market cap"),
+        "SPX":  ("S&P 500 Index",       "the underlying index itself — cash-settled options"),
+        "QQQ":  ("NASDAQ-100 ETF",      "tracks 100 largest non-financial NASDAQ companies, tech-heavy"),
+        "IWM":  ("Russell 2000 ETF",    "tracks 2000 small-cap US companies"),
+        "VIX":  ("CBOE Volatility Index","measures market fear — moves inversely to SPY usually"),
+        "GLD":  ("Gold ETF",            "tracks gold price — safe haven asset"),
+        "TLT":  ("20+ Year Treasury ETF","tracks long-term US government bonds"),
+        "SQQQ": ("3x Short NASDAQ ETF", "inverse leveraged NASDAQ — extremely volatile"),
+        "TQQQ": ("3x Long NASDAQ ETF",  "leveraged NASDAQ — extremely volatile"),
+    }
+    _is_index = _sym_upper in _INDEX_ETF_MAP
+    _idx_section = ""
+    if _is_index:
+        _idx_name, _idx_desc = _INDEX_ETF_MAP[_sym_upper]
+        _spy_spx = _sym_upper in ("SPY", "SPX")
+        _idx_section = (
+            f"\nSYMBOL CONTEXT — INDEX/ETF (not a single stock):\n"
+            f"  Symbol: {_sym_upper} = {_idx_name}\n"
+            f"  What it is: {_idx_desc}\n"
+        )
+        if _spy_spx:
+            _idx_section += (
+                f"  KEY BEHAVIORS FOR {_sym_upper}:\n"
+                f"  - Historically trends UPWARD over 1-year+ horizons (long-run upward bias)\n"
+                f"  - For 1-month horizon: driven by macro sentiment, Fed policy, earnings season, geopolitics\n"
+                f"  - Much lower single-stock randomness than TSLA/NVDA — better for calibration\n"
+                f"  - Corrections rarely exceed -10% in a single month without a major macro shock\n"
+                f"  - SELL signals must be backed by very strong momentum reversal (RSI<40, MACD negative, trend bearish)\n"
+                f"  - When RSI is neutral (40-60) and MACD is flat: lean BUY — do NOT default to SELL or HOLD\n"
+                f"  - The historical base rate is: {_sym_upper} is positive in ~75% of any given 1-month window\n"
+                f"  - Your accuracy on {_sym_upper} should be HIGHER than on volatile individual stocks\n"
+                f"\n  CRITICAL — AVOID HOLD BIAS on {_sym_upper}:\n"
+                f"  - The BUY decision threshold for this symbol is ≥+{buy_thr:.1f}% predicted return\n"
+                f"  - If you predict ≥+{buy_thr:.1f}% return and trend/momentum both agree: output BUY, not HOLD\n"
+                f"  - HOLD should only be used when you are genuinely conflicted: e.g. RSI overbought + bearish MACD + negative trend\n"
+                f"  - A {_sym_upper} HOLD prediction is statistically wrong ~75% of the time for a 1-month horizon\n"
+                f"  - When in doubt between BUY and HOLD: choose BUY for {_sym_upper} — its long-term upward bias makes this correct\n"
+                f"  - When in doubt between SELL and HOLD: require RSI<38 AND MACD negative AND price below 20d SMA before SELL\n"
+            )
+        _idx_section += "\n"
+
     # Compute actual data window description from feature packet (never hardcode)
     _n_bars_fp    = int(feature_packet.get("n_bars", 0) or 0)
     _ctx_start_fp = feature_packet.get("effective_ctx_start") or feature_packet.get("ctx_start") or "unknown"
     _years_fp     = round(_n_bars_fp / 252, 1) if _n_bars_fp else 0
     _data_window  = f"{_n_bars_fp} bars (~{_years_fp} years, from {_ctx_start_fp})"
-    buy_thr, sell_thr = _get_horizon_thresholds(horizon_days)
+    buy_thr, sell_thr = _get_horizon_thresholds(horizon_days, _sym_upper)
     inp_json = json.dumps({
         "symbol":                        normalized_input.get("symbol"),
         "benchmark":                     normalized_input.get("benchmark"),
@@ -911,7 +1091,21 @@ def _build_gemini_prompt(
             "this often signals an impending reversal. Weight reversal_signals heavily."
         )
 
-    return f"""You are a financial decision-support reasoning agent for a walk-forward backtesting system.
+    return f"""You are a financial trading agent for a walk-forward backtesting system.
+
+YOUR TWO JOBS:
+1. DIRECTIONAL PREDICTION: Predict whether the stock will go UP (BUY), DOWN (SELL), or FLAT (HOLD) over the
+   next {horizon_days} days, with a specific predicted_return_pct and confidence_score.
+2. COMPLETE TRADE CONFIGURATION: When options params are provided, select a COMPLETE trade setup — not just
+   direction. In recommended_trade_config, output a SPECIFIC action (Buy Call/Put/Sell Call/Put), a SPECIFIC
+   delta integer, a SPECIFIC DTE integer, and a SPECIFIC quantity (1-10 contracts). The backtester will run
+   with your exact configuration and show agent P&L vs backtester P&L for comparison.
+
+AGENT SIZING RULES (when options params are provided):
+- confidence ≥ 70 AND trend strong → suggest delta 35-50, quantity 4-7 (high conviction)
+- confidence 50-69 → suggest delta 20-35, quantity 2-4 (moderate conviction)
+- confidence < 50 → suggest delta 10-25, quantity 1-2 (low conviction, OTM lottery)
+- DTE must be ≥ 2× the expected move time (don't suggest DTE=5 if you expect the move in 10 days)
 
 STRICT RULES:
 1. Analyze ONLY the structured data provided below.
@@ -958,9 +1152,10 @@ HOLD is only correct when signals genuinely cancel out. It is NOT a safe default
 The system currently has a {hold_rate:.0f}% HOLD rate — this is a critical failure. You MUST be more decisive.
 
 Use HOLD ONLY when ALL of these are true simultaneously:
-- Predicted return is within ±1.5% of zero (genuinely flat)
+- Predicted return is within ±{abs(sell_thr):.1f}% of zero (genuinely flat, matching the HOLD band for this horizon)
 - Bull and bear signals are nearly balanced (neither side > 10pp advantage)
-- RSI is between 42-58 (genuinely neutral zone)
+- RSI is between 44-56 (genuinely neutral zone)
+IMPORTANT: ±{abs(sell_thr):.1f}% is a VERY NARROW band for {horizon_days} days. Markets almost always move more than this.
 
 OVERBOUGHT REVERSAL GATE (applies only for horizon_days ≤ 45):
 If RSI_14 > 75 AND near_resistance = true AND reversal_risk = "medium" or "high" AND horizon_days ≤ 45:
@@ -1020,6 +1215,7 @@ CALIBRATION FAILURE CONTEXT (learn from these to avoid repeating the same mistak
 {f'- {hold_warning}' if hold_warning else ''}
 {f'- {failure_guidance}' if failure_guidance else ''}
 
+{_idx_section}{_opts_section}
 NORMALIZED INPUT:
 {inp_json}
 
@@ -1065,6 +1261,17 @@ REQUIRED JSON RESPONSE (return ONLY this JSON, no other text):
   "calibration_notes": "<2 sentences on what past failure patterns you avoided in this prediction and how calibration history influenced your confidence level>",
   "key_features_used": ["list of top 5 features that most influenced this prediction — be specific, e.g. 'RSI_14=67.3 (bullish momentum zone)' not just 'RSI'"],
   "data_limitations": ["list of 1-3 specific data gaps that could affect accuracy — be specific about what is missing and how it matters"],
+  "options_strategy_assessment": "<REQUIRED if OPTIONS STRATEGY CONTEXT was provided above, else null. State: (1) Does current ATR/volatility support the required move? (2) Is the directional alignment FAVORABLE, NEUTRAL, or UNFAVORABLE for this specific strategy? (3) For short DTE (≤5 days): explicitly assess whether ATR supports a large enough single-day move. (4) One-sentence verdict on whether this options position makes sense given current market conditions.>",
+  "recommended_trade_config": {{
+    "action": "<REQUIRED if options params provided. Based ONLY on your directional market view — what is the best single action for this setup? Use EXACTLY one of: 'Buy Call', 'Buy Put', 'Sell Call', 'Sell Put'. Null if no options params given.>",
+    "suggested_delta": "<REQUIRED if options params provided. Specific recommended delta integer, e.g. 25 or 30 or 40. Choose based on your confidence: high confidence → higher delta (closer to ATM); lower confidence → lower delta (OTM). Null if no options params.>",
+    "suggested_delta_range": "<Recommended delta range string for display, e.g. '25-35', based on your confidence. Null if no options params.>",
+    "suggested_dte": "<REQUIRED if options params provided. Specific recommended DTE integer, e.g. 30. Must be long enough for your expected move to materialize. Null if no options params.>",
+    "suggested_dte_range": "<Recommended DTE range string for display, e.g. '25-35'. Null if no options params.>",
+    "suggested_quantity": "<REQUIRED if options params provided. Recommended number of contracts 1-10, based on confidence and risk. Higher confidence → more contracts. Never suggest 0. Null if no options params.>",
+    "alignment_with_user_config": "<ALIGNED / PARTIALLY_ALIGNED / NOT_ALIGNED — compare your recommended action/delta/DTE with what the user actually selected. Null if no options params.>",
+    "alignment_notes": "<1-2 sentences: which of the user's selected params match your recommendation and which you would change, with a specific reason why. Null if no options params.>"
+  }},
   "needs_human_review": <true if confidence < 60 or strong reversal risk, else false>
 }}"""
 
@@ -1173,6 +1380,7 @@ def _call_gemini(
             signal_scores=sig_scores,
             reversal_risk=_rev_risk,
             rsi=_rsi_val,
+            symbol=str(normalized_input.get("symbol") or ""),
         )
 
         output_hash = hashlib.sha256(raw_text.encode()).hexdigest()[:16]
@@ -1203,10 +1411,12 @@ def _call_gemini(
             "bull_case":                gemini_json.get("bull_case", ""),
             "bear_case":                gemini_json.get("bear_case", ""),
             "why_not_opposite":         gemini_json.get("why_not_opposite_decision", ""),
-            "key_features_used":        gemini_json.get("key_features_used", []),
-            "data_limitations":         gemini_json.get("data_limitations", []),
-            "needs_human_review":       bool(gemini_json.get("needs_human_review", False)),
-            "gemini_raw_json":          gemini_json,
+            "key_features_used":            gemini_json.get("key_features_used", []),
+            "data_limitations":             gemini_json.get("data_limitations", []),
+            "options_strategy_assessment":  gemini_json.get("options_strategy_assessment") or "",
+            "recommended_trade_config":     gemini_json.get("recommended_trade_config") or {},
+            "needs_human_review":           bool(gemini_json.get("needs_human_review", False)),
+            "gemini_raw_json":              gemini_json,
         }
 
     except Exception as exc:
@@ -1420,9 +1630,11 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
         "bull_case":                    gemini_result.get("bull_case", ""),
         "bear_case":                    gemini_result.get("bear_case", ""),
         "why_not_opposite":             gemini_result.get("why_not_opposite", ""),
-        "key_features_used":            gemini_result.get("key_features_used", []),
-        "data_limitations":             gemini_result.get("data_limitations", []),
-        "needs_human_review":           gemini_result.get("needs_human_review", False),
+        "key_features_used":                gemini_result.get("key_features_used", []),
+        "data_limitations":                 gemini_result.get("data_limitations", []),
+        "options_strategy_assessment":      gemini_result.get("options_strategy_assessment", ""),
+        "recommended_trade_config":         gemini_result.get("recommended_trade_config", {}),
+        "needs_human_review":               gemini_result.get("needs_human_review", False),
         "market_movers_used":           bool(_market_movers_context),
         "_feature_packet":              feature_packet,
         "_calibration_summary":         calibration_summary,

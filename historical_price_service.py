@@ -60,6 +60,18 @@ _AMEX = frozenset({
 # ETF set used by external historical provider for correct asset-class routing
 _ETF_SYMBOLS = _AMEX
 
+# ── Index symbol normalization ─────────────────────────────────────────────────
+# Maps common index names → correct ticker for each provider.
+# SPX/NDX/DJI are index names, not tradeable tickers — providers need specific formats.
+_INDEX_SYMBOL_MAP: Dict[str, Dict[str, str]] = {
+    "SPX":  {"yfinance": "^GSPC",  "tradingview": "SP:SPX",    "nasdaq": "^GSPC"},
+    "NDX":  {"yfinance": "^NDX",   "tradingview": "NASDAQ:NDX","nasdaq": "^NDX"},
+    "DJI":  {"yfinance": "^DJI",   "tradingview": "DJ:DJI",    "nasdaq": "^DJI"},
+    "DJIA": {"yfinance": "^DJI",   "tradingview": "DJ:DJI",    "nasdaq": "^DJI"},
+    "VIX":  {"yfinance": "^VIX",   "tradingview": "CBOE:VIX",  "nasdaq": "^VIX"},
+    "RUT":  {"yfinance": "^RUT",   "tradingview": "TVC:RUT",   "nasdaq": "^RUT"},
+}
+
 # ── Provider configuration ─────────────────────────────────────────────────────
 # "auto"                → try RapidAPI historical first; use external_historical if unavailable
 # "rapidapi_tradingview"→ RapidAPI only (fails if historical endpoints not on plan)
@@ -266,6 +278,8 @@ def _fetch_external_historical_provider(
         if clean.startswith(prefix):
             clean = clean[len(prefix):]
             break
+    # Resolve index names (SPX → ^GSPC for NASDAQ API)
+    clean = _INDEX_SYMBOL_MAP.get(clean, {}).get("nasdaq", clean)
 
     assetclass = "etf" if clean in _ETF_SYMBOLS else "stocks"
     url    = f"https://api.nasdaq.com/api/quote/{clean}/historical"
@@ -353,6 +367,8 @@ def _fetch_yfinance(
             if clean.startswith(prefix):
                 clean = clean[len(prefix):]
                 break
+        # Resolve index names to yfinance tickers (SPX → ^GSPC, etc.)
+        clean = _INDEX_SYMBOL_MAP.get(clean, {}).get("yfinance", clean)
         ticker = yf.Ticker(clean)
         df = ticker.history(start=start_date, end=end_date, auto_adjust=True)
         if df is None or df.empty:
@@ -406,16 +422,21 @@ def _fetch_rapidapi_for_range(
         days_needed = (date.today() - start_dt).days + 30
         range_n     = min(days_needed, _MAX_RANGE)
 
-        sym_fmt = _fmt(symbol)
         base    = symbol.upper().replace("-", ".").strip()
-        if sym_fmt.startswith("NASDAQ:"):
-            exchanges = [sym_fmt, f"NYSE:{base}", f"AMEX:{base}"]
-        elif sym_fmt.startswith("NYSE:"):
-            exchanges = [sym_fmt, f"NASDAQ:{base}", f"AMEX:{base}"]
-        elif sym_fmt.startswith("AMEX:"):
-            exchanges = [sym_fmt, f"NASDAQ:{base}", f"NYSE:{base}"]
+        # Resolve index names to TradingView format (SPX → SP:SPX, etc.)
+        _idx_tv = _INDEX_SYMBOL_MAP.get(base, {}).get("tradingview")
+        if _idx_tv:
+            exchanges = [_idx_tv]
         else:
-            exchanges = [f"NASDAQ:{base}", f"NYSE:{base}", f"AMEX:{base}"]
+            sym_fmt = _fmt(symbol)
+            if sym_fmt.startswith("NASDAQ:"):
+                exchanges = [sym_fmt, f"NYSE:{base}", f"AMEX:{base}"]
+            elif sym_fmt.startswith("NYSE:"):
+                exchanges = [sym_fmt, f"NASDAQ:{base}", f"AMEX:{base}"]
+            elif sym_fmt.startswith("AMEX:"):
+                exchanges = [sym_fmt, f"NASDAQ:{base}", f"NYSE:{base}"]
+            else:
+                exchanges = [f"NASDAQ:{base}", f"NYSE:{base}", f"AMEX:{base}"]
 
         for fmt_sym in exchanges:
             try:
