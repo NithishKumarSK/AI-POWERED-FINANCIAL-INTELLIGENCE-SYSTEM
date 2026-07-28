@@ -151,7 +151,6 @@ _apply_light_demo_theme()
 # ── Stock prediction core imports ──────────────────────────────────────────────
 from historical_price_service import (
     fetch_price_history,
-    fetch_price_history_for_range,
     filter_history_up_to,
     get_context_summary,
     get_provider_used,
@@ -323,10 +322,10 @@ def _sign_fmt(v, fmt=",.2f", suffix=""):
 
 
 def _decision_badge(d: str) -> str:
-    _du = str(d).upper()
-    c = {"BUY": "#00875A", "SELL": "#DF1B41", "HOLD": "#D97706", "REVIEW": "#7C3AED"}.get(_du, "#6B7280")
-    _suffix = " ⚠ (human review required)" if _du == "REVIEW" else ""
-    return f'<span style="color:{c};font-weight:800;font-size:1.1rem">{d}{_suffix}</span>'
+    c = {"BUY": "#00875A", "SELL": "#DF1B41", "HOLD": "#D97706"}.get(
+        str(d).upper(), "#6B7280"
+    )
+    return f'<span style="color:{c};font-weight:800;font-size:1.1rem">{d}</span>'
 
 
 def _card(msg, color="#1E40AF", bg="#EFF6FF", border="#3B82F6"):
@@ -359,33 +358,12 @@ def _render_failure_panel():
     errs      = ctx.get("errors", [])
     ts        = ctx.get("timestamp_utc") or st.session_state.get("run_ts", "---")
 
-    _is_input_err = str(error_msg).startswith("Input validation failed")
-
-    if _is_input_err:
-        _banner_text  = "RUN BLOCKED — INVALID INPUT — FIX THE FORM AND RESUBMIT"
-        _next_actions = [
-            ("Next actions", ""),
-            ("&nbsp;&nbsp;1", "<b>Fix the invalid field shown above</b> (e.g. correct the date format to YYYY-MM-DD)"),
-            ("&nbsp;&nbsp;2", "Make sure all dates use format: YYYY-MM-DD (e.g. 2026-05-10, not 2026-057-10)"),
-            ("&nbsp;&nbsp;3", "Click <b>Run</b> again after fixing the input"),
-            ("&nbsp;&nbsp;4", "Do NOT interpret any old output above as current run result"),
-        ]
-    else:
-        _banner_text  = "RUN BLOCKED — DATA / PROVIDER NOT AVAILABLE — OLD OUTPUT CLEARED"
-        _next_actions = [
-            ("Next actions", ""),
-            ("&nbsp;&nbsp;1", "Retry after network / provider is available"),
-            ("&nbsp;&nbsp;2", "Configure a reliable historical data provider (.env)"),
-            ("&nbsp;&nbsp;3", "Use another symbol with available data"),
-            ("&nbsp;&nbsp;4", "Do NOT interpret any old output above as current run result"),
-        ]
-
     st.markdown(
-        f'<div style="background:#7F1D1D;padding:.6rem 1.2rem;border-radius:6px;'
-        f'margin:1rem 0 .3rem 0">'
-        f'<span style="color:#FEF2F2;font-weight:900;font-size:.95rem">'
-        f'{_banner_text}'
-        f'</span></div>',
+        '<div style="background:#7F1D1D;padding:.6rem 1.2rem;border-radius:6px;'
+        'margin:1rem 0 .3rem 0">'
+        '<span style="color:#FEF2F2;font-weight:900;font-size:.95rem">'
+        'RUN BLOCKED — DATA / PROVIDER NOT AVAILABLE — OLD OUTPUT CLEARED'
+        '</span></div>',
         unsafe_allow_html=True,
     )
 
@@ -419,7 +397,13 @@ def _render_failure_panel():
             _err_card(f"<b>Detail:</b> {e}")
 
     st.markdown(
-        _table(_next_actions),
+        _table([
+            ("Next actions", ""),
+            ("&nbsp;&nbsp;1", "Retry after network / provider is available"),
+            ("&nbsp;&nbsp;2", "Configure a reliable historical data provider (.env)"),
+            ("&nbsp;&nbsp;3", "Use another symbol with available data"),
+            ("&nbsp;&nbsp;4", "Do NOT interpret any old output above as current run result"),
+        ]),
         unsafe_allow_html=True,
     )
 
@@ -593,7 +577,7 @@ def main():
     st.markdown(
         f'<div style="background:#0D0D0D;border:2px solid #F59E0B;border-radius:6px;'
         f'padding:.45rem 1rem;margin-bottom:.4rem;font-size:.7rem">'
-        f'<span style="color:#F59E0B;font-weight:900;font-size:.78rem">ACTIVE BUILD: INPUT_PREVIEW_OPTIONS_FIX_V1</span>&nbsp;&nbsp;'
+        f'<span style="color:#F59E0B;font-weight:900;font-size:.78rem">ACTIVE BUILD: TRUTH_GATE_V4</span>&nbsp;&nbsp;'
         f'<span style="color:#9CA3AF">entrypoint: <b style="color:#D1D5DB">{_BUILD_FILE[-45:]}</b></span>&nbsp;&nbsp;'
         f'<span style="color:#9CA3AF">render: <b style="color:#D1D5DB">{_patch_now}</b></span>&nbsp;&nbsp;'
         f'<span style="color:#9CA3AF">AI: <b style="color:{_banner_col}">{_active_ai} {"KEY OK" if _gemini_key else "KEY MISSING"}</b></span>&nbsp;&nbsp;'
@@ -668,14 +652,14 @@ def main():
                 '<td style="padding:.12rem .4rem">Historical OHLCV bars</td>'
                 '<td style="color:#F59E0B;padding:.12rem .4rem">PLAN-DEPENDENT — may not be on current plan; external_historical_provider used as fallback</td></tr>'
                 '<tr><td style="padding:.12rem .4rem">Market movers / screener (/market/get-movers)</td>'
-                '<td style="padding:.12rem .4rem">Live market movers — sent to Gemini for LIVE predictions (origin within 7 days); excluded for historical runs (leakage prevention)</td>'
-                '<td style="color:#10B981;padding:.12rem .4rem">ACTIVE — wired into Gemini prompt</td></tr>'
+                '<td style="padding:.12rem .4rem">Live market movers — health check ONLY, NOT historical OHLCV, NOT sent to Gemini</td>'
+                '<td style="color:#F59E0B;padding:.12rem .4rem">AVAILABLE (not yet wired into prompt)</td></tr>'
                 '<tr><td style="padding:.12rem .4rem">Options chain data</td>'
                 '<td style="padding:.12rem .4rem">Live strike/IV for exact-strike selection</td>'
                 '<td style="color:#EF4444;padding:.12rem .4rem">NOT WIRED — exact-strike unsupported by TT backtest</td></tr>'
-                '<tr><td style="padding:.12rem .4rem">Earnings calendar (/api/calendar/earnings)</td>'
-                '<td style="padding:.12rem .4rem">Earnings warning in AI prompt for prediction window</td>'
-                '<td style="color:#10B981;padding:.12rem .4rem">ACTIVE — checked on every run; warning injected if earnings found</td></tr>'
+                '<tr><td style="padding:.12rem .4rem">Earnings calendar</td>'
+                '<td style="padding:.12rem .4rem">Earnings warning in AI prompt</td>'
+                '<td style="color:#EF4444;padding:.12rem .4rem">NOT YET IMPLEMENTED</td></tr>'
                 '</table>'
                 '<br><span style="color:#9CA3AF">To use additional endpoints: wire them into the Gemini feature packet '
                 '(see calibration_profile_builder.py and failure_analyzer.py for roadmap).</span>'
@@ -740,9 +724,10 @@ def main():
         _info_card(
             "<b>Mode 2 -- Options Strategy Validation:</b> "
             "AI uses the historical context window for pattern analysis. "
-            "The options backtest runs from <b>prediction origin → target date</b> "
-            "(same window as the AI prediction). "
-            "Validate whether the options strategy P&amp;L matches the AI's directional call."
+            "An options position is backtested for the <b>prediction window only</b> "
+            "(prediction_origin_date to target_date). "
+            "The historical context window is NEVER used for backtesting -- "
+            "it is AI study only."
         )
         if not _TT_AVAILABLE:
             _warn_card(
@@ -761,6 +746,9 @@ def main():
     # Section 6 -- Accuracy log always visible
     _render_records()
 
+    # Section 7 -- Accuracy Calibration Dashboard always visible
+    _render_calibration_dashboard()
+
     # Sidebar rolling validation
     _sidebar_rolling()
 
@@ -774,12 +762,6 @@ def _render_stock_form():
     _section_header(1, "Prediction Setup", "Stock + dates + capital")
 
     with st.form("stock_form", clear_on_submit=False):
-        # Dynamic defaults — always relative to today
-        import datetime as _dt_sf
-        _sf_today   = _dt_sf.date.today()
-        _sf_origin  = (_sf_today - _dt_sf.timedelta(days=60)).isoformat()
-        _sf_ctx     = (_sf_today - _dt_sf.timedelta(days=425)).isoformat()
-
         col1, col2, col3 = st.columns(3)
         with col1:
             symbol = st.text_input(
@@ -799,13 +781,13 @@ def _render_stock_form():
         col4, col5, col6 = st.columns(3)
         with col4:
             ctx_start = st.text_input(
-                "Historical Context Start Date", value=_sf_ctx,
-                help="AI uses price history FROM this date. Auto-set to 14 months before today. (YYYY-MM-DD)",
+                "Historical Context Start Date", value="2025-07-01",
+                help="AI uses price history FROM this date. Must be in the past. (YYYY-MM-DD)",
             )
         with col5:
             origin_dt = st.text_input(
-                "Prediction Origin Date", value=_sf_origin,
-                help="AI predicts AS OF this date. Auto-set to 60 days ago. (YYYY-MM-DD)",
+                "Prediction Origin Date", value="2026-03-01",
+                help="AI predicts AS OF this date. Must be in the past. (YYYY-MM-DD)",
             )
         with col6:
             horizon = st.number_input(
@@ -833,24 +815,6 @@ def _render_stock_form():
             tgt_str = "---"
 
         _window_preview(ctx_start, origin_dt, tgt_str, horizon)
-
-        # ── Provider Coverage Preview (before run) ─────────────────────────────
-        # NASDAQ external provider first bar is ~2024-04-02.
-        # yfinance fallback can cover dates going back decades.
-        _NASDAQ_START = "2024-04-02"
-        try:
-            _req_ctx = ctx_start.strip()
-            if _req_ctx < _NASDAQ_START:
-                st.info(
-                    f"**COVERAGE PREVIEW:** Requested context start **{_req_ctx}** is before "
-                    f"the NASDAQ provider first bar ({_NASDAQ_START}). "
-                    f"**yfinance fallback will be tried automatically** and can supply data "
-                    f"back to {_req_ctx} for most symbols. "
-                    f"If yfinance also cannot cover the full range, the run will be "
-                    f"PROVIDER-CONSTRAINED (or BLOCKED if 'Require exact coverage' is checked)."
-                )
-        except Exception:
-            pass
 
         require_strict_coverage = st.checkbox(
             "Require exact historical coverage from requested context start",
@@ -918,87 +882,16 @@ def _render_options_form():
     # ── Strike Selection OUTSIDE form so changing it re-renders immediately ──
     # Inside st.form(), widget changes do not trigger reruns — conditional blocks freeze.
     # Strike Selection must be outside to correctly show/hide Strike vs Delta fields.
-    # Ensure Delta is the default — do not let stale Strike session state persist.
-    if "opt_strike_sel" not in st.session_state:
-        st.session_state["opt_strike_sel"] = "Delta"
     _ss_row = st.columns([1, 1, 1, 1])
     with _ss_row[3]:
         strike_selection = st.selectbox(
             "Strike Selection",
-            options=["Delta", "Percentage OTM", "Price Offset From Underlying", "Premium"],
+            options=["Delta", "Strike"],
             key="opt_strike_sel",
-            help=(
-                "Delta: pick strike by delta (e.g. 30 = 0.30 delta). "
-                "Percentage OTM: pick strike by % out-of-the-money. "
-                "Price Offset From Underlying: pick strike by $ offset from stock price. "
-                "Premium: pick strike by target premium collected/paid."
-            ),
+            help="Delta: select strike by delta value (e.g. 30). Strike: exact price (e.g. 7259, 7570) — no upper cap.",
         )
-
-    # ── Exit Conditions OUTSIDE form — toggles update UI immediately ──────────
-    # Placing these outside st.form() lets checkbox changes instantly show/hide
-    # the value inputs, the same way TastyTrade's toggle switches work.
-    st.markdown(
-        '<div style="background:#0F2940;border:1px solid #1E4D7A;border-radius:6px;'
-        'padding:.5rem 1rem;margin:.5rem 0 .4rem 0">'
-        '<span style="color:#93C5FD;font-weight:800;font-size:.82rem">Exit Conditions</span>'
-        '<span style="color:#64748B;font-size:.7rem;margin-left:.8rem">'
-        'Toggle each condition on. Value only applies when enabled.</span>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-    _ec1, _ec2, _ec3 = st.columns(3)
-
-    with _ec1:
-        _tp_on = st.checkbox(
-            "Take Profit at % of Premium",
-            value=False, key="opt_tp_on",
-        )
-        if _tp_on:
-            take_profit_pct_val = st.number_input(
-                "Take Profit %", value=50, min_value=1, max_value=1000, step=5,
-                key="opt_tp_pct",
-                help="Exit when profit reaches this % of initial premium. e.g. 50 = exit at 50% gain.",
-            )
-        else:
-            take_profit_pct_val = 0
-
-    with _ec2:
-        _sl_on = st.checkbox(
-            "Stop Loss at % of Premium",
-            value=False, key="opt_sl_on",
-        )
-        if _sl_on:
-            stop_loss_pct_val = st.number_input(
-                "Stop Loss %", value=20, min_value=1, max_value=1000, step=5,
-                key="opt_sl_pct",
-                help="Exit when loss reaches this % of initial premium. e.g. 20 = exit at 20% loss.",
-            )
-        else:
-            stop_loss_pct_val = 0
-
-    with _ec3:
-        _ed_on = st.checkbox(
-            "Exit After N Days in Trade",
-            value=False, key="opt_ed_on",
-        )
-        if _ed_on:
-            exit_after_days_val = st.number_input(
-                "Days", value=2, min_value=1, max_value=365, step=1,
-                key="opt_ed_days",
-                help="Exit the trade after this many calendar days, regardless of P&L.",
-            )
-        else:
-            exit_after_days_val = 0
 
     with st.form("options_form", clear_on_submit=False):
-        # ── Dynamic defaults: always relative to today so they never go stale ──
-        import datetime as _dt_defaults
-        _today = _dt_defaults.date.today()
-        _default_origin  = (_today - _dt_defaults.timedelta(days=90)).isoformat()   # 90 days ago — safely in TastyTrade DB
-        _default_ctx     = (_today - _dt_defaults.timedelta(days=455)).isoformat()  # ~15 months back
-        _default_horizon = 30
-
         # ── Base inputs (same as stock mode) ─────────────────────────────────
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -1016,17 +909,17 @@ def _render_options_form():
         col4, col5, col6 = st.columns(3)
         with col4:
             ctx_start = st.text_input(
-                "Historical Context Start Date", value=_default_ctx,
-                help="AI context window start only. Options backtest starts at Prediction Origin Date. Auto-set to 14 months before today.",
+                "Historical Context Start Date", value="2025-07-01",
+                help="AI context window start. NOT used for options backtest.",
             )
         with col5:
             origin_dt = st.text_input(
-                "Prediction Origin Date", value=_default_origin,
-                help="Options backtest STARTS here (origin → target). AI predicts from this date forward. Auto-set to 60 days ago.",
+                "Prediction Origin Date", value="2026-03-01",
+                help="Options backtest STARTS here. AI predicts from this date.",
             )
         with col6:
             horizon = st.number_input(
-                "Decision Horizon (days)", value=_default_horizon, min_value=1, max_value=365,
+                "Decision Horizon (days)", value=30, min_value=1, max_value=365,
                 help="Options backtest ENDS at origin + N days.",
             )
 
@@ -1047,22 +940,6 @@ def _render_options_form():
 
         _window_preview(ctx_start, origin_dt, tgt_str, horizon)
 
-        # ── Provider Coverage Preview (before run) ─────────────────────────────
-        _NASDAQ_START_OPT = "2024-04-02"
-        try:
-            _req_ctx_opt = ctx_start.strip()
-            if _req_ctx_opt < _NASDAQ_START_OPT:
-                st.info(
-                    f"**COVERAGE PREVIEW:** Requested context start **{_req_ctx_opt}** is before "
-                    f"the NASDAQ provider first bar ({_NASDAQ_START_OPT}). "
-                    f"**yfinance fallback will be tried automatically** and can supply data "
-                    f"back to {_req_ctx_opt} for most symbols. "
-                    f"If yfinance also cannot cover the full range, the run will be "
-                    f"PROVIDER-CONSTRAINED (or BLOCKED if 'Require exact coverage' is checked)."
-                )
-        except Exception:
-            pass
-
         # ── Options Strategy Parameters ───────────────────────────────────────
         st.markdown(
             '<div style="background:#0F2940;border:1px solid #1E4D7A;border-radius:6px;'
@@ -1070,7 +947,7 @@ def _render_options_form():
             '<span style="color:#93C5FD;font-weight:800;font-size:.85rem">'
             "Options Strategy Parameters</span>"
             '<span style="color:#64748B;font-size:.7rem;margin-left:.8rem">'
-            "Backtest runs from prediction origin date to target date"
+            "Backtest runs from prediction origin date to target date ONLY"
             "</span></div>",
             unsafe_allow_html=True,
         )
@@ -1091,130 +968,84 @@ def _render_options_form():
         with oc3:
             quantity = st.number_input(
                 "Quantity (contracts)",
-                value=1, min_value=1, max_value=10, step=1,
-                help="Number of option contracts. Tastytrade API limit: 1–10.",
+                value=1, min_value=1, max_value=100, step=1,
+                help="Number of option contracts.",
             )
         # strike_selection is defined OUTSIDE this form (above) so it triggers re-render on change
 
-        # ── Conditional inputs based on strike selection ──────────────────
-        if strike_selection == "Delta":
+        # ── Conditional inputs: Exact Strike vs Delta ─────────────────────
+        if strike_selection == "Strike":
+            es1, es2 = st.columns(2)
+            with es1:
+                strike_price = st.number_input(
+                    "Strike Price",
+                    value=0.0, min_value=0.0, max_value=99999.0, step=0.5,
+                    help="Exact option strike price. No upper cap — SPY 620, SPX 7570, AAPL 240 all accepted.",
+                )
+            with es2:
+                expiry_date_str = st.text_input(
+                    "Expiry Date (YYYY-MM-DD)",
+                    value="",
+                    placeholder="e.g. 2026-08-15",
+                    help="Option expiry date. Required for exact strike validation.",
+                )
+            es3, _es_pad = st.columns(2)
+            with es3:
+                dte_val = st.number_input(
+                    "DTE (used if Expiry Date is blank)",
+                    value=45, min_value=0, max_value=365,
+                    help="Days to expiration — only used when Expiry Date field is empty.",
+                )
+            # proxy delta is ATM (50) by default — not shown to user to avoid confusion
+            delta_val = 50
+            if strike_price > 0:
+                _expiry_show = expiry_date_str if expiry_date_str else f"DTE {dte_val}"
+                st.info(
+                    f"Strike Mode: **{opt_type} @ {strike_price:g}** | "
+                    f"Expiry/DTE: **{_expiry_show}** | "
+                    "Large strikes (SPX 7570, SPY 620) are fully supported — no upper cap."
+                )
+        else:
+            # Delta Selection mode (original)
             od1, od2 = st.columns(2)
             with od1:
                 delta_val = st.number_input(
                     "Delta (1-99)",
                     value=30, min_value=1, max_value=99,
-                    help="Target delta for strike selection (e.g. 46 = 0.46 delta, near ATM).",
+                    help="Target delta for strike selection (e.g. 30 = 0.30 delta).",
                 )
             with od2:
                 dte_val = st.number_input(
                     "Expiration (DTE)",
-                    value=45, min_value=1, max_value=365,
+                    value=50, min_value=1, max_value=365,
                     help="Days to expiration at entry.",
                 )
-            otm_pct_val     = 5.0
-            price_offset_val = 5.0
-            premium_target_val = 1.0
             strike_price    = 0.0
             expiry_date_str = ""
 
-        elif strike_selection == "Percentage OTM":
-            po1, po2 = st.columns(2)
-            with po1:
-                otm_pct_val = st.number_input(
-                    "% OTM (e.g. 5 = 5% out-of-the-money)",
-                    value=5.0, min_value=0.1, max_value=50.0, step=0.5,
-                    help="How far out-of-the-money to sell/buy (e.g. 5 = strike is 5% below/above stock price).",
-                )
-            with po2:
-                dte_val = st.number_input(
-                    "Expiration (DTE)",
-                    value=45, min_value=1, max_value=365,
-                    help="Days to expiration at entry.",
-                )
-            delta_val        = 30
-            price_offset_val = 5.0
-            premium_target_val = 1.0
-            strike_price    = 0.0
-            expiry_date_str = ""
-
-        elif strike_selection == "Price Offset From Underlying":
-            poo1, poo2 = st.columns(2)
-            with poo1:
-                price_offset_val = st.number_input(
-                    "Price Offset ($)",
-                    value=5.0, min_value=0.25, max_value=500.0, step=0.25,
-                    help="Dollar offset from underlying price (e.g. 5 = strike $5 OTM from current stock price).",
-                )
-            with poo2:
-                dte_val = st.number_input(
-                    "Expiration (DTE)",
-                    value=45, min_value=1, max_value=365,
-                    help="Days to expiration at entry.",
-                )
-            delta_val        = 30
-            otm_pct_val      = 5.0
-            premium_target_val = 1.0
-            strike_price    = 0.0
-            expiry_date_str = ""
-
-        elif strike_selection == "Premium":
-            pm1, pm2 = st.columns(2)
-            with pm1:
-                premium_target_val = st.number_input(
-                    "Target Premium ($)",
-                    value=1.0, min_value=0.01, max_value=100.0, step=0.05,
-                    help="Target option premium per contract (e.g. 1.50 = collect/pay $1.50 premium).",
-                )
-            with pm2:
-                dte_val = st.number_input(
-                    "Expiration (DTE)",
-                    value=45, min_value=1, max_value=365,
-                    help="Days to expiration at entry.",
-                )
-            delta_val        = 30
-            otm_pct_val      = 5.0
-            price_offset_val = 5.0
-            strike_price    = 0.0
-            expiry_date_str = ""
-
-        else:
-            delta_val        = 30
-            dte_val          = 45
-            otm_pct_val      = 5.0
-            price_offset_val = 5.0
-            premium_target_val = 1.0
-            strike_price    = 0.0
-            expiry_date_str = ""
-
-        allow_proxy_for_exact = False  # Exact-strike mode removed
-
-        entry_schedule = st.selectbox(
-            "Entry Schedule",
-            options=["Every day", "On exact DTE match", "Weekly", "Monthly"],
-            index=0,
-            help=(
-                "Every day: enter a new position every trading day — CONFIRMED working with Tastytrade API. "
-                "On exact DTE match: enter when a contract with exactly the requested DTE is found — "
-                "CONFIRMED working (AMC run 3761BEE3: 85 trades, +$12,156.64 P&L). "
-                "Weekly: enter once per week — WARNING: not yet verified against live Tastytrade API. "
-                "Monthly: enter once per month — WARNING: not yet verified."
-            ),
-        )
-        if entry_schedule in ("Weekly", "Monthly"):
-            st.warning(
-                f"**{entry_schedule} entry frequency is unverified** — Tastytrade API may default to daily entry."
+        od3, od4 = st.columns(2)
+        with od3:
+            entry_schedule = st.selectbox(
+                "Entry Schedule",
+                options=["Once at prediction origin date", "Daily", "Weekly", "Monthly"],
+                index=0,
+                help="When to enter the position. Default: once at prediction origin date.",
             )
-        exit_rule = "combined"  # legacy field — actual conditions come from outer-scope toggles
+        with od4:
+            exit_rule = st.selectbox(
+                "Exit Rule",
+                options=["Exit at target date", "Exit after N days", "Target profit 50%", "Stop loss 200%"],
+                index=0,
+                help="When to exit. Default: exit at target date (end of prediction window).",
+            )
 
         # Build summary line — shows actual selected values, never stale defaults
-        if strike_selection == "Delta":
-            _params_summary = f"{direction} {opt_type}, Delta {delta_val}, DTE {dte_val}, Qty {quantity}"
-        elif strike_selection == "Percentage OTM":
-            _params_summary = f"{direction} {opt_type}, {otm_pct_val}% OTM, DTE {dte_val}, Qty {quantity}"
-        elif strike_selection == "Price Offset From Underlying":
-            _params_summary = f"{direction} {opt_type}, ${price_offset_val} Offset, DTE {dte_val}, Qty {quantity}"
-        elif strike_selection == "Premium":
-            _params_summary = f"{direction} {opt_type}, ${premium_target_val} Premium, DTE {dte_val}, Qty {quantity}"
+        if strike_selection == "Strike":
+            _expiry_label = expiry_date_str if expiry_date_str else f"DTE {dte_val}"
+            _strike_display = int(strike_price) if strike_price and strike_price == int(strike_price) else strike_price
+            _params_summary = (
+                f"{direction} {opt_type}, Strike {_strike_display}, {_expiry_label}, Qty {quantity}"
+            )
         else:
             _params_summary = f"{direction} {opt_type}, Delta {delta_val}, DTE {dte_val}, Qty {quantity}"
 
@@ -1223,12 +1054,15 @@ def _render_options_form():
             f'padding:.5rem 1rem;font-size:.74rem;color:#065F46;margin:.3rem 0">'
             f'<b>Options Backtest Window:</b>&emsp;'
             f'<code>{origin_dt}</code> to <code>{tgt_str}</code>&emsp;'
-            f'&mdash;&emsp;{_params_summary}<br>'
+            f'<b>({horizon} days)</b>&emsp;&mdash;&emsp;'
+            f'{_params_summary}<br>'
             f'<span style="color:#059669">'
-            f'Backtest runs from prediction origin ({origin_dt}) to target ({tgt_str}) — same window as AI prediction.'
+            f'Historical context ({ctx_start} to {origin_dt}) is AI study only -- '
+            f'backtest NEVER includes historical context window.'
             f'</span></div>',
             unsafe_allow_html=True,
         )
+
         submitted = st.form_submit_button(
             "Run AI Prediction + Options Strategy Backtest",
             type="primary", use_container_width=True,
@@ -1240,9 +1074,8 @@ def _render_options_form():
         st.session_state["run_id"] = run_id
         st.session_state["active_mode"] = "options"
 
-        _is_strike_mode     = False   # Exact-strike mode removed
-        _is_delta_mode      = (strike_selection == "Delta")
-        _is_delta_mode_snap = _is_delta_mode
+        _is_strike_mode = strike_selection == "Strike"
+        _is_delta_mode_snap = not _is_strike_mode
         # Capture exact user-entered options inputs immediately after submit
         st.session_state["user_input_snapshot"] = {
             "symbol":                        symbol.strip().upper(),
@@ -1259,30 +1092,15 @@ def _render_options_form():
             "opt_type":                      opt_type,
             "quantity":                      int(quantity),
             "delta_ui":                      int(delta_val) if _is_delta_mode_snap else None,
-            "otm_pct":                       float(otm_pct_val) if strike_selection == "Percentage OTM" else None,
-            "price_offset":                  float(price_offset_val) if strike_selection == "Price Offset From Underlying" else None,
-            "premium_target":                float(premium_target_val) if strike_selection == "Premium" else None,
-            "strike_price":                  None,
-            "expiry_date":                   None,
+            "strike_price":                  float(strike_price) if _is_strike_mode else None,
+            "expiry_date":                   expiry_date_str.strip() if _is_strike_mode else None,
             "dte":                           int(dte_val),
-            "entry_schedule":                entry_schedule,
-            "take_profit_pct":               float(take_profit_pct_val) if take_profit_pct_val > 0 else None,
-            "stop_loss_pct":                 float(stop_loss_pct_val)   if stop_loss_pct_val > 0   else None,
-            "exit_after_days":               int(exit_after_days_val)   if exit_after_days_val > 0 else None,
             "run_id":                        run_id,
             "submitted_at_utc":              datetime.utcnow().isoformat(timespec="seconds") + "Z",
         }
-        _req_strike   = None
-        _expiry_clean = None
-
-        # Entry frequency: map UI label → Tastytrade API value (all confirmed working)
-        _entry_freq_map = {
-            "Every day":           "every day",
-            "On exact DTE match":  "on_exact_dte_match",
-            "Weekly":              "weekly",
-            "Monthly":             "monthly",
-        }
-        _api_entry_freq = _entry_freq_map.get(entry_schedule, "every day")
+        _is_delta_mode  = not _is_strike_mode
+        _req_strike     = float(strike_price) if (_is_strike_mode and strike_price and float(strike_price) > 0) else None
+        _expiry_clean   = expiry_date_str.strip() if expiry_date_str else None
 
         # ── Single source of truth for all options inputs ─────────────────────
         options_params = {
@@ -1290,31 +1108,43 @@ def _render_options_form():
             "opt_type":         opt_type,
             "quantity":         int(quantity),
             "strike_selection": strike_selection.lower(),
-            "contract_selection_method": "DELTA_SELECTION" if _is_delta_mode else strike_selection.upper().replace(" ", "_"),
-            # Delta mode fields
+            "contract_selection_method": "EXACT_STRIKE" if _is_strike_mode else "DELTA_SELECTION",
+            # Delta mode fields (null in Strike mode)
             "delta_ui":         int(delta_val) if _is_delta_mode else None,
             "delta_decimal":    round(int(delta_val) / 100.0, 4) if _is_delta_mode else None,
             "delta":            int(delta_val) if _is_delta_mode else None,
-            # New strike selection fields
-            "otm_pct":          float(otm_pct_val) if strike_selection == "Percentage OTM" else None,
-            "price_offset":     float(price_offset_val) if strike_selection == "Price Offset From Underlying" else None,
-            "premium_target":   float(premium_target_val) if strike_selection == "Premium" else None,
-            # Strike fields — always None (exact-strike mode removed)
-            "requested_strike": None,
-            "strike_price":     None,
-            "expiry_date":      None,
-            # DTE valid in all modes
+            # Strike mode fields (null in Delta mode)
+            "requested_strike": _req_strike,
+            "strike_price":     _req_strike,
+            "expiry_date":      _expiry_clean if _is_strike_mode else None,
+            # DTE valid in both modes
             "dte":              int(dte_val),
-            "entry_schedule":     entry_schedule,
-            "api_entry_frequency": _api_entry_freq,
-            "exit_rule":          exit_rule,
-            "take_profit_pct":    float(take_profit_pct_val) if take_profit_pct_val > 0 else None,
-            "stop_loss_pct":      float(stop_loss_pct_val)   if stop_loss_pct_val > 0   else None,
-            "exit_after_days":    int(exit_after_days_val)   if exit_after_days_val > 0 else None,
-            "allow_proxy_for_exact": False,
+            "entry_schedule":   entry_schedule,
+            "exit_rule":        exit_rule,
         }
 
-        if True:  # no pre-validation needed (strike mode removed)
+        # ── Pre-run validation gate — block invalid inputs before any API call ─
+        _pre_errors = []
+        if _is_strike_mode and not _req_strike:
+            _pre_errors.append(
+                f"Strike Mode requires Strike Price > 0. "
+                f"You entered: {strike_price!r}. "
+                "Examples: SPY=620, SPX=7570, AAPL=240. No upper cap — enter the exact strike."
+            )
+        if _pre_errors:
+            st.session_state["error_msg"] = _pre_errors[0]
+            st.session_state["opts_params"] = options_params
+            st.session_state["opts_result"] = {
+                "status":                "REVIEW_REQUIRED",
+                "reason":                _pre_errors[0],
+                "backtest_status":       "NOT_RUN",
+                "exact_validation_status": "INVALID_INPUT",
+                "accuracy_saved":        False,
+                "accuracy_skip_reason":  "MISSING_STRIKE_PRICE",
+            }
+            st.session_state["saved"]    = False
+            st.session_state["save_msg"] = "NOT SAVED — strike price missing or zero"
+        else:
             _run_options_all(
                 symbol=symbol.strip().upper(),
                 ctx_start=ctx_start.strip(),
@@ -1411,19 +1241,14 @@ def _run_all(
         "run_context": _run_ctx,
     })
 
-    _today_str = today.strftime("%Y-%m-%d")
+    try:
+        ctx_dt   = datetime.strptime(ctx_start, "%Y-%m-%d").date()
+        days_req = max(400, (today - ctx_dt).days + 90)
+    except Exception:
+        days_req = 500
 
-    with st.spinner(f"Fetching historical prices for {symbol} (trying multiple providers)..."):
-        hist, hist_err, _hist_cov = fetch_price_history_for_range(
-            symbol, ctx_start, _today_str
-        )
-
-    # Propagate coverage info to run_context early so later checks can read it
-    _run_ctx["provider_chain"] = _hist_cov.get("providers_tried", [])
-    _run_ctx["hist_provider"]  = _hist_cov.get("provider", "unknown")
-    _run_ctx["effective_ctx_start"]  = _hist_cov.get("effective_start") or ctx_start
-    _run_ctx["requested_ctx_start"]  = ctx_start
-    _run_ctx["ctx_coverage_status"]  = _hist_cov.get("coverage_status", "FAILED")
+    with st.spinner(f"Fetching historical prices for {symbol}..."):
+        hist, hist_err = fetch_price_history(symbol, min_days=days_req)
 
     if not hist:
         _run_ctx["provider_status"]["historical_data"] = "FAILED"
@@ -1489,12 +1314,9 @@ def _run_all(
     _first_bar = ctx_bars[0]["date"]
     _last_bar  = ctx_bars[-1]["date"]
 
-    # Effective date discrepancy — use coverage info from provider chain
+    # Effective date discrepancy — user entered a date the provider can't reach
     _effective_ctx_start = _first_bar
     _date_gap_days = 0
-    _provider_name = _hist_cov.get("provider", "unknown")
-    _cov_status    = _hist_cov.get("coverage_status", "PARTIAL")
-
     if _effective_ctx_start > ctx_start:
         try:
             _req_dt  = datetime.strptime(ctx_start, "%Y-%m-%d").date()
@@ -1506,33 +1328,27 @@ def _run_all(
         _run_ctx["requested_ctx_start"]    = ctx_start
         _run_ctx["ctx_start_gap_days"]     = _date_gap_days
         _run_ctx["provider_coverage"] = {
-            "requested_ctx_start":        ctx_start,
-            "first_available_bar":        _effective_ctx_start,
-            "coverage_gap_days":          _date_gap_days,
-            "coverage_status":            "TRUNCATED",
-            "provider_used":              _provider_name,
-            "providers_tried":            _hist_cov.get("providers_tried", []),
-            "strict_mode":                not allow_provider_truncation,
+            "requested_ctx_start":       ctx_start,
+            "first_available_bar":       _effective_ctx_start,
+            "coverage_gap_days":         _date_gap_days,
+            "coverage_status":           "TRUNCATED",
+            "strict_mode":               not allow_provider_truncation,
             "provider_truncation_allowed": allow_provider_truncation,
-            "run_allowed":                allow_provider_truncation,
+            "run_allowed":               allow_provider_truncation,
         }
         if not allow_provider_truncation:
-            # STRICT MODE: all providers tried — still couldn't reach requested date
-            _providers_tried_str = ", ".join(
-                p["provider"] for p in _hist_cov.get("providers_tried", [])
-            ) or "none"
+            # STRICT MODE: user checked "Require exact historical coverage" — block the run
             _block_msg = (
-                f"RUN BLOCKED — EXACT DATE RANGE NOT AVAILABLE\n\n"
-                f"Requested Context Start : {ctx_start}\n"
-                f"Provider First Available: {_effective_ctx_start} (gap: {_date_gap_days} days)\n"
-                f"Providers tried         : {_providers_tried_str}\n\n"
-                f"AI Prediction : NOT_RUN\n"
-                f"Validation    : NOT_RUN\n"
+                f"RUN BLOCKED — STRICT COVERAGE REQUIRED\n\n"
+                f"Requested Context Start: {ctx_start}\n"
+                f"Provider First Available Date: {_effective_ctx_start}\n"
+                f"Gap: {_date_gap_days} days\n\n"
+                f"AI Prediction: NOT_RUN\n"
+                f"Validation: NOT_RUN\n"
                 f"Accuracy Saved: NO\n\n"
-                f"Reason: No provider (NASDAQ, yfinance) can supply data from {ctx_start}. "
-                f"Earliest available: {_effective_ctx_start}. "
-                f"To allow a provider-constrained run using {_effective_ctx_start} as effective start, "
-                f"uncheck 'Require exact historical coverage' in the form."
+                f"Reason: 'Require exact historical coverage' is checked. Provider cannot satisfy the requested "
+                f"historical context window. Uncheck 'Require exact historical coverage' to proceed with "
+                f"available provider data (PROVIDER-CONSTRAINED run)."
             )
             _run_ctx["input_binding_warning"] = _block_msg
             _run_ctx["validation_status"] = "BLOCKED_DATE_RANGE_UNAVAILABLE"
@@ -1541,15 +1357,13 @@ def _run_all(
             st.session_state["error_msg"] = _block_msg
             _log_invalid_run(run_id, input_hash, symbol, "stock",
                              "BLOCKED_DATE_RANGE_UNAVAILABLE",
-                             f"User requested {ctx_start}, best provider starts {_effective_ctx_start}, "
-                             f"gap={_date_gap_days}d. Tried: {_providers_tried_str}.")
+                             f"User requested {ctx_start}, provider starts {_effective_ctx_start}, gap={_date_gap_days}d. Strict mode blocked.")
             return
         else:
-            # PROVIDER-CONSTRAINED MODE (checkbox unchecked): warn but allow
-            _run_ctx["input_binding_warning"] = (
-                f"PROVIDER-CONSTRAINED RUN — requested context start was {ctx_start}, but "
-                f"best available provider ({_provider_name}) first bar is {_effective_ctx_start} "
-                f"(gap: {_date_gap_days} days). "
+            # PROVIDER-CONSTRAINED MODE (default): warn but allow
+            _run_ctx["input_binding_warning"]  = (
+                f"PROVIDER-CONSTRAINED RUN — requested context start was {ctx_start}, but provider "
+                f"first available bar is {_effective_ctx_start} (gap: {_date_gap_days} days). "
                 f"AI used {_effective_ctx_start} as effective context start — NOT your requested {ctx_start}. "
                 f"To block this behavior, check 'Require exact historical coverage' in the form."
             )
@@ -1584,13 +1398,6 @@ def _run_all(
         return
 
     st.session_state["ai_result"] = ai_result
-
-    # Cache origin price per symbol for strike guidance
-    _op = ai_result.get("origin_price_used")
-    if _op and symbol:
-        _pc = st.session_state.get("_symbol_price_cache", {})
-        _pc[symbol.upper()] = round(float(_op), 2)
-        st.session_state["_symbol_price_cache"] = _pc
 
     if ai_result.get("status") != "SUCCESS":
         st.session_state["error_msg"] = (
@@ -1738,28 +1545,14 @@ def _run_options_all(
         "run_context":  _run_ctx2,
     })
 
-    _today_str2 = today.strftime("%Y-%m-%d")
+    try:
+        ctx_dt   = datetime.strptime(ctx_start, "%Y-%m-%d").date()
+        days_req = max(400, (today - ctx_dt).days + 90)
+    except Exception:
+        days_req = 500
 
-    with st.spinner(f"Fetching historical prices for {symbol} (trying multiple providers)..."):
-        hist, hist_err, _hist_cov2 = fetch_price_history_for_range(
-            symbol, ctx_start, _today_str2
-        )
-
-    _run_ctx2["provider_chain"]      = _hist_cov2.get("providers_tried", [])
-    _run_ctx2["hist_provider"]       = _hist_cov2.get("provider", "unknown")
-    _run_ctx2["effective_ctx_start"] = _hist_cov2.get("effective_start") or ctx_start
-    _run_ctx2["requested_ctx_start"] = ctx_start
-    _run_ctx2["ctx_coverage_status"] = _hist_cov2.get("coverage_status", "FAILED")
-    _eff2 = _run_ctx2["effective_ctx_start"]
-    if _eff2 > ctx_start:
-        try:
-            _gap2 = (datetime.strptime(_eff2, "%Y-%m-%d").date()
-                     - datetime.strptime(ctx_start, "%Y-%m-%d").date()).days
-        except Exception:
-            _gap2 = 0
-        _run_ctx2["ctx_start_gap_days"] = _gap2
-    else:
-        _run_ctx2["ctx_start_gap_days"] = 0
+    with st.spinner(f"Fetching historical prices for {symbol}..."):
+        hist, hist_err = fetch_price_history(symbol, min_days=days_req)
 
     if not hist:
         _run_ctx2["provider_status"]["historical_data"] = "FAILED"
@@ -1872,9 +1665,8 @@ def _run_options_all(
         )
         return
 
-    # Step 7 -- Options backtest: ctx_start → target_date (full study window)
-    # Uses historical_context_start_date as backtest start so TastyTrade has enough
-    # history to find matching contracts (mirrors TastyTrade website behaviour).
+    # Step 7 -- Options backtest: prediction_origin_date → target_date
+    # CRITICAL: start_date = prediction_origin_date, NOT historical_context_start_date
     if run_type == "live_future_prediction":
         # Target is future — backtest and actual validation are PENDING
         opts_result: Dict[str, Any] = {
@@ -1916,10 +1708,6 @@ def _run_options_all(
         )
         _strike_f = float(_confirmed_strike)
         if _origin_px_chk > 0:
-            # Cache underlying price so strike guidance can show it before next run
-            _price_cache = st.session_state.get("_symbol_price_cache", {})
-            _price_cache[symbol.upper()] = round(_origin_px_chk, 2)
-            st.session_state["_symbol_price_cache"] = _price_cache
             _strike_dist_pct = round(((_strike_f - _origin_px_chk) / _origin_px_chk) * 100, 2)
             if abs(_strike_dist_pct) > 200:
                 _strike_dist_status = "EXTREME_STRIKE_DISTANCE"
@@ -1966,7 +1754,7 @@ def _run_options_all(
     opts_result: Dict[str, Any] = {
         "status":                  "SKIPPED",
         "backtest_range":          f"{origin_date} to {target_date}",
-        "note":                    "Options backtest window = prediction window (origin_date to target_date)",
+        "note":                    "Options backtest window = prediction window only",
         "strike_selection":        options_params.get("strike_selection", "delta"),
         "contract_method":         options_params.get("contract_selection_method", "DELTA_SELECTION"),
         "requested_strike":        _confirmed_strike,
@@ -2039,126 +1827,61 @@ def _run_options_all(
                     direction_map = {"Buy": "long", "Sell": "short"}
                     type_map      = {"Call": "call", "Put": "put"}
 
-                    # Build leg based on strike selection mode
-                    _direction_api  = direction_map.get(options_params.get("direction", "Sell"), "short")
-                    _type_api       = type_map.get(options_params.get("opt_type", "Put"), "put")
-                    _qty            = options_params.get("quantity", 1)
-                    _strike_sel_key = options_params.get("strike_selection", "delta").lower()
-
-                    if _strike_sel_key == "delta":
+                    # Build leg based on actual selection mode — NEVER mix strike and delta
+                    if _is_exact_mode and _confirmed_strike:
+                        # Tastytrade does NOT support fixed-strike backtesting via its API.
+                        # Mark exact validation as UNSUPPORTED, then run a delta proxy
+                        # labeled clearly as DELTA_PROXY_APPROXIMATE.
+                        opts_result["exact_validation_status"] = "UNSUPPORTED_BY_PROVIDER"
+                        opts_result["exact_validation_note"] = (
+                            "Tastytrade API does not support fixed-strike backtesting. "
+                            f"Requested strike {_confirmed_strike} cannot be verified exactly. "
+                            "Running delta-proxy (ATM ~50) as reference ONLY — labeled DELTA_PROXY_APPROXIMATE."
+                        )
+                        opts_result["eligible_for_exact_accuracy"] = False
+                        _accuracy_skip_reason = "EXACT_STRIKE_UNSUPPORTED_BY_PROVIDER"
+                        # Proxy leg uses delta=50 (ATM reference), clearly not exact
+                        leg = {
+                            "type":                "equity-option",
+                            "direction":           direction_map.get(options_params.get("direction", "Sell"), "short"),
+                            "quantity":            options_params.get("quantity", 1),
+                            "side":                type_map.get(options_params.get("opt_type", "Put"), "put"),
+                            "daysUntilExpiration": _effective_dte_used,
+                            "strikeSelection":     "delta",
+                            "delta":               50,
+                        }
+                        opts_result["validation_type"] = "DELTA_PROXY_APPROXIMATE"
+                        opts_result["fallback_used"]   = True
+                        opts_result["payload_dte"]     = _effective_dte_used
+                        opts_result["dte_adjustment_reason"] = "EXPIRY_DATE_PRIORITY" if _confirmed_expiry else "USER_DTE"
+                    else:
+                        # Delta selection mode — use exactly what the user entered (no silent default)
                         _delta_ui = options_params.get("delta_ui") or options_params.get("delta")
                         if not _delta_ui:
-                            opts_result.update({"status": "REVIEW_REQUIRED", "reason": "Delta value missing — cannot proceed."})
-                            st.session_state["opts_result"] = opts_result
-                            st.session_state["saved"]       = False
-                            st.session_state["save_msg"]    = "NOT SAVED — delta value missing"
+                            opts_result.update({"status": "REVIEW_REQUIRED", "reason": "Delta value missing in Delta mode — cannot proceed."})
                             return opts_result
                         leg = {
                             "type":                "equity-option",
-                            "direction":           _direction_api,
-                            "quantity":            _qty,
-                            "side":                _type_api,
+                            "direction":           direction_map.get(options_params.get("direction", "Sell"), "short"),
+                            "quantity":            options_params.get("quantity", 1),
+                            "side":                type_map.get(options_params.get("opt_type", "Put"), "put"),
                             "daysUntilExpiration": _effective_dte_used,
                             "strikeSelection":     "delta",
                             "delta":               int(_delta_ui),
                         }
-                        opts_result["payload_dte"]      = _effective_dte_used
-                        opts_result["validation_type"]  = "DELTA_SELECTION"
-                        opts_result["fallback_used"]    = False
+                        opts_result["payload_dte"] = _effective_dte_used
+                        opts_result["validation_type"] = "DELTA_SELECTION"
+                        opts_result["fallback_used"]   = False
                         opts_result["eligible_for_exact_accuracy"] = False
 
-                    elif _strike_sel_key == "percentage otm":
-                        _otm = options_params.get("otm_pct") or 5.0
-                        leg = {
-                            "type":                "equity-option",
-                            "direction":           _direction_api,
-                            "quantity":            _qty,
-                            "side":                _type_api,
-                            "daysUntilExpiration": _effective_dte_used,
-                            "strikeSelection":     "percentageOtm",
-                            "percentageOtm":       float(_otm),
-                        }
-                        opts_result["payload_dte"]      = _effective_dte_used
-                        opts_result["validation_type"]  = "PERCENTAGE_OTM_SELECTION"
-                        opts_result["fallback_used"]    = False
-                        opts_result["eligible_for_exact_accuracy"] = False
-
-                    elif _strike_sel_key == "price offset from underlying":
-                        _offset = options_params.get("price_offset") or 5.0
-                        leg = {
-                            "type":                "equity-option",
-                            "direction":           _direction_api,
-                            "quantity":            _qty,
-                            "side":                _type_api,
-                            "daysUntilExpiration": _effective_dte_used,
-                            "strikeSelection":     "priceOffset",
-                            "priceOffset":         float(_offset),
-                        }
-                        opts_result["payload_dte"]      = _effective_dte_used
-                        opts_result["validation_type"]  = "PRICE_OFFSET_SELECTION"
-                        opts_result["fallback_used"]    = False
-                        opts_result["eligible_for_exact_accuracy"] = False
-
-                    elif _strike_sel_key == "premium":
-                        _prem = options_params.get("premium_target") or 1.0
-                        leg = {
-                            "type":                "equity-option",
-                            "direction":           _direction_api,
-                            "quantity":            _qty,
-                            "side":                _type_api,
-                            "daysUntilExpiration": _effective_dte_used,
-                            "strikeSelection":     "premium",
-                            "premium":             float(_prem),
-                        }
-                        opts_result["payload_dte"]      = _effective_dte_used
-                        opts_result["validation_type"]  = "PREMIUM_SELECTION"
-                        opts_result["fallback_used"]    = False
-                        opts_result["eligible_for_exact_accuracy"] = False
-
-                    else:
-                        # Fallback to delta=30
-                        leg = {
-                            "type":                "equity-option",
-                            "direction":           _direction_api,
-                            "quantity":            _qty,
-                            "side":                _type_api,
-                            "daysUntilExpiration": _effective_dte_used,
-                            "strikeSelection":     "delta",
-                            "delta":               30,
-                        }
-                        opts_result["payload_dte"]      = _effective_dte_used
-                        opts_result["validation_type"]  = "DELTA_SELECTION_FALLBACK"
-                        opts_result["fallback_used"]    = False
-                        opts_result["eligible_for_exact_accuracy"] = False
-
-                    _api_entry_freq  = options_params.get("api_entry_frequency", "every day")
-                    _exit_rule       = options_params.get("exit_rule", "Exit at target date")
-                    _take_profit_pct = options_params.get("take_profit_pct")
-                    _stop_loss_pct   = options_params.get("stop_loss_pct")
-                    _exit_after_days = options_params.get("exit_after_days")
-                    # Backtest runs over the prediction window (origin → target).
-                    # AI learns from ctx_start → origin, then we validate over origin → target.
-                    _bt_end_date = target_date
-                    opts_result["backtest_range"] = f"{origin_date} → {_bt_end_date}"
                     payload = _tt_build_legs(
                         symbol=symbol,
                         start_date=origin_date,
-                        end_date=_bt_end_date,
+                        end_date=target_date,
                         legs=[leg],
-                        entry_frequency=_api_entry_freq,
-                        exit_rule=_exit_rule,
-                        stop_loss_pct=_stop_loss_pct,
-                        take_profit_pct=_take_profit_pct,
-                        exit_after_days=_exit_after_days,
                     )
                     st.session_state["backtest_payload"] = payload.to_dict()
                     backtest_id, err = _tt_create_backtest(payload)
-                    # EXIT_COND_DROPPED means: backtest succeeded but exit conditions
-                    # were auto-dropped (API rejected them); flag for UI warning.
-                    _exit_cond_dropped = bool(err and err.startswith("EXIT_COND_DROPPED:"))
-                    if _exit_cond_dropped:
-                        opts_result["exit_cond_dropped"] = True
-                        opts_result["exit_cond_drop_reason"] = err.split(":", 1)[-1][:300]
                     if backtest_id:
                         bt_data, poll_err = _tt_poll_backtest(backtest_id)
                         if bt_data:
@@ -2176,18 +1899,14 @@ def _run_options_all(
                                 stats.get("Total profit/loss") or stats.get("totalProfitLoss")
                                 or stats.get("profit_loss") or 0
                             )
+                            _avg_pnl = float(
+                                stats.get("Avg. profit/loss per trade")
+                                or stats.get("Avg. return per trade")
+                                or stats.get("avgProfitLoss") or stats.get("avg_pnl") or 0
+                            )
                             _n_trades = int(
                                 stats.get("Number of trades") or stats.get("numTrades")
                                 or stats.get("total_trades") or len(_trials) or 0
-                            )
-                            # Only store dollar P&L — never fall back to "Avg. return per trade"
-                            # which is a percentage value and would display as "$-7.96" (wrong unit).
-                            _avg_pnl_raw = float(
-                                stats.get("Avg. profit/loss per trade")
-                                or stats.get("avgProfitLoss") or stats.get("avg_pnl") or 0
-                            )
-                            _avg_pnl = _avg_pnl_raw if _avg_pnl_raw else (
-                                _total_pl / _n_trades if _n_trades > 0 else 0
                             )
 
                             # Detect FLAT_NO_TRADES — 0 trades + $0 P&L = not a real validation
@@ -2209,14 +1928,6 @@ def _run_options_all(
                                 if not _accuracy_skip_reason:
                                     _accuracy_skip_reason = "FLAT_NO_TRADES"
                             else:
-                                _max_loss = float(
-                                    stats.get("maxLoss") or stats.get("max_loss")
-                                    or stats.get("Worst loss") or 0
-                                )
-                                _max_profit = float(
-                                    stats.get("maxProfit") or stats.get("max_profit")
-                                    or stats.get("Highest profit") or 0
-                                )
                                 opts_result.update({
                                     "status":       "SUCCESS",
                                     "backtest_id":  backtest_id,
@@ -2224,59 +1935,14 @@ def _run_options_all(
                                     "profit_loss":  _total_pl,
                                     "avg_pnl":      _avg_pnl,
                                     "total_trades": _n_trades,
-                                    "max_loss":     _max_loss,
-                                    "max_profit":   _max_profit,
                                     "raw_stats":    stats,
-                                    "trials":       _trials,
-                                    "raw_bt_data":  bt_data,
                                 })
                         else:
                             opts_result["status"] = "BACKTEST_POLL_FAILED"
                             opts_result["error"]  = poll_err
                     else:
-                        # Detect HTTP 429 rate limit from service error string
-                        if err and err.startswith("RATE_LIMITED:429:"):
-                            _retry_after_raw = err.split("retry_after=")[-1] if "retry_after=" in err else "unknown"
-                            opts_result.update({
-                                "status":              "RATE_LIMITED",
-                                "error":               (
-                                    f"Tastytrade rate limit reached (HTTP 429). "
-                                    f"Retry-After: {_retry_after_raw}. "
-                                    "Wait before retrying. Accuracy NOT saved."
-                                ),
-                                "http_status":         429,
-                                "retry_after":         _retry_after_raw,
-                                "accuracy_saved":      False,
-                                "accuracy_skip_reason": "RATE_LIMITED_429",
-                                "backtest_id":         None,
-                            })
-                            _accuracy_skip_reason = "RATE_LIMITED_429"
-                        elif err and err.startswith("BACKTEST_HTTP_"):
-                            # Parse structured error: BACKTEST_HTTP_400:body_text
-                            _parts = err.split(":", 1)
-                            _http_code_str = _parts[0].replace("BACKTEST_HTTP_", "")
-                            _err_body_raw = _parts[1] if len(_parts) > 1 else ""
-                            try:
-                                _http_code_int = int(_http_code_str)
-                            except ValueError:
-                                _http_code_int = 0
-                            opts_result.update({
-                                "status":              "BACKTEST_CREATE_FAILED",
-                                "http_status":         _http_code_int,
-                                "error":               (
-                                    f"Failed to create backtest: HTTP {_http_code_int}. "
-                                    "Tastytrade authentication succeeded — this is a payload/provider validation issue, "
-                                    "NOT a credential issue. Check payload, DTE, and strike parameters."
-                                ),
-                                "error_body":          _err_body_raw,
-                                "accuracy_saved":      False,
-                                "accuracy_skip_reason": f"BACKTEST_CREATE_FAILED_HTTP_{_http_code_int}",
-                                "backtest_id":         None,
-                            })
-                            _accuracy_skip_reason = f"BACKTEST_CREATE_FAILED_HTTP_{_http_code_int}"
-                        else:
-                            opts_result["status"] = "BACKTEST_CREATE_FAILED"
-                            opts_result["error"]  = err
+                        opts_result["status"] = "BACKTEST_CREATE_FAILED"
+                        opts_result["error"]  = err
                 except Exception as exc:
                     opts_result["status"] = "ERROR"
                     opts_result["error"]  = f"{type(exc).__name__}: {exc}"
@@ -2457,18 +2123,12 @@ def _render_results():
                 ("Bars to AI",        f"{n_ctx} trading days"),
                 ("Last AI bar",       last_ai_bar),
                 ("Total bars fetched",f"{len(hist)}"),
-                ("Data Provider",     _run_ctx_stock.get("hist_provider", "---")),
             ]),
             unsafe_allow_html=True,
         )
 
-    _eff_ctx_leak = _run_ctx_stock.get("effective_ctx_start") or ctx_start
-    _leak_ctx_label = (
-        f"{_eff_ctx_leak}"
-        + (f' (requested {ctx_start} — provider-constrained)' if _eff_ctx_leak != ctx_start else "")
-    )
     _warn_card(
-        f"<b>Data Leakage Prevention:</b> AI received bars from <b>{_leak_ctx_label}</b> to "
+        f"<b>Data Leakage Prevention:</b> AI received bars from <b>{ctx_start}</b> to "
         f"<b>{origin}</b> only. Target price ({target}) was NOT in AI context. "
         "Revealed after prediction."
     )
@@ -2483,9 +2143,8 @@ def _render_results():
     _etp_gem_model     = ai.get("model_name", "---") if _etp_gemini_used else "---"
     _etp_hist_src      = get_provider_used(symbol) or "external_historical_provider"
     _etp_hist_label    = {
-        "rapidapi_tradingview":         "RapidAPI TradingView",
+        "rapidapi_tradingview": "RapidAPI TradingView",
         "external_historical_provider": "External Historical Provider (NASDAQ public)",
-        "yfinance":                     "yfinance (open-source, full history)",
     }.get(_etp_hist_src, _etp_hist_src)
     _etp_tt_used       = False  # Stock mode never uses tastytrade
     _etp_rapidapi_hist = "Unavailable (subscription plan)"
@@ -2535,8 +2194,8 @@ def _render_results():
         f'{"YES — HTTP " + str(_etp_rapi_hc_etp.get("http_status","?")) if _etp_rapi_called else "Not yet (run prediction first)"}</b><br>'
         f'RapidAPI Status: <b>{"200 OK" if _etp_rapi_ok else ("Error" if _etp_rapi_called else "---")}</b><br>'
         f'RapidAPI OHLCV: <b style="color:#F59E0B">{_etp_rapidapi_hist}</b><br>'
-        f'Historical Provider: <b style="color:#10B981">{_etp_hist_label}</b><br>'
-        f'Historical Source Key: <b style="color:#10B981">{_etp_hist_src}</b></div>'
+        f'Historical Bars: <b>{_etp_hist_label}</b><br>'
+        f'Historical Source: <b>{_etp_hist_src}</b></div>'
         # Validation values
         f'<div style="color:#F1F5F9">Mode: <b>Stock Price Validation</b><br>'
         f'Tastytrade Called: <b style="color:{"#10B981" if _etp_tt_verified else "#F59E0B"}">'
@@ -2670,9 +2329,10 @@ def _render_results():
                 ("Decision Horizon",      f"{horizon} days"),
                 ("Confidence Score",      f"{ai.get('confidence_score', '---')}/100"),
                 ("Risk Score",            f"{ai.get('risk_score', '---')}/100"),
-                ("Data Quality Score",    f"{min(100, int(_dq))}/100" if _dq is not None else "---"),
+                ("Data Quality Score",    f"{_dq}/100" if _dq is not None else "---"),
                 ("Effective Origin Date", ai.get("effective_origin_date", "---")),
-                ("AI Provider",           f'{_ai_prov.upper()} {"(active)" if _gem_used else "(fallback baseline)"}'),
+                ("AI Provider",           _ai_prov.upper()),
+                ("Gemini Used",           _gem_label),
                 ("Gemini Model",          _gem_mod if _gem_used else "---"),
                 ("Gemini Latency",        f"{_gem_lat} ms" if _gem_used and _gem_lat else "---"),
                 ("Prompt Hash",           f'<code style="font-size:.65rem">{_ph[:16]}…</code>' if _ph else "---"),
@@ -2701,18 +2361,13 @@ def _render_results():
                     ("Final Capital",             "PENDING"),
                     ("Initial Capital",           _fmt(cap, "$")),
                     ("Decision Horizon",          f"{horizon} days"),
-                    ("Historical Price Provider", _etp_hist_src),
+                    ("Historical Price Provider", "Historical price data provider"),
                 ]),
                 unsafe_allow_html=True,
             )
         elif val_ok:
             _prov = get_provider_used(spi.get("symbol", ""))
-            _prov_name_map = {
-                "rapidapi_tradingview": "RapidAPI TradingView",
-                "yfinance":             "yfinance",
-                "nasdaq_external":      "NASDAQ External",
-            }
-            _prov_label = _prov_name_map.get(_prov, _prov or _etp_hist_src or "Historical price data provider")
+            _prov_label = "RapidAPI TradingView" if _prov == "rapidapi_tradingview" else "Historical price data provider"
             st.markdown(
                 _table([
                     ("Actual Decision",      _decision_badge(act_dec)),
@@ -2737,45 +2392,9 @@ def _render_results():
                 "Possible causes: target date is a weekend/holiday, or no data for this range."
             )
 
-    # AI reasoning — full structured breakdown
-    _ai_main    = ai.get("reasoning") or ai.get("main_reason") or ""
-    _ai_trend   = ai.get("trend_assessment", "") or ""
-    _ai_mom     = ai.get("momentum_assessment", "") or ""
-    _ai_vol     = ai.get("volatility_assessment", "") or ""
-    _ai_bench   = ai.get("benchmark_assessment", "") or ""
-    _ai_bull    = ai.get("bull_case", "") or ""
-    _ai_bear    = ai.get("bear_case", "") or ""
-    _ai_why_not = ai.get("why_not_opposite", "") or ""
-    _ai_inv     = ai.get("invalidating_conditions", []) or []
-    _ai_kf      = ai.get("key_features_used", []) or []
-    if _ai_main or _ai_trend:
-        _reasoning_rows = ""
-        if _ai_main:
-            _reasoning_rows += f'<div style="margin-bottom:.6rem"><span style="color:#93C5FD;font-weight:700">Prediction Rationale:</span> {_ai_main}</div>'
-        if _ai_trend:
-            _reasoning_rows += f'<div style="margin-bottom:.4rem"><span style="color:#6EE7B7;font-weight:600">Trend:</span> {_ai_trend}</div>'
-        if _ai_mom:
-            _reasoning_rows += f'<div style="margin-bottom:.4rem"><span style="color:#6EE7B7;font-weight:600">Momentum (RSI/MACD):</span> {_ai_mom}</div>'
-        if _ai_vol:
-            _reasoning_rows += f'<div style="margin-bottom:.4rem"><span style="color:#6EE7B7;font-weight:600">Volatility:</span> {_ai_vol}</div>'
-        if _ai_bench:
-            _reasoning_rows += f'<div style="margin-bottom:.4rem"><span style="color:#6EE7B7;font-weight:600">vs Benchmark:</span> {_ai_bench}</div>'
-        if _ai_bull:
-            _reasoning_rows += f'<div style="margin-bottom:.4rem"><span style="color:#10B981;font-weight:600">Bull Case:</span> {_ai_bull}</div>'
-        if _ai_bear:
-            _reasoning_rows += f'<div style="margin-bottom:.4rem"><span style="color:#EF4444;font-weight:600">Bear Case:</span> {_ai_bear}</div>'
-        if _ai_why_not:
-            _reasoning_rows += f'<div style="margin-bottom:.4rem"><span style="color:#F59E0B;font-weight:600">Why Not Opposite:</span> {_ai_why_not}</div>'
-        if _ai_kf:
-            _reasoning_rows += f'<div style="margin-bottom:.4rem"><span style="color:#C4B5FD;font-weight:600">Key Signals Used:</span> {", ".join(_ai_kf)}</div>'
-        if _ai_inv:
-            _reasoning_rows += f'<div style="margin-top:.4rem"><span style="color:#F87171;font-weight:600">Invalidating Conditions:</span> {" | ".join(_ai_inv)}</div>'
-        st.markdown(
-            f'<div style="background:#0A1929;border-left:4px solid #3B82F6;border-radius:6px;'
-            f'padding:.9rem 1.2rem;margin:.6rem 0;font-size:.82rem;color:#CBD5E1;line-height:1.6">'
-            f'{_reasoning_rows}</div>',
-            unsafe_allow_html=True,
-        )
+    # AI reasoning + leakage
+    if ai.get("reasoning"):
+        _info_card(f"<b>AI Reasoning:</b> {ai['reasoning']}")
 
     lck = ai.get("leakage_check", "")
     if lck == "CLEAN":
@@ -3027,7 +2646,8 @@ def _render_results():
     # ── Section 8 — Known Answer Audit ───────────────────────────────────────
     _render_known_answer_audit(val, cap)
 
-    # ── Developer Debug (collapsed expanders below) ──────────────────────────
+    # ── Section 9 — Developer Debug ──────────────────────────────────────────
+    _section_header(9, "Developer Debug", "Raw JSON, hash proof, momentum signals")
     fu  = ai.get("features_used", {}) or {}
     mom = ai.get("_momentum_signals", {}) or {}
     _gem_used_d  = bool(ai.get("gemini_used"))
@@ -3043,13 +2663,13 @@ def _render_results():
                 ("Run ID",                f"<code>{run_id}</code>"),
                 ("Run Timestamp (UTC)",   run_ts),
                 ("Input Hash",            f'<code style="font-size:.68rem">{hash_v}</code>'),
-                ("AI Output Hash",        f'<code style="font-size:.68rem">{ai.get("gemini_output_hash", "---")}</code>'),
+                ("AI Output Hash",        f'<code style="font-size:.68rem">{ai.get("stock_prediction_input_hash", "---")}</code>'),
                 ("Hash Match",            "YES" if ai.get("stock_prediction_input_hash") == hash_v else "NO"),
                 ("Leakage Check",              ai.get("leakage_check", "---")),
                 ("Bars visible to AI",         f'{fu.get("bars_used", "---")} (cutoff {origin})'),
                 ("Last AI bar date",           fu.get("last_ai_bar_date", "---")),
                 ("Target price hidden",        "YES — not in AI context"),
-                ("actual_provider_used",       _etp_hist_src),
+                ("actual_provider_used",       "external_historical_provider"),
                 ("actual_validation_engine",   "historical_stock_price_validation"),
                 ("ai_source",                  ai.get("source", "---")),
                 ("Model version",              ai.get("model_version", "---")),
@@ -3204,94 +2824,88 @@ def _render_options_results():
         )
 
     # ── Section 2 — Historical Context ───────────────────────────────────────
-    _eff_ctx  = _run_ctx_opts.get("effective_ctx_start") or ctx_start
-    _req_ctx  = _run_ctx_opts.get("requested_ctx_start") or ctx_start
-    _ctx_constrained = (_eff_ctx and _req_ctx and _eff_ctx != _req_ctx)
-    _ctx_display_start = _eff_ctx or ctx_start
-
-    n_ctx  = len([b for b in hist if _ctx_display_start <= b["date"] <= origin])
+    _section_header(
+        2, "Historical Context Used by AI",
+        f"Bars {ctx_start} to {origin} — AI study only. Backtest uses prediction window only.",
+    )
+    n_ctx  = len([b for b in hist if ctx_start <= b["date"] <= origin])
     ctx_ok = ctx_summ.get("status") == "OK"
 
-    # Show key origin price prominently, collapse the rest into expander
-    if ctx_ok:
-        _cc1, _cc2, _cc3 = st.columns(3)
-        _cc1.metric("Origin Price (AI's last close)", f"${ctx_summ.get('end_price', 0):,.2f}")
-        _cc2.metric("Context Bars Passed to AI", f"{n_ctx} trading days")
-        _cc3.metric("Context Period Return", f"{ctx_summ.get('return_pct', 0):+.2f}%")
-        if _ctx_constrained:
-            st.caption(f"Provider-constrained: requested {_req_ctx}, effective {_eff_ctx}.")
-
-    with st.expander("Historical Context Detail", expanded=False):
-        _ctx_window_label = (
-            f"{_eff_ctx}  to  {origin}"
-            + (f'  <span style="color:#D97706;font-size:.72rem">(requested {_req_ctx} — provider-constrained)</span>'
-               if _ctx_constrained else "")
-        )
+    c2a, c2b = st.columns([3, 2])
+    with c2a:
         st.markdown(
             _table([
                 ("Symbol",                    symbol),
-                ("Historical context window", _ctx_window_label),
-                ("Prediction / validation window", f"{origin}  to  {target}  ({horizon} days)"),
+                ("Historical context window", f"{ctx_start}  →  {origin}"),
+                ("Prediction / validation window", f"{origin}  →  {target}  ({horizon} days)"),
                 ("Last bar visible to AI",     max((b["date"] for b in hist if b["date"] <= origin), default="---")),
                 ("Bars passed to AI",          f"{n_ctx} trading days"),
                 ("Context start price",        _fmt(ctx_summ.get("start_price"), "$") if ctx_ok else "---"),
-                ("Origin price (AI's last close)", _fmt(ctx_summ.get("end_price"), "$") if ctx_ok else "---"),
+                ("Origin price (AI's last)",   _fmt(ctx_summ.get("end_price"), "$") if ctx_ok else "---"),
                 ("Context period return",      _fmt(ctx_summ.get("return_pct"), suffix="%") if ctx_ok else "---"),
             ]),
             unsafe_allow_html=True,
         )
+    with c2b:
+        _warn_card(
+            "<b>Two-Window Architecture</b><br>"
+            f"<b>Context window</b> ({ctx_start} → {origin}): AI study only.<br>"
+            f"<b>Prediction window</b> ({origin} → {target}): AI predicts + backtest checks.<br>"
+            "<b>Backtest start = prediction_origin_date.</b><br>"
+            "Context window is NEVER used as backtest start."
+        )
+        if ctx_ok:
+            st.metric("Origin Price (AI's last known)", f"${ctx_summ.get('end_price', 0):,.2f}")
 
-    # ── Section 2B — Inputs Summary (collapsed) ──────────────────────────────
-    with st.expander("Run Inputs & Parameters", expanded=False):
-        i1, i2 = st.columns(2)
-        with i1:
-            st.markdown(
-                _table([
-                    ("Symbol",              symbol),
-                    ("Context Start",       f"{_eff_ctx}" + (f" (requested: {_req_ctx})" if _ctx_constrained else "")),
-                    ("Prediction Origin",   origin),
-                    ("Target Date",         target),
-                    ("Capital",             _fmt(cap, "$")),
-                    ("Benchmark",           spi.get("benchmark", "---")),
-                    ("Price Basis",         spi.get("price_basis", "close")),
-                    ("Data Provider",       _run_ctx_opts.get("hist_provider", "---")),
-                    ("Mode",                "Options Strategy Validation"),
-                    ("Input Hash",          f'<code style="font-size:.68rem">{hash_v}</code>'),
-                ]),
-                unsafe_allow_html=True,
-            )
-        with i2:
-            _p_sel = opts_p.get("strike_selection", "delta")
-            _p_is_strike = _p_sel == "strike"
-            _p_strike_row = (
-                ("Strike",  str(opts_p.get("strike_price", "---")))
-                if _p_is_strike else
-                ("Delta",   str(opts_p.get("delta", "---")))
-            )
-            _p_expiry_row = (
-                [("Expiry Date", opts_p.get("expiry_date") or "---")]
-                if _p_is_strike else []
-            )
-            st.markdown(
-                _table([
-                    ("Direction",          opts_p.get("direction", "---")),
-                    ("Type",               opts_p.get("opt_type", "---")),
-                    ("Quantity",           f"{opts_p.get('quantity', '---')} contract(s)"),
-                    ("Strike Selection",   _p_sel.title()),
-                    _p_strike_row,
-                    ("DTE",                f"{opts_p.get('dte', '---')} days"),]
-                    + _p_expiry_row + [
-                    ("Entry Schedule",     opts_p.get("entry_schedule", "---")),
-                    ("Exit: Take Profit",  f"{opts_p.get('take_profit_pct')}% of premium" if opts_p.get("take_profit_pct") else "---"),
-                    ("Exit: Stop Loss",    f"{opts_p.get('stop_loss_pct')}% of premium"   if opts_p.get("stop_loss_pct")   else "---"),
-                    ("Exit: After N Days", f"{opts_p.get('exit_after_days')} days"         if opts_p.get("exit_after_days") else "---"),
-                    ("Backtest Window",    opts.get("backtest_range") or f"{ctx_start}  →  {target}"),
-                ]),
-                unsafe_allow_html=True,
-            )
+    # ── Section 2B — Inputs Summary Table ────────────────────────────────────
+    _section_header("2B", "Inputs Used")
+    i1, i2 = st.columns(2)
+    with i1:
+        st.markdown(
+            _table([
+                ("Symbol",              symbol),
+                ("Context Start",       ctx_start),
+                ("Prediction Origin",   origin),
+                ("Target Date",         target),
+                ("Capital",             _fmt(cap, "$")),
+                ("Benchmark",           spi.get("benchmark", "---")),
+                ("Price Basis",         spi.get("price_basis", "close")),
+                ("Mode",                "Options Strategy Validation"),
+                ("Input Hash",          f'<code style="font-size:.68rem">{hash_v}</code>'),
+            ]),
+            unsafe_allow_html=True,
+        )
+    with i2:
+        _p_sel = opts_p.get("strike_selection", "delta")
+        _p_is_strike = _p_sel == "strike"
+        _p_strike_row = (
+            ("Strike",  str(opts_p.get("strike_price", "---")))
+            if _p_is_strike else
+            ("Delta",   str(opts_p.get("delta", "---")))
+        )
+        _p_expiry_row = (
+            [("Expiry Date", opts_p.get("expiry_date") or "---")]
+            if _p_is_strike else []
+        )
+        st.markdown(
+            _table([
+                ("Direction",          opts_p.get("direction", "---")),
+                ("Type",               opts_p.get("opt_type", "---")),
+                ("Quantity",           f"{opts_p.get('quantity', '---')} contract(s)"),
+                ("Strike Selection",   _p_sel.title()),
+                _p_strike_row,
+                ("DTE",                f"{opts_p.get('dte', '---')} days"),]
+                + _p_expiry_row + [
+                ("Entry Schedule",     opts_p.get("entry_schedule", "---")),
+                ("Exit Rule",          opts_p.get("exit_rule", "---")),
+                ("Backtest Window",    f"{origin}  →  {target}"),
+            ]),
+            unsafe_allow_html=True,
+        )
 
     # ── Paid API Usage Proof (options mode) — single truth source ────────────
-    # Collapsed by default — technical debugging info, not for presentation
+    # RapidAPI: from session_state["rapidapi_health"] (real health check)
+    # Tastytrade: from run_context["tastytrade_auth_truth"] ONLY (never from stale health)
     _rapi_hc_o   = st.session_state.get("rapidapi_health") or {}
     _run_ctx_tt  = st.session_state.get("run_context", {})
     # Single auth truth object — same one used by Developer Debug
@@ -3326,113 +2940,64 @@ def _render_options_results():
         c = "#10B981" if s == "SUCCESS" else "#F59E0B" if s == "NOT_RUN" else "#EF4444"
         return f'<span style="color:{c};font-weight:700">{s}</span>'
 
-    # Pull historical provider chain from run_context
-    _hist_prov_used  = _run_ctx_tt.get("hist_provider", "unknown")
-    _hist_prov_chain = _run_ctx_tt.get("provider_chain", [])
-    _prov_label_map  = {
-        "rapidapi_tradingview": "TradingView RapidAPI (your paid subscription)",
-        "nasdaq_external":      "NASDAQ Official API (api.nasdaq.com — real exchange data)",
-        "yfinance":             "yfinance (last resort fallback)",
-    }
-    _prov_used_label = _prov_label_map.get(_hist_prov_used, _hist_prov_used)
-
-    def _chain_row(p: dict) -> str:
-        pname  = _prov_label_map.get(p.get("provider",""), p.get("provider",""))
-        bars   = p.get("bars", 0)
-        status = p.get("status", "FAILED")
-        err    = p.get("error", "") or ""
-        is_used = p.get("provider","") == _hist_prov_used
-        tick   = "✅ USED" if (is_used and bars > 0) else ("⚠️ TRIED" if bars == 0 else "✅")
-        color  = "#10B981" if (is_used and bars > 0) else "#F59E0B" if bars == 0 else "#10B981"
-        err_snip = f' — <span style="color:#FCA5A5">{err[:80]}</span>' if err and bars == 0 else ""
-        return (f'<span style="color:{color};font-weight:700">{tick}</span> '
-                f'<b>{pname}</b> → {bars} bars{err_snip}<br>')
-
-    with st.expander("API Usage Proof & Auth Details", expanded=False):
-        # ── Historical OHLCV provider chain (always shown first — most important) ──
-        _chain_html = "".join(_chain_row(p) for p in _hist_prov_chain) if _hist_prov_chain else (
-            f'<b>{_prov_used_label}</b> (provider chain not recorded for this run)<br>'
-        )
-        st.markdown(
-            f'<div style="background:#0A1628;border:1px solid #2563EB;'
-            f'border-radius:8px;padding:.7rem 1.1rem;margin:.6rem 0;font-size:.72rem">'
-            f'<div style="color:#93C5FD;font-weight:800;font-size:.82rem;margin-bottom:.4rem">'
-            f'PAID API USAGE PROOF — Run {_current_rid or "N/A"}</div>'
-            # Historical OHLCV section
-            f'<div style="color:#FCD34D;font-weight:700;margin-bottom:.3rem">── HISTORICAL OHLCV DATA (for AI training) ──</div>'
-            f'<div style="color:#F1F5F9;margin-bottom:.5rem">'
-            f'<b>Tried in order:</b> TradingView RapidAPI → NASDAQ Official API → yfinance<br>'
-            f'{_chain_html}'
-            f'<b>Final provider used:</b> <span style="color:#10B981;font-weight:700">{_prov_used_label}</span><br>'
-            + (
-                f'<span style="color:#EF4444;font-weight:700;font-size:.72rem">'
-                f'⚠ WARNING: yfinance IS being used as last resort — both TradingView RapidAPI AND NASDAQ Official API '
-                f'returned 0 bars for this symbol/date range. yfinance data may differ from TastyTrade prices. '
-                f'Results should be treated as approximate.</span>'
-                if _hist_prov_used == "yfinance" else
-                f'<span style="color:#93C5FD;font-size:.68rem">'
-                f'Note: TradingView RapidAPI is tried first (your paid subscription). '
-                f'If it returns 0 bars for the requested date range, the system automatically falls back to '
-                f'NASDAQ\'s official public API (api.nasdaq.com — same price data, no API key needed). '
-                f'This is NOT yfinance.</span>'
-            )
-            + f'</div>'
-            f'<hr style="border-color:#1E3A5F;margin:.4rem 0">'
-            # Two-column: RapidAPI health check | TastyTrade
-            f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem 1.2rem">'
-            f'<div style="color:#FCD34D;font-weight:700;margin-bottom:.2rem">RAPIDAPI (TradingView) — HEALTH CHECK ONLY</div>'
-            f'<div style="color:#FCD34D;font-weight:700;margin-bottom:.2rem">TASTYTRADE (OAuth) — OPTIONS BACKTEST</div>'
-            f'<div style="color:#F1F5F9">'
-            f'<span style="color:#93C5FD;font-size:.68rem">This section proves your RapidAPI key is active. '
-            f'The market movers endpoint is pinged as a health check — it does NOT provide OHLCV bars '
-            f'to the AI or backtest. Historical data chain is shown above.</span><br><br>'
-            f'API Key Present: {_ab(_ro_key_ok)}<br>'
-            f'Called This Run: {_ab(_ro_called)}<br>'
-            f'HTTP Status: <b>{_ro_status if _ro_called else "---"}</b><br>'
-            f'Endpoint: <code style="font-size:.66rem">{_ro_endpoint.replace("https://","")}</code><br>'
-            f'Total Movers: <b>{_ro_count if _ro_count is not None else "---"}</b><br>'
-            f'Top Symbols: <b>{", ".join(_ro_syms[:3]) if _ro_syms else "---"}</b> '
-            f'<span style="color:#64748B;font-size:.66rem">(today\'s top movers — not related to your symbol)</span><br>'
-            f'Role: <b>LIVE_MARKET_MOVERS / API_KEY_HEALTH_CHECK</b><br>'
-            f'Used for Historical OHLCV: {_ab(False, "YES", "NO — see chain above")}<br>'
-            f'Used for Gemini Historical Prompt: {_ab(_ro_leakage, "YES", "NO (leakage-safe)")}<br>'
-            + (f'Error: <span style="color:#EF4444">{_ro_err}</span>' if _ro_err else "")
-            + f'</div>'
-            f'<div style="color:#F1F5F9">'
-            f'Credential Source: <b>{_tt_cred_src}</b><br>'
-            f'Refresh Token Present: {_ab(_tt_rt_present, "YES", "NO")}<br>'
-            f'Access Token Present: {_ab(_tt_at_present, "YES", "NO")}<br>'
-            f'Token Refresh Attempted: {_ab(_tt_ref_att, "YES", "NOT_RUN")}<br>'
-            f'Token Refresh Status: {_stat_badge(_tt_ref_stat)}<br>'
-            f'Customer Check Status: {_stat_badge(_tt_cust_stat)}<br>'
-            f'Auth HTTP Status: <b>{"N/A" if _tt_http is None else _tt_http}</b><br>'
-            f'Backtest Allowed: {_ab(_tt_allowed_ui)}<br>'
-            f'<br><b style="color:#FCD34D">OPTIONS BACKTEST RESULT:</b><br>'
-            f'Backtest Status: <b style="color:{"#10B981" if opts_status == "SUCCESS" else "#EF4444"}">'
-            f'{opts_status}</b><br>'
-            f'Backtest ID: <b>{opts.get("backtest_id") or "—"}</b><br>'
-            + (
-                f'Options P&L: <b style="color:{"#10B981" if float(opts.get("profit_loss",0) or 0)>=0 else "#EF4444"}">'
-                f'${float(opts.get("profit_loss",0) or 0):+,.2f}</b><br>'
-                f'Win Rate: <b>{f"{float(opts.get("win_rate",0) or 0)*100:.1f}%"}</b><br>'
-                f'Trials / Trades: <b>{opts.get("total_trades","---")}</b><br>'
-                if opts_status == "SUCCESS" else
-                f'P&L: <b>N/A</b><br>Win Rate: <b>N/A</b><br>Trades: <b>N/A</b><br>'
-            )
-            + f'Accuracy Saved: {_ab(st.session_state.get("saved", False))}<br>'
-            + (f'Auth/Backtest Reason: <span style="color:#FCA5A5;font-size:.67rem">{_tt_reason_ui}</span>' if not _tt_allowed_ui else "")
-            + (f'<br>Backtest Error: <span style="color:#EF4444">{opts.get("error","")}</span>' if opts_status not in ("SUCCESS", "SKIPPED") else "")
-            + f'</div>'
-            f'</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-    # ── AI Prediction (left) | Options Backtest Actual (right) ───────────────
     st.markdown(
-        f'<div style="color:#8BA9C4;font-size:.8rem;margin:.8rem 0 .2rem 0;font-weight:600">'
-        f'<b>{symbol}</b> &nbsp;|&nbsp; Backtest: {origin} → {target} &nbsp;|&nbsp; '
-        f'AI context: {ctx_start} → {origin} ({len([b for b in hist if ctx_start <= b["date"] <= origin])} bars)'
+        f'<div style="background:#0A1628;border:1px solid #2563EB;'
+        f'border-radius:8px;padding:.7rem 1.1rem;margin:.6rem 0">'
+        f'<div style="color:#93C5FD;font-weight:800;font-size:.82rem;margin-bottom:.5rem">'
+        f'PAID API USAGE PROOF — Run {_current_rid or "N/A"}</div>'
+        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem 1.2rem;font-size:.71rem">'
+        f'<div style="color:#FCD34D;font-weight:700;margin-bottom:.2rem">RAPIDAPI (TradingView)</div>'
+        f'<div style="color:#FCD34D;font-weight:700;margin-bottom:.2rem">TASTYTRADE (OAuth) — AUTH TRUTH</div>'
+        f'<div style="color:#F1F5F9">'
+        f'API Key Present: {_ab(_ro_key_ok)}<br>'
+        f'Called This Run: {_ab(_ro_called)}<br>'
+        f'HTTP Status: <b>{_ro_status if _ro_called else "---"}</b><br>'
+        f'Endpoint: <code style="font-size:.66rem">{_ro_endpoint.replace("https://","")}</code><br>'
+        f'Total Movers: <b>{_ro_count if _ro_count is not None else "---"}</b><br>'
+        f'Top Symbols: <b>{", ".join(_ro_syms[:3]) if _ro_syms else "---"}</b><br>'
+        f'Role: <b>LIVE_MARKET_MOVERS / PROVIDER_HEALTH</b><br>'
+        f'Used for Historical OHLCV: {_ab(False, "YES", "NO")}<br>'
+        f'Used for Stock Validation: {_ab(False, "YES", "NO")}<br>'
+        f'Used for Gemini Historical Prompt: {_ab(_ro_leakage, "YES", "NO")}<br>'
+        f'Data To Gemini: {_ab(not _ro_leakage, "NO (leakage-safe)", "YES (LEAK!)")}<br>'
+        f'Used In Stock Mode: {_ab(True, "YES — health check only", "NO")}<br>'
+        f'Used In Options Mode: {_ab(True, "YES — health check only", "NO")}<br>'
+        + (f'Error: <span style="color:#EF4444">{_ro_err}</span>' if _ro_err else "")
+        + f'</div>'
+        f'<div style="color:#F1F5F9">'
+        f'Credential Source: <b>{_tt_cred_src}</b><br>'
+        f'Refresh Token Present: {_ab(_tt_rt_present, "YES", "NO")}<br>'
+        f'Access Token Present: {_ab(_tt_at_present, "YES", "NO")}<br>'
+        f'Token Refresh Attempted: {_ab(_tt_ref_att, "YES", "NOT_RUN")}<br>'
+        f'Token Refresh Status: {_stat_badge(_tt_ref_stat)}<br>'
+        f'Customer Check Status: {_stat_badge(_tt_cust_stat)}<br>'
+        f'Auth HTTP Status: <b>{"N/A" if _tt_http is None else _tt_http}</b><br>'
+        f'Backtest Allowed: {_ab(_tt_allowed_ui)}<br>'
+        + f'<br><b style="color:#FCD34D">OPTIONS BACKTEST:</b><br>'
+        f'Backtest Status: <b style="color:{"#10B981" if opts_status == "SUCCESS" else "#EF4444"}">'
+        f'{opts_status}</b><br>'
+        f'Backtest ID: <b>{opts.get("backtest_id") or "—"}</b><br>'
+        + (
+            f'Options P&L: <b style="color:{"#10B981" if float(opts.get("profit_loss",0) or 0)>=0 else "#EF4444"}">'
+            f'${float(opts.get("profit_loss",0) or 0):+,.2f}</b><br>'
+            f'Win Rate: <b>{f"{float(opts.get("win_rate",0) or 0)*100:.1f}%"}</b><br>'
+            f'Trials / Trades: <b>{opts.get("total_trades","---")}</b><br>'
+            if opts_status == "SUCCESS" else
+            f'P&L: <b>N/A</b><br>Win Rate: <b>N/A</b><br>Trades: <b>N/A</b><br>'
+        )
+        + f'Accuracy Saved: {_ab(st.session_state.get("saved", False))}<br>'
+        + (f'Auth/Backtest Reason: <span style="color:#FCA5A5;font-size:.67rem">{_tt_reason_ui}</span>' if not _tt_allowed_ui else "")
+        + (f'<br>Backtest Error: <span style="color:#EF4444">{opts.get("error","")}</span>' if opts_status not in ("SUCCESS", "SKIPPED") else "")
+        + f'</div>'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Section 3 (left) | Section 4 (right) — options side-by-side ──────────
+    st.markdown(
+        f'<div style="color:#8BA9C4;font-size:.72rem;margin:.8rem 0 .2rem 0">'
+        f'<b>{symbol}</b> &nbsp;|&nbsp; {origin} → {target} &nbsp;({horizon} days)'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -3441,248 +3006,68 @@ def _render_options_results():
 
     with c3l:
         st.markdown(
-            '<div style="background:#0F2940;padding:.5rem 1rem;border-radius:6px;'
-            'color:#93C5FD;font-weight:900;font-size:.88rem;margin-bottom:.4rem;letter-spacing:.03em">'
-            "AI PREDICTION</div>",
+            '<div style="background:#0F2940;padding:.4rem 1rem;border-radius:6px;'
+            'color:#93C5FD;font-weight:800;font-size:.82rem;margin-bottom:.4rem">'
+            "SECTION 3 — AI Options Strategy Prediction</div>",
             unsafe_allow_html=True,
         )
-        _ret_err_raw = cmp.get("return_error_pct") if cmp_ok else None
-        _ret_err_fmt = (
-            f'<span style="color:#EF4444;font-weight:700">{float(_ret_err_raw):+.2f}pp</span>'
-            if _ret_err_raw is not None else "---"
-        )
-        _ai_dec = ai.get("decision", "---")
-        _user_dir = opts_p.get("direction", "") if opts_p else ""
         st.markdown(
             _table([
-                ("AI Market Signal",         _decision_badge(_ai_dec)),
-                ("Origin Price Used",         _fmt(ai.get("origin_price_used"), "$")),
-                ("Predicted Target Price",    _fmt(ai.get("predicted_target_price"), "$")),
-                ("Predicted Return %",        _sign_fmt(ai.get("predicted_return_pct"), suffix="%")),
-                ("Predicted Final Capital",   _fmt(ai.get("predicted_final_capital"), "$")),
-                ("Predicted Total P&L",       _sign_fmt(ai.get("predicted_total_pl"))),
-                ("Confidence Score",          f"{ai.get('confidence_score', '---')}/100"),
+                ("AI Decision",             _decision_badge(ai.get("decision", "---"))),
+                ("Origin Price Used",        _fmt(ai.get("origin_price_used"), "$")),
+                ("Predicted Target Price",   _fmt(ai.get("predicted_target_price"), "$")),
+                ("Predicted Return %",       _sign_fmt(ai.get("predicted_return_pct"), suffix="%")),
+                ("Predicted Final Capital",  _fmt(ai.get("predicted_final_capital"), "$")),
+                ("Predicted Total P&L",      _sign_fmt(ai.get("predicted_total_pl"))),
+                ("Confidence Score",         f"{ai.get('confidence_score', '---')}/100"),
                 ("Risk Score",               f"{ai.get('risk_score', '---')}/100"),
-                ("Return Error vs Actual",    _ret_err_fmt),
-                ("Leakage Check",             ai.get("leakage_check", "---")),
+                ("Leakage Check",            ai.get("leakage_check", "---")),
             ]),
             unsafe_allow_html=True,
         )
-        # Explain AI signal vs user's chosen strategy direction
-        _conflict_note = ""
-        if _user_dir and _ai_dec not in ("---", "HOLD"):
-            _dir_upper = _user_dir.upper()
-            _ai_upper  = _ai_dec.upper()
-            if (_dir_upper == "BUY" and _ai_upper == "SELL") or (_dir_upper == "SELL" and _ai_upper == "BUY"):
-                _conflict_note = (
-                    f'<span style="color:#F59E0B;font-weight:700">⚠ AI vs Strategy Mismatch:</span> '
-                    f'You selected <b>{_dir_upper}</b> as your options strategy direction, but the AI independently '
-                    f'analyzed the market and predicts <b>{_ai_upper}</b> (bearish/bullish score from technical indicators). '
-                    f'These are separate — the AI does NOT read your direction input. '
-                    f'A <b>CONFLICT</b> here means: AI thinks market is going the opposite way from your bet.'
-                )
-            elif (_dir_upper == "BUY" and _ai_upper == "BUY") or (_dir_upper == "SELL" and _ai_upper == "SELL"):
-                _conflict_note = (
-                    f'<span style="color:#34D399;font-weight:700">✓ AI Agrees with Strategy:</span> '
-                    f'AI market signal ({_ai_upper}) matches your chosen options direction ({_dir_upper}). '
-                    f'AI analyzes the market independently — this alignment adds confidence to your strategy.'
-                )
-        if _conflict_note:
-            st.markdown(
-                f'<div style="background:#1E293B;border-left:3px solid #F59E0B;'
-                f'padding:.5rem .75rem;border-radius:4px;font-size:.72rem;'
-                f'color:#CBD5E1;margin:.4rem 0">{_conflict_note}</div>',
-                unsafe_allow_html=True,
-            )
 
     with c3r:
         st.markdown(
-            '<div style="background:#052E1A;padding:.5rem 1rem;border-radius:6px;'
-            'color:#6EE7B7;font-weight:900;font-size:.88rem;margin-bottom:.4rem;letter-spacing:.03em">'
-            "OPTIONS BACKTEST ACTUAL</div>",
+            '<div style="background:#052E1A;padding:.4rem 1rem;border-radius:6px;'
+            'color:#6EE7B7;font-weight:800;font-size:.82rem;margin-bottom:.4rem">'
+            "SECTION 4 — Options Backtest Actual</div>",
             unsafe_allow_html=True,
         )
-        if opts.get("exit_cond_dropped"):
-            st.warning(
-                "⚠️ Exit conditions (Stop Loss / Take Profit) were rejected by the TastyTrade API "
-                "and auto-removed. Backtest ran WITHOUT TP/SL — trades held until expiry or end date. "
-                "This causes results to differ significantly from the TastyTrade website. "
-                "Try using only Take Profit OR only Stop Loss (not both) for better API compatibility."
-            )
-        _opts_dir_check = (st.session_state.get("opts_params") or {}).get("direction", "Sell")
-        if _opts_dir_check.lower() == "buy" and not opts.get("exit_cond_dropped"):
-            st.info(
-                "ℹ️ BUY (Long) strategy detected: The TastyTrade backtester API may not apply "
-                "Take Profit / Stop Loss exit conditions for BUY strategies in the same way "
-                "as the TastyTrade website. If results differ from the website, this is the reason. "
-                "The TastyTrade website uses actual historical option prices; the API may use a "
-                "theoretical pricing model. For accurate BUY strategy results, verify on the website directly."
-            )
         if opts_status == "SUCCESS":
             pnl        = opts.get("profit_loss")
             win_rate   = opts.get("win_rate")
             avg_pnl    = opts.get("avg_pnl")
             tot_trades = opts.get("total_trades")
-            max_loss_v = opts.get("max_loss")
-            max_prof_v = opts.get("max_profit")
             wr_fmt = (
                 f"{float(win_rate)*100:.1f}%" if (win_rate is not None and float(win_rate) <= 1)
                 else (f"{float(win_rate):.1f}%" if win_rate is not None else "---")
             )
-            _agr       = cmp.get("agreement", "---") if cmp_ok else "---"
-            _agr_color = "#EF4444" if _agr == "CONFLICT" else ("#10B981" if _agr == "AGREE" else "#9CA3AF")
-            _agr_badge = f'<span style="color:{_agr_color};font-weight:800">{_agr}</span>'
-            _bt_range_disp = opts.get("backtest_range", f"{ctx_start} → {target}")
             st.markdown(
                 _table([
-                    ("Options Backtest P&L",    _sign_fmt(pnl) if pnl is not None else "---"),
-                    ("Win Rate",                wr_fmt),
-                    ("Avg P&L / Trade",         f"${avg_pnl:+,.2f}" if avg_pnl is not None else "---"),
-                    ("Total Trades",            str(tot_trades) if tot_trades is not None else "---"),
-                    ("Max Single-Trade Loss",   _sign_fmt(max_loss_v) if max_loss_v is not None else "---"),
-                    ("Max Single-Trade Profit", _sign_fmt(max_prof_v) if max_prof_v is not None else "---"),
-                    ("Backtest Window",         _bt_range_disp),
-                    ("AI vs Backtest",          _agr_badge if cmp_ok else "---"),
-                    ("Backtest ID",             f'<code style="font-size:.65rem">{opts.get("backtest_id", "---")}</code>'),
+                    ("Backtest Status",   "SUCCESS"),
+                    ("Backtest Window",   f"{origin}  →  {target}"),
+                    ("Total P&L",         _sign_fmt(pnl) if pnl is not None else "---"),
+                    ("Win Rate",          wr_fmt),
+                    ("Avg P&L / Trade",   _sign_fmt(avg_pnl) if avg_pnl is not None else "---"),
+                    ("Total Trades",      str(tot_trades) if tot_trades is not None else "---"),
+                    ("Backtest ID",       opts.get("backtest_id", "---")),
                 ]),
                 unsafe_allow_html=True,
             )
-            if max_loss_v is not None and max_loss_v < 0:
-                _loss_abs = abs(max_loss_v)
-                _cap_float = float(cap) if cap else 0
-                if _cap_float > 0 and _loss_abs > _cap_float:
-                    _err_card(
-                        f"<b>RISK WARNING: Max single-trade loss (${_loss_abs:,.2f}) exceeds initial capital (${_cap_float:,.2f}).</b><br>"
-                        "This indicates extreme leverage — options positions lost more than the capital allocated. "
-                        "Review position sizing, contract quantity, and DTE before live trading."
-                    )
-                elif _loss_abs > 50_000:
-                    _warn_card(
-                        f"<b>RISK NOTE: Max single-trade loss was ${_loss_abs:,.2f}.</b><br>"
-                        "Large individual trade losses detected. Review position sizing before live trading."
-                    )
-            # Trade count anomaly detection for infrequent schedules
-            _sched = opts_p.get("entry_schedule", "Every day")
-            if tot_trades is not None and _sched in ("Monthly", "Weekly"):
-                _days_per_entry = 21 if _sched == "Monthly" else 5
-                _expected_trades = max(1, int(horizon / _days_per_entry))
-                _actual_trades = int(tot_trades or 0)
-                if _actual_trades > _expected_trades * 3:
-                    _warn_card(
-                        f"<b>ENTRY FREQUENCY ANOMALY: {_sched} schedule returned {_actual_trades} trades "
-                        f"in {horizon} days (expected ~{_expected_trades}).</b><br>"
-                        f"Tastytrade may not recognize the '{_sched.lower()}' frequency string — "
-                        "the API may be defaulting to daily entry. "
-                        "P&L results reflect more entries than intended. "
-                        "Verify with <code>verify_tastytrade_delta_backtest.py --entry-frequency monthly</code>."
-                    )
         elif opts_status == "SKIPPED":
-            _skip_err  = opts.get("error", "")
-            _skip_note = opts.get("note", "")
-            _skip_body = _skip_err or _skip_note or "Options backtest was not run."
-            _cred_hint = (
-                "<br>Check TASTYTRADE_USERNAME / TASTYTRADE_PASSWORD in .env."
-                if _skip_err and "credential" in _skip_err.lower()
-                else ""
-            )
             _warn_card(
                 f"<b>Options backtest skipped.</b><br>"
-                f"{_skip_body}{_cred_hint}"
+                f"{opts.get('error', opts.get('note', 'Tastytrade backtester unavailable.'))}.<br>"
+                "Check TASTYTRADE_USERNAME / TASTYTRADE_PASSWORD in .env."
             )
         elif opts_status == "FLAT_NO_TRADES":
-            _dte_hint = opts.get("effective_dte_used") or opts.get("payload_dte") or (opts_p.get("dte", "?") if opts_p else "?")
-            _bt_range_s = opts.get("backtest_range", f"{origin} → {target}")
-            try:
-                import datetime as _fnt_dt
-                _fnt_parts = _bt_range_s.replace("→", " ").split()
-                _fnt_start, _fnt_end = _fnt_parts[0], _fnt_parts[-1]
-                _fnt_window_days = (_fnt_dt.date.fromisoformat(_fnt_end) - _fnt_dt.date.fromisoformat(_fnt_start)).days
-            except Exception:
-                _fnt_window_days = None
-            _dte_int = int(_dte_hint) if str(_dte_hint).isdigit() else None
-            _short_window = _fnt_window_days is not None and _fnt_window_days < 7
-            _short_dte    = _dte_int is not None and _dte_int < 7
-            if _short_window and _short_dte:
-                _fnt_cause = (
-                    f"The backtest window is only <b>{_fnt_window_days} day(s)</b> "
-                    f"AND DTE={_dte_hint} day(s) is too small. Both need to be fixed."
-                )
-                _fnt_fix = (
-                    "Set <b>Decision Horizon to at least 14 days</b> and "
-                    "<b>DTE to at least 14 days</b> (recommended 14–45)."
-                )
-            elif _short_window:
-                _fnt_cause = (
-                    f"The backtest window is only <b>{_fnt_window_days} day(s)</b> ({_bt_range_s}). "
-                    f"A DTE={_dte_hint} position needs time to open AND reach TP/SL or expiry. "
-                    "TastyTrade cannot complete any trades in a 1–6 day window."
-                )
-                _fnt_fix = (
-                    "Set <b>Decision Horizon to at least 14 days</b> so the backtest window is wide enough "
-                    "for option positions to complete."
-                )
-            elif _short_dte:
-                _fnt_cause = (
-                    f"DTE={_dte_hint} day(s) is too small. "
-                    "TastyTrade's historical database rarely contains option contracts "
-                    "with fewer than 7 days to expiration."
-                )
-                _fnt_fix = "Set <b>Expiration (DTE) to at least 7 days</b> (recommended: 14–45)."
-            else:
-                _fnt_cause = (
-                    f"TastyTrade found no matching option contracts for DTE={_dte_hint}, "
-                    f"delta=30 within the backtest window {_bt_range_s}. "
-                    "This can happen when options data is unavailable for the specific date or symbol."
-                )
-                _fnt_fix = (
-                    "Try a <b>longer backtest window</b> (more days between origin and target), "
-                    "a <b>larger DTE</b> (14–45), or verify TSLA options exist on those dates."
-                )
             _err_card(
                 f"<b>Tastytrade authentication succeeded. Backtest returned zero trades.</b><br>"
-                "This is a <b>parameter / contract availability</b> issue — not a credential issue.<br><br>"
-                f"<b>Root cause:</b> {_fnt_cause}<br><br>"
-                f"<b>Fix:</b> {_fnt_fix}"
-            )
-        elif opts_status == "RATE_LIMITED":
-            _retry_s = opts.get("retry_after", "unknown")
-            _err_card(
-                f"<b>Tastytrade rate limit reached (HTTP 429).</b><br>"
-                f"Too many requests sent to Tastytrade backtester. "
-                f"<b>Retry-After: {_retry_s}</b> — wait before retrying.<br>"
-                "Accuracy NOT saved. No stale result shown. Backtest did NOT run."
-            )
-        elif opts_status == "EXACT_STRIKE_UNSUPPORTED":
-            _warn_card(
-                f"<b>Exact strike not supported by provider — backtest NOT run.</b><br>"
-                f"Tastytrade does not support fixed-strike backtesting. Requested strike: "
-                f"<b>{opts.get('requested_strike', '—')}</b>.<br>"
-                "To run an approximate reference using delta proxy (ATM ~50), check "
-                "<b>'Allow delta proxy approximation'</b> in the form above.<br>"
-                "Accuracy NOT saved. No payload was sent."
-            )
-        elif opts_status == "BACKTEST_CREATE_FAILED":
-            _http_code = opts.get("http_status", "")
-            _err_body  = opts.get("error_body", "")
-            _err_card(
-                f"<b>Options backtest failed: HTTP {_http_code}.</b><br>"
-                "Tastytrade authentication succeeded — this is a <b>payload/provider validation issue</b>, "
-                "not a credential issue.<br>"
-                f"{opts.get('error', '')}.<br>"
-                + (f'<br><span style="color:#9CA3AF;font-size:.72rem">Response body: {_err_body[:400]}</span>' if _err_body else "")
-            )
-        elif opts_status == "PENDING":
-            _bt_range = opts.get("backtest_range", "")
-            _reason   = opts.get("reason", "Target date is in the future.")
-            st.info(
-                f"**Options backtest PENDING — target date is in the future.**\n\n"
-                f"{_reason}\n\n"
-                f"**Backtest window:** {_bt_range}\n\n"
-                f"The TastyTrade options backtest runs on **historical data only**. "
-                f"Your prediction window extends into the future, so no options data exists yet to backtest against. "
-                f"This prediction has been saved and will be validated automatically once the target date passes.\n\n"
-                f"**To get immediate backtest results:** Use a Prediction Origin Date that is **at least 30+ days in the past** "
-                f"(e.g. if today is 2026-07-25 and horizon is 30 days, use origin ≤ 2026-06-25)."
+                "This is a <b>parameter / contract availability</b> issue — not a credential issue.<br>"
+                "Possible causes: exact strike unsupported by provider, "
+                f"strike too far from underlying price ({opts.get('strike_distance_warning', '')}), "
+                "DTE/expiry mismatch, no matching contracts in the date window, "
+                "or delta proxy found no trades. Check strike distance and DTE/expiry below."
             )
         else:
             _err_card(
@@ -3690,92 +3075,55 @@ def _render_options_results():
                 f"{opts.get('error', 'Unknown error')}."
             )
 
-    # AI reasoning — full structured breakdown
-    _ai_main2    = ai.get("reasoning") or ai.get("main_reason") or ""
-    _ai_trend2   = ai.get("trend_assessment", "") or ""
-    _ai_mom2     = ai.get("momentum_assessment", "") or ""
-    _ai_vol2     = ai.get("volatility_assessment", "") or ""
-    _ai_bench2   = ai.get("benchmark_assessment", "") or ""
-    _ai_bull2    = ai.get("bull_case", "") or ""
-    _ai_bear2    = ai.get("bear_case", "") or ""
-    _ai_why_not2 = ai.get("why_not_opposite", "") or ""
-    _ai_inv2     = ai.get("invalidating_conditions", []) or []
-    _ai_kf2      = ai.get("key_features_used", []) or []
-    if _ai_main2 or _ai_trend2:
-        _reasoning_rows2 = ""
-        if _ai_main2:
-            _reasoning_rows2 += f'<div style="margin-bottom:.6rem"><span style="color:#93C5FD;font-weight:700">Prediction Rationale:</span> {_ai_main2}</div>'
-        if _ai_trend2:
-            _reasoning_rows2 += f'<div style="margin-bottom:.4rem"><span style="color:#6EE7B7;font-weight:600">Trend:</span> {_ai_trend2}</div>'
-        if _ai_mom2:
-            _reasoning_rows2 += f'<div style="margin-bottom:.4rem"><span style="color:#6EE7B7;font-weight:600">Momentum (RSI/MACD):</span> {_ai_mom2}</div>'
-        if _ai_vol2:
-            _reasoning_rows2 += f'<div style="margin-bottom:.4rem"><span style="color:#6EE7B7;font-weight:600">Volatility:</span> {_ai_vol2}</div>'
-        if _ai_bench2:
-            _reasoning_rows2 += f'<div style="margin-bottom:.4rem"><span style="color:#6EE7B7;font-weight:600">vs Benchmark:</span> {_ai_bench2}</div>'
-        if _ai_bull2:
-            _reasoning_rows2 += f'<div style="margin-bottom:.4rem"><span style="color:#10B981;font-weight:600">Bull Case:</span> {_ai_bull2}</div>'
-        if _ai_bear2:
-            _reasoning_rows2 += f'<div style="margin-bottom:.4rem"><span style="color:#EF4444;font-weight:600">Bear Case:</span> {_ai_bear2}</div>'
-        if _ai_why_not2:
-            _reasoning_rows2 += f'<div style="margin-bottom:.4rem"><span style="color:#F59E0B;font-weight:600">Why Not Opposite:</span> {_ai_why_not2}</div>'
-        if _ai_kf2:
-            _reasoning_rows2 += f'<div style="margin-bottom:.4rem"><span style="color:#C4B5FD;font-weight:600">Key Signals Used:</span> {", ".join(_ai_kf2)}</div>'
-        if _ai_inv2:
-            _reasoning_rows2 += f'<div style="margin-top:.4rem"><span style="color:#F87171;font-weight:600">Invalidating Conditions:</span> {" | ".join(_ai_inv2)}</div>'
+    if ai.get("reasoning"):
+        _info_card(f"<b>AI Reasoning:</b> {ai['reasoning']}")
+
+    # ── Section 3B — Options Strategy Parameters ─────────────────────────────
+    _section_header(
+        "3B", "Options Strategy Parameters",
+        f"Backtest: {origin} → {target}  (prediction window ONLY — never context window)",
+    )
+    oc1, oc2, oc3 = st.columns(3)
+    with oc1:
         st.markdown(
-            f'<div style="background:#0A1929;border-left:4px solid #3B82F6;border-radius:6px;'
-            f'padding:.9rem 1.2rem;margin:.6rem 0;font-size:.82rem;color:#CBD5E1;line-height:1.6">'
-            f'{_reasoning_rows2}</div>',
+            _table([
+                ("Symbol",     symbol),
+                ("Direction",  opts_p.get("direction", "---")),
+                ("Type",       opts_p.get("opt_type", "---")),
+                ("Quantity",   f"{opts_p.get('quantity', '---')} contract(s)"),
+            ]),
             unsafe_allow_html=True,
         )
-
-    # ── Strategy Parameters (collapsed) ──────────────────────────────────────
-    _3b_bt_range = opts.get("backtest_range", f"{ctx_start} → {target}")
-    with st.expander(f"Strategy Parameters  |  Backtest: {_3b_bt_range}", expanded=False):
-        oc1, oc2, oc3 = st.columns(3)
-        with oc1:
-            st.markdown(
-                _table([
-                    ("Symbol",     symbol),
-                    ("Direction",  opts_p.get("direction", "---")),
-                    ("Type",       opts_p.get("opt_type", "---")),
-                    ("Quantity",   f"{opts_p.get('quantity', '---')} contract(s)"),
-                ]),
-                unsafe_allow_html=True,
-            )
-        with oc2:
-            _3b_sel = opts_p.get("strike_selection", "delta")
-            _3b_is_strike = _3b_sel == "strike"
-            _3b_contract_row = (
-                ("Strike",  str(opts_p.get("strike_price", "---")))
-                if _3b_is_strike else
-                ("Delta",   str(opts_p.get("delta", "---")))
-            )
-            _3b_extra = (
-                [("Expiry Date", opts_p.get("expiry_date") or "---")]
-                if _3b_is_strike else []
-            )
-            st.markdown(
-                _table([
-                    ("Strike Selection", _3b_sel.title()),
-                    _3b_contract_row,
-                    ("DTE",              f"{opts_p.get('dte', '---')} days"),
-                ] + _3b_extra),
-                unsafe_allow_html=True,
-            )
-        with oc3:
-            st.markdown(
-                _table([
-                    ("Entry Schedule",   opts_p.get("entry_schedule", "---")),
-                    ("Take Profit",     f"{opts_p.get('take_profit_pct')}% of premium" if opts_p.get("take_profit_pct") else "off"),
-                    ("Stop Loss",       f"{opts_p.get('stop_loss_pct')}% of premium"   if opts_p.get("stop_loss_pct")   else "off"),
-                    ("Exit After Days", str(opts_p.get("exit_after_days")) + " days"   if opts_p.get("exit_after_days") else "off"),
-                    ("Backtest Start",  origin),
-                    ("Backtest End",    target),
-                ]),
-                unsafe_allow_html=True,
-            )
+    with oc2:
+        _3b_sel = opts_p.get("strike_selection", "delta")
+        _3b_is_strike = _3b_sel == "strike"
+        _3b_contract_row = (
+            ("Strike",  str(opts_p.get("strike_price", "---")))
+            if _3b_is_strike else
+            ("Delta",   str(opts_p.get("delta", "---")))
+        )
+        _3b_extra = (
+            [("Expiry Date", opts_p.get("expiry_date") or "---")]
+            if _3b_is_strike else []
+        )
+        st.markdown(
+            _table([
+                ("Strike Selection", _3b_sel.title()),
+                _3b_contract_row,
+                ("DTE",              f"{opts_p.get('dte', '---')} days"),
+            ] + _3b_extra),
+            unsafe_allow_html=True,
+        )
+    with oc3:
+        st.markdown(
+            _table([
+                ("Entry Schedule",  opts_p.get("entry_schedule", "---")),
+                ("Exit Rule",       opts_p.get("exit_rule", "---")),
+                ("Backtest Start",  origin),
+                ("Backtest End",    target),
+            ]),
+            unsafe_allow_html=True,
+        )
 
     # ── Strike distance and DTE/expiry warnings ────────────────────────────────
     _sd_status = opts.get("strike_distance_status", "")
@@ -3839,66 +3187,10 @@ def _render_options_results():
                     ("Avg P&L / Trade",  f"${avg_pnl_v:+,.2f}"),
                     ("Number of Trades", str(n_trades_v)),
                     ("Backtest ID",      opts.get("backtest_id", "---")),
-                    ("Backtest Window",  opts.get("backtest_range", f"{origin}  →  {target}")),
+                    ("Backtest Window",  f"{origin}  →  {target}"),
                 ]),
                 unsafe_allow_html=True,
             )
-    elif opts_status == "FLAT_NO_TRADES":
-        _dte_used  = opts.get("effective_dte_used") or opts.get("payload_dte") or "?"
-        _bt_range  = opts.get("backtest_range", f"{origin} → {target}")
-        try:
-            import datetime as _sum_dt
-            _sum_parts = _bt_range.replace("→", " ").split()
-            _sum_start, _sum_end = _sum_parts[0], _sum_parts[-1]
-            _sum_window_days = (_sum_dt.date.fromisoformat(_sum_end) - _sum_dt.date.fromisoformat(_sum_start)).days
-        except Exception:
-            _sum_window_days = None
-        _sum_dte_int   = int(_dte_used) if str(_dte_used).isdigit() else None
-        _sum_short_win = _sum_window_days is not None and _sum_window_days < 7
-        _sum_short_dte = _sum_dte_int is not None and _sum_dte_int < 7
-        if _sum_short_win and _sum_short_dte:
-            _sum_why = (
-                f"• <b>Backtest window = {_sum_window_days} day(s)</b> — too short for any position to open and close.<br>"
-                f"• <b>DTE = {_dte_used} day(s)</b> — TastyTrade rarely has contracts this short-dated in its historical data."
-            )
-            _sum_fix = f"Set <b>Decision Horizon ≥ 14 days</b> and <b>DTE ≥ 14 days</b> (recommended 14–45)."
-        elif _sum_short_win:
-            _sum_why = (
-                f"• <b>Backtest window = {_sum_window_days} day(s)</b> ({_bt_range}) — too short. "
-                f"A DTE={_dte_used} position needs enough time to open AND reach TP/SL or expiry. "
-                "TastyTrade cannot complete any trades in fewer than 7 days."
-            )
-            _sum_fix = "Set <b>Decision Horizon to at least 14 days</b> so option positions have time to complete."
-        elif _sum_short_dte:
-            _sum_why = (
-                f"• <b>DTE = {_dte_used} day(s)</b> — TastyTrade's historical database rarely contains "
-                "option contracts with fewer than 7 days to expiration."
-            )
-            _sum_fix = "Set <b>Expiration (DTE) to at least 7 days</b> (recommended: 14–45)."
-        else:
-            _sum_why = (
-                f"• No matching option contracts found for DTE={_dte_used}, delta=30 within "
-                f"the backtest window {_bt_range}. Options data may not be available for this symbol on those dates."
-            )
-            _sum_fix = "Try a longer backtest window, a different DTE (14–45), or verify options existed on these dates."
-        _err_card(
-            f"<b>Options Backtest FLAT_NO_TRADES — TastyTrade ran the backtest but found ZERO matching contracts.</b><br>"
-            f"Backtest window: <b>{_bt_range}</b> &nbsp;|&nbsp; DTE used: <b>{_dte_used}</b><br><br>"
-            f"<b>Why this happens:</b><br>"
-            f"{_sum_why}<br><br>"
-            f"<b>Fix:</b> {_sum_fix}<br>"
-            "Comparison and accuracy save are BLOCKED until backtest returns trades."
-        )
-    elif opts_status == "PENDING":
-        _bt_range = opts.get("backtest_range", "")
-        st.info(
-            f"**Options Backtest PENDING — target date is in the future.**\n\n"
-            f"Backtest window: **{_bt_range}** is in the future. "
-            f"The TastyTrade backtester only works on **historical data**. "
-            f"This prediction is saved as PENDING and will be validated on/after the target date.\n\n"
-            f"**Fix:** Use a Prediction Origin Date at least 30+ days in the past so the entire "
-            f"prediction window (origin → target) is historical."
-        )
     else:
         _err_card(
             f"<b>Options Backtest {opts_status} — cannot compare AI vs backtest.</b><br>"
@@ -3906,572 +3198,40 @@ def _render_options_results():
             "<b>Comparison and accuracy save are BLOCKED until backtest succeeds.</b>"
         )
 
-    # ── TastyTrade-Style Full Results (Summary / Details / Logs) ─────────────
-    if opts_status == "SUCCESS":
-        _section_header(None, "Backtest Results", "Matching TastyTrade output — Summary, Details, Logs")
-
-        _raw_trials   = opts.get("trials", [])
-        _raw_stats    = opts.get("raw_stats", {})
-        _raw_bt_data  = opts.get("raw_bt_data", {})
-        _res_raw      = (_raw_bt_data.get("results") or {}) if _raw_bt_data else {}
-
-        # Daily settlement from API (may be nested under results)
-        _daily_rows = (
-            _res_raw.get("dailySettlements")
-            or _res_raw.get("daily_settlements")
-            or _res_raw.get("dailysettlements")
-            or []
-        )
-        # Transactions from API
-        _txn_rows = (
-            _res_raw.get("transactions")
-            or _res_raw.get("orders")
-            or []
-        )
-
-        # ── Strategy Config Recap (TastyTrade header style) ──────────────────
-        _tp_disp  = opts_p.get("take_profit_pct")
-        _sl_disp  = opts_p.get("stop_loss_pct")
-        _ead_disp = opts_p.get("exit_after_days")
-        _exit_parts = []
-        if _tp_disp: _exit_parts.append(f"Take profit: {_tp_disp}% of premium")
-        if _sl_disp: _exit_parts.append(f"Stop loss: {_sl_disp}% of premium")
-        if _ead_disp: _exit_parts.append(f"Exit after {_ead_disp} days")
-        if not _exit_parts: _exit_parts.append(opts_p.get("exit_rule", "Exit at target date"))
-        _exit_str = " | ".join(_exit_parts)
-        _delta_disp = opts_p.get("delta", "30")
-        _dte_disp   = opts_p.get("dte", "1")
-        _dir_disp   = opts_p.get("direction", "Buy").lower()
-        _type_disp  = opts_p.get("opt_type", "Call").lower()
-        _qty_disp   = opts_p.get("quantity", 1)
-
+    # ── Underlying Stock Reference (informational only) ───────────────────────
+    _section_header(
+        None, "Underlying Stock Reference",
+        "INFORMATIONAL ONLY — NOT used for options agreement or accuracy",
+    )
+    st.markdown(
+        '<div style="background:#1E293B;border-left:4px solid #F59E0B;'
+        'padding:.5rem 1rem;border-radius:4px;font-size:.73rem;color:#FCD34D;margin:.3rem 0">'
+        'The underlying stock price movement is shown here for context only. '
+        'It does NOT drive the options final decision or accuracy record. '
+        'Options accuracy requires a successful Tastytrade options backtest.</div>',
+        unsafe_allow_html=True,
+    )
+    if val_ok:
+        orig_p = float(val.get("origin_price") or 0)
+        tgt_p  = float(val.get("target_price") or 0)
+        ret_p  = float(val.get("actual_return_pct") or 0)
+        cap_v  = float(val.get("actual_final_capital") or cap)
+        pl_v   = float(val.get("actual_total_pl") or 0)
+        act_dec_ref = val.get("actual_decision", "---")
         st.markdown(
-            f'<div style="background:#0D1B2A;border:1px solid #1E4D7A;border-radius:8px;'
-            f'padding:.7rem 1.2rem;margin:.4rem 0 .6rem 0;font-size:.8rem">'
-            f'<span style="color:#FCD34D;font-weight:800">UNDERLYING:</span> '
-            f'<span style="color:#F1F5F9;font-weight:700">{symbol}</span> &nbsp;|&nbsp; '
-            f'<span style="color:#FCD34D;font-weight:800">LEGS:</span> '
-            f'<span style="color:#6EE7B7">{_dir_disp} {_qty_disp} {_type_disp} {_delta_disp}Δ {_dte_disp} DTE</span> '
-            f'&nbsp;|&nbsp; '
-            f'<span style="color:#FCD34D;font-weight:800">ENTRY:</span> '
-            f'<span style="color:#F1F5F9">{opts_p.get("entry_schedule","Every day")}</span> '
-            f'&nbsp;|&nbsp; '
-            f'<span style="color:#FCD34D;font-weight:800">EXIT:</span> '
-            f'<span style="color:#F1F5F9">{_exit_str}</span> '
-            f'&nbsp;|&nbsp; '
-            f'<span style="color:#FCD34D;font-weight:800">DATES:</span> '
-            f'<span style="color:#F1F5F9">{origin} → {target}</span>'
-            f'</div>',
+            _table([
+                ("Underlying Stock Decision", _decision_badge(act_dec_ref)),
+                ("Origin Price",             _fmt(orig_p, "$")),
+                ("Target Price",             _fmt(tgt_p, "$")),
+                ("Actual Stock Return %",    _sign_fmt(ret_p, suffix="%")),
+                ("Stock Final Capital",      _fmt(cap_v, "$")),
+                ("Stock Total P&L",          _sign_fmt(pl_v)),
+                ("Note",                     "Reference only — not options accuracy"),
+            ]),
             unsafe_allow_html=True,
         )
-
-        _tt_tab_sum, _tt_tab_det, _tt_tab_log = st.tabs(["Summary", "Details", "Logs"])
-
-        # ── SUMMARY TAB ───────────────────────────────────────────────────────
-        with _tt_tab_sum:
-            import plotly.graph_objects as go
-
-            # Build dual-axis chart: stock price (left) + strategy P&L (right)
-            _chart_dates  = []
-            _chart_prices = []
-            _chart_pl     = []
-
-            # Stock price curve from hist — show full backtest window (ctx_start to target)
-            _hist_in_window = [b for b in hist if ctx_start <= b["date"] <= target]
-            for b in sorted(_hist_in_window, key=lambda x: x["date"]):
-                _chart_dates.append(b["date"])
-                _chart_prices.append(float(b.get("close") or b.get("Close") or 0))
-
-            # Strategy P&L curve — from daily settlements if available, else from cumulative trials
-            if _daily_rows:
-                _ds_dates = []
-                _ds_pl    = []
-                for dr in _daily_rows:
-                    _ds_d = dr.get("date") or dr.get("Date") or ""
-                    _ds_p = float(dr.get("totalProfitLoss") or dr.get("total_profit_loss")
-                                  or dr.get("Total profit/loss") or 0)
-                    if _ds_d:
-                        _ds_dates.append(_ds_d)
-                        _ds_pl.append(_ds_p)
-            else:
-                # Build cumulative from trials
-                _trial_sorted = sorted(_raw_trials, key=lambda t: str(t.get("openDateTime") or t.get("entryDate") or t.get("entry_date") or ""))
-                _cum = 0.0
-                _ds_dates = []
-                _ds_pl    = []
-                for _t in _trial_sorted:
-                    _exit_d = str(_t.get("closeDateTime") or _t.get("exitDate") or _t.get("exit_date") or "")[:10]
-                    _pl_t   = float(_t.get("profitLoss") or _t.get("profit_loss") or 0)
-                    _cum   += _pl_t
-                    if _exit_d:
-                        _ds_dates.append(_exit_d)
-                        _ds_pl.append(_cum)
-
-            fig = go.Figure()
-
-            if _chart_dates and _chart_prices:
-                fig.add_trace(go.Scatter(
-                    x=_chart_dates, y=_chart_prices,
-                    name=f"{symbol} end of day price",
-                    line=dict(color="#94A3B8", width=2),
-                    yaxis="y1",
-                ))
-
-            if _ds_dates and _ds_pl:
-                fig.add_trace(go.Scatter(
-                    x=_ds_dates, y=_ds_pl,
-                    name="Strategy profit/loss",
-                    line=dict(color="#F97316", width=2),
-                    fill="tozeroy",
-                    fillcolor="rgba(249,115,22,0.08)",
-                    yaxis="y2",
-                ))
-
-            fig.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="#0D1B2A",
-                plot_bgcolor="#0D1B2A",
-                margin=dict(l=60, r=60, t=30, b=40),
-                height=320,
-                legend=dict(orientation="h", x=0, y=1.12, font=dict(size=11)),
-                yaxis=dict(
-                    title=dict(text=f"{symbol} Price ($)", font=dict(color="#94A3B8")),
-                    tickfont=dict(color="#94A3B8"),
-                    side="left",
-                ),
-                yaxis2=dict(
-                    title=dict(text="Strategy P&L ($)", font=dict(color="#F97316")),
-                    tickfont=dict(color="#F97316"),
-                    overlaying="y",
-                    side="right",
-                    tickprefix="$",
-                ),
-                xaxis=dict(tickfont=dict(color="#94A3B8")),
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-            # API MISMATCH WARNING: The TastyTrade backtester API uses a different TP/SL exit engine
-            # than the TastyTrade website. The website exits trades at precise daily prices (15 min before
-            # close). The API may delay or miss these exits, causing individual trade P&Ls — and therefore
-            # total P&L, drawdown, CAGR, win/loss sizes — to differ significantly from the website.
-            # This is an API limitation; our code reads the API's profitLoss per trial honestly.
-            st.warning(
-                "⚠️ **API vs Website Difference:** The TastyTrade backtester API applies Take Profit / "
-                "Stop Loss exits differently from the TastyTrade website. The website checks prices 15 min "
-                "before close each day; the API may exit trades at different times or prices, causing "
-                "**Total P&L, individual trade P&Ls, drawdown, CAGR, and win/loss sizes to differ from "
-                "what you see on the TastyTrade website.** This is an API engine limitation — not an error "
-                "in our platform. For authoritative results, verify on the TastyTrade website directly."
-            )
-
-            # Your Strategy stats vs Buy and Hold
-            _pnl_v    = float(opts.get("profit_loss") or 0)
-            _raw_max_dd = float(_raw_stats.get("Max drawdown") or _raw_stats.get("maxDrawdown") or 0)
-            # Always use user's stated initial capital as the capital baseline — TastyTrade website
-            # uses the user's account balance (not API-computed BPR) for Used capital / ROC / CAGR.
-            _used_cap = cap if cap else float(_raw_stats.get("Used capital") or _raw_stats.get("usedCapital") or 1)
-            _roc      = (_pnl_v / _used_cap * 100) if _used_cap else 0
-            _mar      = float(_raw_stats.get("MAR ratio") or _raw_stats.get("marRatio") or 0)
-
-            # Buy and Hold: compute over the BACKTEST window only (origin → target), matching TastyTrade website.
-            # ctx_start is the AI learning window start (much earlier); using it inflates Buy & Hold return.
-            _bh_start = next((float(b.get("close") or 0) for b in sorted(hist, key=lambda x: x["date"]) if b["date"] >= origin), 0)
-            _bh_end   = next((float(b.get("close") or 0) for b in sorted(hist, key=lambda x: x["date"], reverse=True) if b["date"] <= target), 0)
-            _bh_pl    = ((_bh_end / _bh_start - 1) * _used_cap) if (_bh_start > 0 and _used_cap > 0) else 0
-            _bh_ret   = ((_bh_end / _bh_start - 1) * 100) if _bh_start > 0 else 0
-
-            cs1, cs2 = st.columns(2)
-            with cs1:
-                pnl_color = "#10B981" if _pnl_v >= 0 else "#EF4444"
-                st.markdown(
-                    f'<div style="background:#0A2540;border:1px solid #1E4D7A;border-radius:8px;padding:1rem 1.2rem">'
-                    f'<div style="color:#93C5FD;font-weight:800;font-size:.85rem;margin-bottom:.7rem">Your Strategy</div>'
-                    f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem">'
-                    f'<div style="color:#94A3B8;font-size:.78rem">Total profit/loss</div>'
-                    f'<div style="color:{pnl_color};font-weight:800;font-size:.9rem">${_pnl_v:+,.2f}</div>'
-                    f'<div style="color:#94A3B8;font-size:.78rem">Max drawdown</div>'
-                    f'<div style="color:#EF4444;font-weight:700">{_raw_max_dd:.2f}%</div>'
-                    f'<div style="color:#94A3B8;font-size:.78rem">Return on used capital</div>'
-                    f'<div style="color:{"#10B981" if _roc >= 0 else "#EF4444"};font-weight:700">{_roc:.1f}%</div>'
-                    f'<div style="color:#94A3B8;font-size:.78rem">MAR ratio</div>'
-                    f'<div style="color:#F1F5F9;font-weight:700">{_mar:.2f}</div>'
-                    f'<div style="color:#94A3B8;font-size:.78rem">Used capital</div>'
-                    f'<div style="color:#F1F5F9">${_used_cap:,.2f}</div>'
-                    f'</div></div>',
-                    unsafe_allow_html=True,
-                )
-            with cs2:
-                bh_color = "#10B981" if _bh_pl >= 0 else "#EF4444"
-                st.markdown(
-                    f'<div style="background:#0A2540;border:1px solid #374151;border-radius:8px;padding:1rem 1.2rem">'
-                    f'<div style="color:#9CA3AF;font-weight:800;font-size:.85rem;margin-bottom:.7rem">Buy and Hold ({symbol})</div>'
-                    f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem">'
-                    f'<div style="color:#94A3B8;font-size:.78rem">Total profit/loss</div>'
-                    f'<div style="color:{bh_color};font-weight:800;font-size:.9rem">${_bh_pl:+,.2f}</div>'
-                    f'<div style="color:#94A3B8;font-size:.78rem">Return on capital</div>'
-                    f'<div style="color:{"#10B981" if _bh_ret >= 0 else "#EF4444"};font-weight:700">{_bh_ret:.2f}%</div>'
-                    f'<div style="color:#94A3B8;font-size:.78rem">Start price</div>'
-                    f'<div style="color:#F1F5F9">${_bh_start:,.2f}</div>'
-                    f'<div style="color:#94A3B8;font-size:.78rem">End price</div>'
-                    f'<div style="color:#F1F5F9">${_bh_end:,.2f}</div>'
-                    f'<div style="color:#94A3B8;font-size:.78rem">Capital used</div>'
-                    f'<div style="color:#F1F5F9">${_used_cap:,.2f}</div>'
-                    f'</div></div>',
-                    unsafe_allow_html=True,
-                )
-
-            st.markdown(
-                '<div style="color:#64748B;font-size:.72rem;text-align:center;margin-top:.5rem">'
-                'Trades (entries and exits) are executed at the mid price, once per day, 15 minutes before market close.'
-                '</div>',
-                unsafe_allow_html=True,
-            )
-
-        # ── DETAILS TAB ──────────────────────────────────────────────────────
-        with _tt_tab_det:
-            _n_tr   = int(opts.get("total_trades") or 0)
-            _n_wins = int(_raw_stats.get("Wins") or _raw_stats.get("numWins") or _raw_stats.get("num_wins") or 0)
-            _n_loss = int(_raw_stats.get("Losses") or _raw_stats.get("numLosses") or _raw_stats.get("num_losses") or 0)
-            _pr_rate = (_n_wins / _n_tr * 100) if _n_tr > 0 else 0
-            _lr_rate = (_n_loss / _n_tr * 100) if _n_tr > 0 else 0
-            _lg_prof = float(_raw_stats.get("Highest profit") or _raw_stats.get("maxProfit") or 0)
-            _lg_loss = float(_raw_stats.get("Worst loss") or _raw_stats.get("maxLoss") or 0)
-            # "Avg. return per trade" from API is a percentage (e.g. -9.35); display as %.
-            # "Avg. profit/loss per trade" is a dollar amount; compute from total_pl/n_trades if missing.
-            _avg_ret_pct = float(_raw_stats.get("Avg. return per trade") or _raw_stats.get("avgReturnPerTrade") or 0)
-            _avg_pnl_dollar = float(
-                _raw_stats.get("Avg. profit/loss per trade") or _raw_stats.get("avgProfitLoss") or opts.get("avg_pnl") or 0
-            )
-            if not _avg_pnl_dollar and _n_tr > 0:
-                _avg_pnl_dollar = float(opts.get("profit_loss") or 0) / _n_tr
-            _avg_days = float(_raw_stats.get("Avg. days in trade") or _raw_stats.get("avgDaysInTrade") or 0)
-            _avg_bpr  = float(_raw_stats.get("Avg. BPR per trade") or _raw_stats.get("avgBuyingPowerReduction") or 0)
-            _avg_prem = float(_raw_stats.get("Avg. premium") or _raw_stats.get("avgPremium") or 0)
-            _avg_win  = float(_raw_stats.get("Avg. win size") or _raw_stats.get("avgWinSize") or 0)
-            _avg_ls   = float(_raw_stats.get("Avg. loss size") or _raw_stats.get("avgLossSize") or 0)
-            _tot_prem = float(_raw_stats.get("Total premium") or _raw_stats.get("totalPremium") or 0)
-            _tot_fees = float(_raw_stats.get("Total fees") or _raw_stats.get("totalFees") or 0)
-            _cagr_v   = float(_raw_stats.get("CAGR") or _raw_stats.get("cagr") or 0)
-            _used_c   = cap if cap else float(_raw_stats.get("Used capital") or _raw_stats.get("usedCapital") or 1)
-
-            _opts_qty = int((st.session_state.get("opts_params") or {}).get("quantity", 1))
-            _opts_direction = (st.session_state.get("opts_params") or {}).get("direction", "Sell")
-            # For BUY (long) strategies: API returns per-1-contract premium. Multiply by qty for total position.
-            # For SELL (short) strategies: API already returns total-position premium. Do NOT multiply again.
-            if _opts_qty > 1 and _avg_prem != 0 and _opts_direction.lower() in ("buy", "long"):
-                _avg_prem *= _opts_qty
-            if _opts_qty > 1 and _tot_prem != 0 and _opts_direction.lower() in ("buy", "long"):
-                _tot_prem *= _opts_qty
-
-            # For SELL strategies the API returns Total premium as the credit received (should be positive).
-            # If the API returns a negative value for a SELL strategy, flip the sign.
-            if _opts_direction.lower() == "sell" and _tot_prem < 0:
-                _tot_prem = abs(_tot_prem)
-                _avg_prem = abs(_avg_prem)
-
-            # Per-trade bar chart
-            if _raw_trials:
-                import plotly.graph_objects as go
-                _bar_pls   = []
-                _bar_dates = []
-                for _t in _raw_trials[:200]:
-                    _t_pl  = float(_t.get("profitLoss") or _t.get("profit_loss") or 0)
-                    _t_dt  = str(_t.get("openDateTime") or _t.get("entryDate") or _t.get("entry_date") or "")[:10]
-                    _bar_pls.append(_t_pl)
-                    _bar_dates.append(_t_dt or f"Trade {len(_bar_dates)+1}")
-
-                _bar_colors = ["#10B981" if p >= 0 else "#EF4444" for p in _bar_pls]
-                fig2 = go.Figure(go.Bar(
-                    x=_bar_dates, y=_bar_pls,
-                    marker_color=_bar_colors,
-                    name="Profit/loss per trade",
-                ))
-                fig2.update_layout(
-                    template="plotly_dark",
-                    paper_bgcolor="#0D1B2A",
-                    plot_bgcolor="#0D1B2A",
-                    title=dict(text="Profit / loss for all trades", font=dict(size=12, color="#94A3B8")),
-                    margin=dict(l=50, r=20, t=40, b=40),
-                    height=240,
-                    yaxis=dict(tickprefix="$", tickfont=dict(size=10)),
-                    xaxis=dict(tickfont=dict(size=9)),
-                    showlegend=False,
-                )
-                st.plotly_chart(fig2, use_container_width=True)
-
-            # Stats grid in 3 columns
-            def _stat_row(label, value, color="#F1F5F9"):
-                return (
-                    f'<div style="color:#94A3B8;font-size:.77rem">{label}</div>'
-                    f'<div style="color:{color};font-weight:700;font-size:.82rem">{value}</div>'
-                )
-
-            dc1, dc2, dc3 = st.columns(3)
-            with dc1:
-                st.markdown(
-                    f'<div style="background:#0A2540;border:1px solid #1E4D7A;border-radius:8px;padding:.9rem 1rem">'
-                    f'<div style="display:grid;grid-template-columns:auto 1fr;gap:.3rem .7rem;align-items:center">'
-                    + _stat_row("Number of trades",        str(_n_tr))
-                    + _stat_row("Trades with profits",     str(_n_wins), "#10B981")
-                    + _stat_row("Profit rate",             f"{_pr_rate:.0f}%", "#10B981" if _pr_rate > 0 else "#94A3B8")
-                    + _stat_row("Largest individual profit", f"${_lg_prof:+,.2f}", "#10B981" if _lg_prof >= 0 else "#EF4444")
-                    + _stat_row("Trades with losses",      str(_n_loss), "#EF4444")
-                    + _stat_row("Loss rate",               f"{_lr_rate:.0f}%", "#EF4444" if _lr_rate > 0 else "#94A3B8")
-                    + _stat_row("Largest individual loss", f"${_lg_loss:+,.2f}", "#EF4444" if _lg_loss < 0 else "#94A3B8")
-                    + f'</div></div>',
-                    unsafe_allow_html=True,
-                )
-            with dc2:
-                _rp_color  = "#10B981" if _avg_ret_pct >= 0 else "#EF4444"
-                _pnl_color = "#10B981" if _avg_pnl_dollar >= 0 else "#EF4444"
-                # Premium capture rate: only meaningful for SELL strategies
-                _det_direction = (st.session_state.get("opts_params") or {}).get("direction", "Sell")
-                _is_sell_det = _det_direction.lower() == "sell"
-                _prem_cap_pct = (float(opts.get("profit_loss") or 0) / _tot_prem * 100) if (_tot_prem and _is_sell_det) else 0
-                _prem_cap_color = "#10B981" if _prem_cap_pct >= 0 else "#EF4444"
-                st.markdown(
-                    f'<div style="background:#0A2540;border:1px solid #1E4D7A;border-radius:8px;padding:.9rem 1rem">'
-                    f'<div style="display:grid;grid-template-columns:auto 1fr;gap:.3rem .7rem;align-items:center">'
-                    + _stat_row("Avg. return per trade",      f"{_avg_ret_pct:+.2f}%" if _avg_ret_pct else "---", _rp_color)
-                    + _stat_row("Avg. days in trade",         f"{_avg_days:.1f}" if _avg_days else "1")
-                    + _stat_row("Avg. BPR per trade",         f"${_avg_bpr:,.2f}" if _avg_bpr else "---")
-                    + _stat_row("Avg. premium",               f"${_avg_prem:+,.2f}" if _avg_prem else "---")
-                    + _stat_row("Avg. profit/loss per trade", f"${_avg_pnl_dollar:+,.2f}" if _avg_pnl_dollar else "---", _pnl_color)
-                    + _stat_row("Avg. win size",              f"${_avg_win:+,.2f}" if _avg_win else "$0")
-                    + _stat_row("Avg. loss size",             f"${_avg_ls:+,.2f}" if _avg_ls else "---", "#EF4444")
-                    + (_stat_row("Premium capture rate", f"{_prem_cap_pct:+,.2f}%", _prem_cap_color) if _is_sell_det else _stat_row("Premium capture rate", "N/A (Buy strategy)", "#64748B"))
-                    + f'</div></div>',
-                    unsafe_allow_html=True,
-                )
-            with dc3:
-                _pnl_v2   = float(opts.get("profit_loss") or 0)
-                _roc2     = (_pnl_v2 / _used_c * 100) if _used_c else 0
-                _pnl_c    = "#10B981" if _pnl_v2 >= 0 else "#EF4444"
-                _roc_c    = "#10B981" if _roc2 >= 0 else "#EF4444"
-                st.markdown(
-                    f'<div style="background:#0A2540;border:1px solid #1E4D7A;border-radius:8px;padding:.9rem 1rem">'
-                    f'<div style="display:grid;grid-template-columns:auto 1fr;gap:.3rem .7rem;align-items:center">'
-                    + _stat_row("Total profit/loss",        f"${_pnl_v2:+,.2f}", _pnl_c)
-                    + _stat_row("Used capital",             f"${_used_c:,.2f}")
-                    + _stat_row("Return on used capital",   f"{_roc2:.1f}%", _roc_c)
-                    + _stat_row("CAGR",                     f"{_cagr_v:.1f}%" if _cagr_v else "---")
-                    + _stat_row("MAR ratio",                f"{_mar:.2f}" if _mar else "---")
-                    + _stat_row("Max drawdown",             f"{_raw_max_dd:.2f}%", "#EF4444")
-                    + _stat_row("Total premium",            f"${_tot_prem:+,.2f}" if _tot_prem else "---")
-                    + _stat_row("Total fees",               f"${_tot_fees:.2f}" if _tot_fees else "---")
-                    + f'</div></div>',
-                    unsafe_allow_html=True,
-                )
-
-        # ── LOGS TAB ─────────────────────────────────────────────────────────
-        with _tt_tab_log:
-            _log_t1, _log_t2, _log_t3, _log_t4 = st.tabs(["Trades", "Orders", "Transactions", "Daily Settlement"])
-
-            # ── Trades sub-tab ────────────────────────────────────────────────
-            with _log_t1:
-                if _raw_trials:
-                    import pandas as pd
-                    _trade_rows = []
-                    for _i, _t in enumerate(_raw_trials, 1):
-                        _t_open   = str(_t.get("openDateTime") or _t.get("entryDate") or _t.get("entry_date") or "")[:10]
-                        _t_close  = str(_t.get("closeDateTime") or _t.get("exitDate") or _t.get("exit_date") or "")[:10]
-                        _t_pl     = float(_t.get("profitLoss") or _t.get("profit_loss") or 0)
-                        _t_prem_raw = _t.get("initialPremium") or _t.get("premium") or _t.get("openPremium")
-                        _t_fees_raw = _t.get("fees") or _t.get("totalFees")
-                        _t_bpr_raw  = _t.get("buyingPowerReduction") or _t.get("buyingPower")
-                        _t_roi_raw  = _t.get("returnOnInvestment") or _t.get("roi")
-                        _t_reason   = str(_t.get("exitReason") or _t.get("closeReason") or _t.get("exit_reason") or "---").replace("_", " ")
-                        _t_prem     = float(_t_prem_raw) if _t_prem_raw is not None else None
-                        _t_fees     = float(_t_fees_raw) if _t_fees_raw is not None else None
-                        _t_bpr      = float(_t_bpr_raw)  if _t_bpr_raw  is not None else None
-                        _t_roi      = float(_t_roi_raw)  if _t_roi_raw  is not None else None
-                        _trade_rows.append({
-                            "#":            _i,
-                            "Opened":       _t_open,
-                            "Closed":       _t_close,
-                            "Premium":      f"${_t_prem:+,.2f}" if _t_prem is not None else "---",
-                            "Fees":         f"${_t_fees:.2f}"   if _t_fees is not None else "---",
-                            "Buying Power": f"${_t_bpr:,.2f}"   if _t_bpr  is not None else "---",
-                            "Profit/Loss":  f"${_t_pl:+,.2f}",
-                            "Close Reason": _t_reason,
-                            "ROI":          f"{_t_roi:.2f}%"    if _t_roi  is not None else "---",
-                        })
-                    df_trades = pd.DataFrame(_trade_rows)
-                    st.dataframe(df_trades, use_container_width=True, hide_index=True,
-                                 column_config={"#": st.column_config.NumberColumn(width="small")})
-                    st.caption(f"Total: {len(_raw_trials)} trade(s). Entries and exits executed at mid price, 15 min before market close.")
-                else:
-                    st.info("No per-trade data returned by this backtest run.")
-
-            # ── Orders sub-tab ────────────────────────────────────────────────
-            with _log_t2:
-                _orders_raw = (
-                    _res_raw.get("orders")
-                    or _res_raw.get("orderHistory")
-                    or []
-                )
-                if _orders_raw:
-                    import pandas as pd
-                    st.dataframe(pd.DataFrame(_orders_raw), use_container_width=True, hide_index=True)
-                else:
-                    st.info("No order-level data returned by the API for this backtest.")
-
-            # ── Transactions sub-tab ──────────────────────────────────────────
-            with _log_t3:
-                if _txn_rows:
-                    import pandas as pd
-                    _txn_display = []
-                    for _j, _tx in enumerate(_txn_rows, 1):
-                        _txn_display.append({
-                            "#":          _j,
-                            "Date":       str(_tx.get("date") or _tx.get("Date") or "")[:10],
-                            "Time":       str(_tx.get("time") or _tx.get("Time") or "---"),
-                            "Trade No.":  _tx.get("tradeNumber") or _tx.get("trade_number") or "---",
-                            "Type":       str(_tx.get("type") or _tx.get("transactionType") or "---").replace("_", " "),
-                            "Instrument": str(_tx.get("instrument") or _tx.get("description") or "---"),
-                            "Price":      f"${float(_tx.get('price') or 0):,.2f}",
-                            "Quantity":   _tx.get("quantity") or 1,
-                            "Value":      f"${float(_tx.get('value') or _tx.get('amount') or 0):,.2f}",
-                            "Effect":     str(_tx.get("effect") or _tx.get("debitCredit") or "---"),
-                            "Fees":       f"${float(_tx.get('fees') or 0):.3f}",
-                        })
-                    st.dataframe(pd.DataFrame(_txn_display), use_container_width=True, hide_index=True)
-                else:
-                    _txn_auto = []
-                    for _i2, _t2 in enumerate(_raw_trials, 1):
-                        _t2_open  = str(_t2.get("openDateTime") or _t2.get("entryDate") or "")[:10]
-                        _t2_close = str(_t2.get("closeDateTime") or _t2.get("exitDate") or "")[:10]
-                        _t2_prem  = float(_t2.get("initialPremium") or _t2.get("premium") or 0)
-                        _t2_cl_px = float(_t2.get("closePremium") or _t2.get("exitPremium") or 0)
-                        _t2_fees  = float(_t2.get("fees") or 0)
-                        _t2_instr = str(_t2.get("instrument") or _t2.get("description") or f"{symbol} option")
-                        _txn_auto.append({
-                            "#": (_i2 * 2) - 1, "Date": _t2_open, "Time": "EOD",
-                            "Trade No.": _i2, "Type": "buy to open",
-                            "Instrument": _t2_instr,
-                            "Price": f"${_t2_prem:,.2f}", "Quantity": 1,
-                            "Value": f"${_t2_prem:,.2f}", "Effect": "debit",
-                            "Fees": f"${_t2_fees/2:.3f}",
-                        })
-                        if _t2_close:
-                            _txn_auto.append({
-                                "#": _i2 * 2, "Date": _t2_close, "Time": "EOD",
-                                "Trade No.": _i2, "Type": "sell to close",
-                                "Instrument": _t2_instr,
-                                "Price": f"${_t2_cl_px:,.2f}", "Quantity": 1,
-                                "Value": f"${_t2_cl_px:,.2f}", "Effect": "credit",
-                                "Fees": f"${_t2_fees/2:.3f}",
-                            })
-                    if _txn_auto:
-                        import pandas as pd
-                        st.dataframe(pd.DataFrame(_txn_auto), use_container_width=True, hide_index=True)
-                        st.caption("Constructed from trial data — exact order-level detail requires API support.")
-                    else:
-                        st.info("No transaction data available for this backtest run.")
-
-            # ── Daily Settlement sub-tab ───────────────────────────────────────
-            with _log_t4:
-                if _daily_rows:
-                    import pandas as pd
-                    _ds_display = []
-                    for _dr2 in _daily_rows:
-                        _dr_date = str(_dr2.get("date") or _dr2.get("Date") or "")[:10]
-                        _dr_prog = _dr2.get("progress") or _dr2.get("backtestProgress") or "---"
-                        _dr_tpl  = float(_dr2.get("totalProfitLoss") or _dr2.get("total_profit_loss") or _dr2.get("Total profit/loss") or 0)
-                        _dr_nl   = float(_dr2.get("netLiquidity") or _dr2.get("net_liquidity") or _dr2.get("Net liquidity") or 0)
-                        _dr_dd   = float(_dr2.get("drawdown") or _dr2.get("Drawdown") or 0)
-                        _dr_roi  = float(_dr2.get("returnOnInvestment") or _dr2.get("roi") or _dr2.get("ROI") or 0)
-                        _ds_display.append({
-                            "Date":              _dr_date,
-                            "Backtest Progress": f"{_dr_prog}%" if isinstance(_dr_prog, (int, float)) else str(_dr_prog),
-                            "Total P&L":         f"${_dr_tpl:+,.2f}",
-                            "Net Liquidity":     f"${_dr_nl:,.2f}",
-                            "Drawdown":          f"{_dr_dd:.2f}%",
-                            "ROI":               f"{_dr_roi:.2f}%",
-                        })
-                    st.dataframe(pd.DataFrame(_ds_display), use_container_width=True, hide_index=True)
-                else:
-                    # Build calendar-day daily settlement from trial data.
-                    # Shows every day from bt_start to bt_end (including weekends, matching TastyTrade).
-                    import datetime as _dtm
-                    _ds_from_trials = []
-                    _used_cap_ds = float(cap) if cap else float(_raw_stats.get("Used capital") or _raw_stats.get("usedCapital") or 0)
-
-                    # Build a map: exit_date → cumulative P&L realized on that day
-                    _exit_pl_map: dict = {}
-                    for _dt3 in _raw_trials:
-                        _exit_d3 = str(_dt3.get("closeDateTime") or _dt3.get("exitDate") or _dt3.get("exit_date") or "")[:10]
-                        _pl3 = float(_dt3.get("profitLoss") or _dt3.get("profit_loss") or 0)
-                        if _exit_d3:
-                            _exit_pl_map[_exit_d3] = _exit_pl_map.get(_exit_d3, 0.0) + _pl3
-
-                    # Determine date range from backtest_range field or fallback to trial dates
-                    _br = opts.get("backtest_range", "") or ""
-                    _bt_s_str = _br.split("→")[0].strip() if "→" in _br else ""
-                    _bt_e_str = _br.split("→")[-1].strip() if "→" in _br else ""
-                    # Fallback: use min/max trial dates
-                    if not _bt_s_str or not _bt_e_str:
-                        _all_open  = [str(_t.get("openDateTime") or _t.get("entryDate") or "")[:10] for _t in _raw_trials if _t.get("openDateTime") or _t.get("entryDate")]
-                        _all_close = [str(_t.get("closeDateTime") or _t.get("exitDate") or "")[:10] for _t in _raw_trials if _t.get("closeDateTime") or _t.get("exitDate")]
-                        _bt_s_str  = min(_all_open) if _all_open else ""
-                        _bt_e_str  = max(_all_close) if _all_close else ""
-
-                    try:
-                        _start_dt = _dtm.date.fromisoformat(_bt_s_str)
-                        _end_dt   = _dtm.date.fromisoformat(_bt_e_str)
-                        _cum_pl   = 0.0
-                        _nl_peak  = _used_cap_ds
-                        _cur_dt   = _start_dt
-                        while _cur_dt <= _end_dt:
-                            _d_str   = str(_cur_dt)
-                            _day_pl  = _exit_pl_map.get(_d_str, 0.0)
-                            _cum_pl += _day_pl
-                            _nl_now  = _used_cap_ds + _cum_pl
-                            if _nl_now > _nl_peak:
-                                _nl_peak = _nl_now
-                            _dd_day  = ((_nl_peak - _nl_now) / _nl_peak * 100) if _nl_peak > 0 else 0
-                            _roi_day = (_cum_pl / _used_cap_ds * 100) if _used_cap_ds else 0
-                            _ds_from_trials.append({
-                                "Date":            _d_str,
-                                "Total profit/loss": f"${_cum_pl:+,.2f}",
-                                "Net liquidity":   f"${_nl_now:,.2f}",
-                                "Drawdown":        f"{_dd_day:.2f}%",
-                                "ROI":             f"{_roi_day:.2f}%",
-                            })
-                            _cur_dt += _dtm.timedelta(days=1)
-                    except (ValueError, TypeError):
-                        pass
-
-                    if _ds_from_trials:
-                        import pandas as pd
-                        st.dataframe(pd.DataFrame(_ds_from_trials), use_container_width=True, hide_index=True)
-                        st.caption("Constructed from trial exit dates — mark-to-market of open positions not included (API limitation).")
-                    else:
-                        st.info("No daily settlement data available for this backtest run.")
-
-    # ── Underlying Stock Reference (informational only — collapsed) ──────────
-    with st.expander("Underlying Stock Price Reference (informational only)", expanded=False):
-        st.caption("Not used for options accuracy — shown for context only.")
-        if val_ok:
-            orig_p = float(val.get("origin_price") or 0)
-            tgt_p  = float(val.get("target_price") or 0)
-            ret_p  = float(val.get("actual_return_pct") or 0)
-            cap_v  = float(val.get("actual_final_capital") or cap)
-            pl_v   = float(val.get("actual_total_pl") or 0)
-            act_dec_ref = val.get("actual_decision", "---")
-            st.markdown(
-                _table([
-                    ("Underlying Stock Decision", _decision_badge(act_dec_ref)),
-                    ("Origin Price",             _fmt(orig_p, "$")),
-                    ("Target Price",             _fmt(tgt_p, "$")),
-                    ("Actual Stock Return %",    _sign_fmt(ret_p, suffix="%")),
-                    ("Stock Final Capital",      _fmt(cap_v, "$")),
-                    ("Stock Total P&L",          _sign_fmt(pl_v)),
-                ]),
-                unsafe_allow_html=True,
-            )
-        else:
-            st.info("Stock validation did not succeed.")
+    else:
+        _warn_card("Underlying stock reference unavailable — stock validation did not succeed.")
 
     # ── Final Decision Board ──────────────────────────────────────────────────
     _section_header(None, "Final Decision Board")
@@ -4485,9 +3245,7 @@ def _render_options_results():
         ai_dir  = "positive" if ai.get("predicted_return_pct", 0) >= 2 else (
                   "negative" if ai.get("predicted_return_pct", 0) <= -2 else "neutral")
         bt_dir  = "positive" if bt_pnl > 0 else ("negative" if bt_pnl < 0 else "neutral")
-        # REVIEW means AI was uncertain — it cannot be a MATCH with any backtest direction
-        _ai_is_review = str(ai_dec).upper() == "REVIEW"
-        bt_agree = (ai_dir == bt_dir) and not _ai_is_review
+        bt_agree = ai_dir == bt_dir
         agreement  = "MATCH" if bt_agree else "CONFLICT"
         final_dec  = ai_dec if bt_agree else "REVIEW"
     else:
@@ -4576,7 +3334,8 @@ def _render_options_results():
     if val_ok:
         _render_known_answer_audit(val, cap)
 
-    # ── Auth status + diagnostics (no section header) ────────────────────────
+    # ── Section 9 — Developer Debug ───────────────────────────────────────────
+    _section_header(9, "Developer Debug", "Raw JSON, hash proof, backtest payload, no-leakage proof")
     fu  = ai.get("features_used", {}) or {}
     mom = ai.get("_momentum_signals", {}) or {}
 
@@ -4631,7 +3390,7 @@ def _render_options_results():
                 ("Run ID",              f"<code>{run_id}</code>"),
                 ("Run Timestamp (UTC)", run_ts),
                 ("Input Hash",          f'<code style="font-size:.68rem">{hash_v}</code>'),
-                ("AI Output Hash",      f'<code style="font-size:.68rem">{ai.get("gemini_output_hash", "---")}</code>'),
+                ("AI Output Hash",      f'<code style="font-size:.68rem">{ai.get("stock_prediction_input_hash", "---")}</code>'),
                 ("Hash Match",          "YES" if ai.get("stock_prediction_input_hash") == hash_v else "NO"),
                 ("Leakage Check",       ai.get("leakage_check", "---")),
                 ("Bars visible to AI",  f'{fu.get("bars_used", "---")} (cutoff {origin})'),
@@ -4646,7 +3405,7 @@ def _render_options_results():
             _table([
                 ("Backtest start",      origin),
                 ("Backtest end",        target),
-                ("Backtest window",     f"{origin} → {target} (prediction origin to target)"),
+                ("Backtest = ctx_start?", "NO (correctly uses origin_date)" if origin != ctx_start else "YES (BUG!)"),
                 ("Backtest status",     opts_status),
                 ("Backtest ID",         opts.get("backtest_id", "N/A")),
                 ("Options P&L",         _sign_fmt(opts.get("profit_loss")) if opts_status == "SUCCESS" else "N/A"),
@@ -4655,6 +3414,116 @@ def _render_options_results():
             ]),
             unsafe_allow_html=True,
         )
+
+    with st.expander("StockPredictionInput JSON"):
+        st.json(spi)
+    with st.expander("Options Params"):
+        st.json(opts_p)
+    _opts_vtype = opts.get("validation_type", "")
+    _bt_payload_title = (
+        "Delta Proxy Payload Sent To Tastytrade (APPROXIMATE — not exact strike)"
+        if _opts_vtype == "DELTA_PROXY_APPROXIMATE" else
+        "Backtest Payload Sent To Tastytrade"
+    )
+    if opts.get("exact_validation_status") == "UNSUPPORTED_BY_PROVIDER":
+        with st.expander("Exact Strike Request (UNSUPPORTED by provider — not sent)"):
+            st.json({
+                "contract_selection_method": "EXACT_STRIKE",
+                "requested_strike":          opts.get("requested_strike"),
+                "expiry_date":               opts.get("expiry_date"),
+                "exact_validation_status":   "UNSUPPORTED_BY_PROVIDER",
+                "eligible_for_exact_accuracy": False,
+                "note":                      opts.get("exact_validation_note", "Exact strike backtesting unsupported by Tastytrade API."),
+            })
+    with st.expander(_bt_payload_title):
+        _bt_payload_display = bt_payload if bt_payload else {"note": "Payload not stored (tastytrade unavailable)"}
+        if _opts_vtype == "DELTA_PROXY_APPROXIMATE":
+            _bt_payload_display = dict(_bt_payload_display) if isinstance(_bt_payload_display, dict) else {}
+            _bt_payload_display["_proxy_note"] = (
+                "This payload uses delta=50 (ATM proxy) because Tastytrade does not support "
+                "fixed-strike backtesting. This is NOT an exact strike result."
+            )
+        st.json(_bt_payload_display)
+    with st.expander("User Input Snapshot vs Effective Input (date binding proof)"):
+        _snap_o = st.session_state.get("user_input_snapshot", {})
+        _rctx_o = st.session_state.get("run_context", {})
+        _ibw_o  = _rctx_o.get("input_binding_warning")
+        if _ibw_o:
+            st.error(_ibw_o)
+        _uo1, _uo2 = st.columns(2)
+        with _uo1:
+            st.markdown("**User-Entered Inputs (exact, captured at submit)**")
+            st.json(_snap_o)
+        with _uo2:
+            st.markdown("**Effective Inputs Used by AI (after provider constraints)**")
+            st.json({
+                "effective_ctx_start":    _rctx_o.get("effective_ctx_start") or _snap_o.get("historical_context_start_date", "same as requested"),
+                "requested_ctx_start":    _rctx_o.get("requested_ctx_start") or _snap_o.get("historical_context_start_date"),
+                "ctx_start_gap_days":     _rctx_o.get("ctx_start_gap_days", 0),
+                "provider_status":        _rctx_o.get("provider_status", {}),
+                "input_binding_warning":  _ibw_o or "NONE — inputs matched",
+            })
+    _run_ctx_d = st.session_state.get("run_context", {})
+    _tt_dbg_d  = _run_ctx_d.get("tastytrade_debug", {})
+    with st.expander("Tastytrade Auth Debug (credential source, auth chain, backtest chain)"):
+        _cred_src = _tt_dbg_d.get("credential_source") or (
+            "REFRESH_TOKEN" if os.getenv("TASTYTRADE_REFRESH_TOKEN")
+            else "ACCESS_TOKEN" if os.getenv("TASTYTRADE_ACCESS_TOKEN")
+            else "MISSING"
+        )
+        st.markdown(
+            _table([
+                ("Credential Source",     _cred_src),
+                ("TT Token Refresh",      _tt_dbg_d.get("token_refresh_status", "NOT_RUN")),
+                ("Customer Check",        _tt_dbg_d.get("customer_check_status", "NOT_RUN")),
+                ("Backtest Create",       _tt_dbg_d.get("backtest_create", "NOT_RUN")),
+                ("Backtest Poll",         _tt_dbg_d.get("backtest_poll", "NOT_RUN")),
+                ("Final TT Status",       opts_status),
+                ("Accuracy Skip Reason",  opts.get("accuracy_skip_reason", "NONE")),
+                ("Accuracy Saved",        str(saved)),
+            ]),
+            unsafe_allow_html=True,
+        )
+    with st.expander("Run Context (provider status for this run)"):
+        st.json(_run_ctx_d)
+    with st.expander("AI Prediction Raw JSON"):
+        st.json({k: v for k, v in ai.items() if k != "_momentum_signals"})
+    with st.expander("Momentum Signals Used by AI"):
+        st.json(mom)
+    with st.expander("Options Backtest Result"):
+        st.json(opts)
+    with st.expander("Actual Stock Validation Result"):
+        st.json({k: v for k, v in val.items() if k != "comparison"} if val else {})
+    with st.expander("Comparison Raw JSON"):
+        st.json(cmp)
+    with st.expander("AI Context Bars (first/last 3, no leakage proof)"):
+        ctx_bars_all = [b for b in hist if ctx_start <= b["date"] <= origin]
+        st.json({
+            "n_bars":    len(ctx_bars_all),
+            "first_3":   ctx_bars_all[:3],
+            "last_3":    ctx_bars_all[-3:],
+            "ctx_start": ctx_start,
+            "cutoff":    origin,
+            "target":    target,
+            "note":      "target-date price was NOT in these bars",
+        })
+    _opts_sig = ai.get("signal_scores", {})
+    if _opts_sig:
+        with st.expander("Signal Score Engine (bull/bear/uncertainty)"):
+            _bull = _opts_sig.get("bullish_score", 0)
+            _bear = _opts_sig.get("bearish_score", 0)
+            _unc  = _opts_sig.get("uncertainty_score", 0)
+            _dom  = _opts_sig.get("dominant", "---")
+            _doms = _opts_sig.get("dominant_score", 0)
+            st.markdown(
+                _table([
+                    ("Bullish Score",    f'<b style="color:#10B981">{_bull}/100</b>'),
+                    ("Bearish Score",    f'<b style="color:#EF4444">{_bear}/100</b>'),
+                    ("Uncertainty Score",f'<b style="color:#F59E0B">{_unc}/100</b>'),
+                    ("Dominant Signal",  f'<b>{_dom.upper()} ({_doms}/100)</b>'),
+                ]),
+                unsafe_allow_html=True,
+            )
 
     _render_decision_distribution_diagnostics()
 
@@ -4755,43 +3624,9 @@ def _render_known_answer_audit(val: dict, initial_capital: float):
 def _render_records():
     _section_header(
         6, "Accuracy Records",
-        "stock_prediction_evaluation_runs.jsonl — all records counted, last 20 shown",
+        "stock_prediction_evaluation_runs.jsonl -- last 20 runs",
     )
-
-    # Refresh button clears session-state record cache so next read hits disk fresh
-    _r6col1, _r6col2 = st.columns([5, 1])
-    with _r6col2:
-        if st.button("Refresh Accuracy", key="refresh_accuracy_btn"):
-            st.session_state.pop("_accuracy_records_cache", None)
-            st.rerun()
-
-    # File metadata banner
-    from pathlib import Path as _P6
-    import os as _os6, datetime as _dt6
-    _eval_path = _P6(__file__).resolve().parent / "stock_prediction_evaluation_runs.jsonl"
-    if _eval_path.exists():
-        _fmtime = _dt6.datetime.utcfromtimestamp(_os6.path.getmtime(_eval_path)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        _flines = sum(1 for _ in open(_eval_path, encoding="utf-8"))
-        with _r6col1:
-            st.caption(f"File: `{_eval_path.name}` | Last modified (UTC): `{_fmtime}` | Lines on disk: `{_flines}` | Loaded at: `{_dt6.datetime.utcnow().strftime('%H:%M:%SZ')}`")
-    else:
-        with _r6col1:
-            st.caption("No accuracy file found yet.")
-
-    # Current run badge
-    _cur_run_id = st.session_state.get("run_id")
-    _saved_flag = st.session_state.get("saved")
-    _save_msg   = st.session_state.get("save_msg", "")
-    if _cur_run_id:
-        if _saved_flag is True:
-            st.success(f"Current Run ({_cur_run_id}): SAVED to accuracy log — will appear in table below.")
-        elif _saved_flag is False:
-            _skip_r = st.session_state.get("opts_result", {}).get("accuracy_skip_reason") or "see run output"
-            st.info(f"Current Run ({_cur_run_id}): NOT SAVED — {_skip_r}")
-        # else pending/no info
-
-    # Load all records for accurate summary stats, then show last 20 in table
-    records = load_stock_prediction_records(limit=10000)
+    records = load_stock_prediction_records(limit=50)
     pending_count = count_pending_predictions()
 
     summ = get_accuracy_summary(records) if records else {}
@@ -4809,18 +3644,6 @@ def _render_records():
         _info_card("No validated accuracy records yet. Complete a historical validation to create the first record.")
         return
 
-    # Check if current run is included in table
-    _cur_run_id2 = st.session_state.get("run_id", "")
-    _run_ids_in_table = [r.get("run_id", "") for r in records[:20]]
-    if _cur_run_id2 and _saved_flag is True:
-        if _cur_run_id2 in _run_ids_in_table:
-            st.success(f"Current run {_cur_run_id2} IS included in table below.")
-        else:
-            st.warning(
-                f"Current run {_cur_run_id2} was saved but is NOT yet visible in the table. "
-                "Click 'Refresh Accuracy' button above to reload from disk."
-            )
-
     import pandas as pd
     rows = []
     for r in records[:20]:
@@ -4828,11 +3651,9 @@ def _render_records():
         ap  = r.get("ai_prediction") or {}
         av  = r.get("actual_validation") or {}
         cmp = r.get("comparison") or {}
-        _rid = r.get("run_id", "")
-        _cur_marker = " ◀ CURRENT" if _rid == _cur_run_id2 else ""
         rows.append({
             "Timestamp":       (r.get("timestamp") or "")[:19],
-            "Run ID":          _rid + _cur_marker,
+            "Run ID":          r.get("run_id", ""),
             "Symbol":          sp.get("symbol", ""),
             "Origin Date":     sp.get("prediction_origin_date", ""),
             "Target Date":     sp.get("target_date", ""),
@@ -5070,8 +3891,6 @@ def _render_calibration_dashboard():
             with st.expander("Per-Symbol Decision Match %"):
                 sym_data = batch_sum["match_by_symbol"]
                 for sym, d in sorted(sym_data.items(), key=lambda x: x[1].get("match_pct", 0)):
-                    if d.get("runs", 0) == 0:
-                        continue  # skip symbols with no completed runs
                     st.write(f"**{sym}**: {d['match_pct']}% ({d['matches']}/{d['runs']} runs)")
 
         # Recommendations

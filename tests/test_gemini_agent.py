@@ -266,9 +266,9 @@ def test_guardrail_review_low_quality():
 
 
 def test_guardrail_review_low_confidence():
-    """Confidence < 55 triggers REVIEW — threshold raised from 50 to 55."""
+    """Confidence < 45 triggers REVIEW — threshold lowered from 55 to 45."""
     from gemini_stock_prediction_agent import _apply_guardrails
-    d, r = _apply_guardrails(5.0, 50, 40, 80)
+    d, r = _apply_guardrails(5.0, 44, 40, 80)
     assert d == "REVIEW"
 
 

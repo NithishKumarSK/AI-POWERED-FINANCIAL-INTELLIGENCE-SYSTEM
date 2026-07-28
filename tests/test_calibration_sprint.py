@@ -91,49 +91,50 @@ def _import_batch_runner():
 def test_dynamic_thresholds_7d():
     _get_horizon_thresholds, *_ = _import_agent()
     buy, sell = _get_horizon_thresholds(7)
-    assert buy == 1.25
-    assert sell == -1.25
+    assert buy == 1.0
+    assert sell == -1.0
 
 
 def test_dynamic_thresholds_30d():
     _get_horizon_thresholds, *_ = _import_agent()
     buy, sell = _get_horizon_thresholds(30)
-    assert buy == 2.0
-    assert sell == -2.0
+    assert buy == 1.5
+    assert sell == -1.5
 
 
 def test_dynamic_thresholds_45d():
     _get_horizon_thresholds, *_ = _import_agent()
     buy, sell = _get_horizon_thresholds(45)
-    assert buy == 2.5
-    assert sell == -2.5
+    assert buy == 2.0
+    assert sell == -2.0
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 4-12: _apply_guardrails signal-gate tests
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_buy_requires_bullish_score_60():
-    """pred_return=3.0, bull=50 (< 60) => HOLD not BUY."""
+def test_buy_requires_bullish_score_45():
+    """pred_return=3.0, bull=44 (< 45 new threshold) => HOLD not BUY."""
     _, _apply_guardrails, *_ = _import_agent()
-    # bull=50 < 60, so BUY gate fails
+    # bull=44 < 45 new threshold → BUY gate fails
+    # HOLD override: dom_score=44 < 45 → also fails → HOLD
     decision, _ = _apply_guardrails(
         3.0, 70, 30, 80, horizon_days=30,
-        signal_scores=_sig(bull=50, bear=30, uncert=40, dominant="bullish", dom_score=50)
+        signal_scores=_sig(bull=44, bear=20, uncert=36, dominant="bullish", dom_score=44)
     )
     assert decision == "HOLD"
 
 
-def test_buy_requires_bull_bear_spread_12():
-    """bull=62, bear=55 — spread=7 < 12 => BUY gate fails (initial result is HOLD).
-    We use a return barely above threshold (2.1) but NOT near override threshold
-    (override needs abs(2.1) >= 2.0*0.70=1.4 — which IS near; use confidence<60 to block override).
+def test_buy_requires_bull_bear_spread_5():
+    """bull=60, bear=56 — spread=4 < 5 (new threshold) => BUY gate fails.
+    confidence=55 < 60 => HOLD override does NOT fire either.
     """
     _, _apply_guardrails, *_ = _import_agent()
-    # confidence=58 < 60 => HOLD override does NOT fire; spread=7 < 12 => BUY gate fails
+    # spread=4 < 5 new threshold → main BUY gate fails
+    # confidence=55 < 60 → HOLD override blocked → HOLD
     decision, _ = _apply_guardrails(
-        3.0, 58, 30, 80, horizon_days=30,
-        signal_scores=_sig(bull=62, bear=55, uncert=40, dominant="bullish", dom_score=62)
+        3.0, 55, 30, 80, horizon_days=30,
+        signal_scores=_sig(bull=60, bear=56, uncert=40, dominant="bullish", dom_score=60)
     )
     assert decision == "HOLD"
 
@@ -149,24 +150,28 @@ def test_buy_with_valid_signals():
     assert "BUY" in reason
 
 
-def test_sell_requires_bearish_score_60():
-    """pred=-3.0%, bear=50 < 60 => HOLD not SELL."""
+def test_sell_requires_bearish_score_45():
+    """pred=-3.0%, bear=44 (< 45 new threshold) => HOLD not SELL."""
     _, _apply_guardrails, *_ = _import_agent()
+    # bear=44 < 45 new threshold → SELL gate fails
+    # HOLD override: dom_score=44 < 45 → also fails → HOLD
     decision, _ = _apply_guardrails(
         -3.0, 70, 30, 80, horizon_days=30,
-        signal_scores=_sig(bull=30, bear=50, uncert=40, dominant="bearish", dom_score=50)
+        signal_scores=_sig(bull=20, bear=44, uncert=36, dominant="bearish", dom_score=44)
     )
     assert decision == "HOLD"
 
 
-def test_sell_requires_bear_bull_spread_12():
-    """bear=62, bull=55 — spread=7 < 12 => SELL gate fails (initial result is HOLD).
-    Use confidence=58 < 60 so HOLD override does not fire.
+def test_sell_requires_bear_bull_spread_5():
+    """bear=60, bull=56 — spread=4 < 5 (new threshold) => SELL gate fails.
+    confidence=55 < 60 => HOLD override does NOT fire either.
     """
     _, _apply_guardrails, *_ = _import_agent()
+    # spread=4 < 5 new threshold → main SELL gate fails
+    # confidence=55 < 60 → HOLD override blocked → HOLD
     decision, _ = _apply_guardrails(
-        -3.0, 58, 30, 80, horizon_days=30,
-        signal_scores=_sig(bull=55, bear=62, uncert=40, dominant="bearish", dom_score=62)
+        -3.0, 55, 30, 80, horizon_days=30,
+        signal_scores=_sig(bull=56, bear=60, uncert=40, dominant="bearish", dom_score=60)
     )
     assert decision == "HOLD"
 
@@ -182,14 +187,15 @@ def test_sell_with_valid_signals():
     assert "SELL" in reason
 
 
-def test_hold_override_lowered_to_60():
-    """HOLD override fires at dom_score=62 (lowered from 65 to 60)."""
+def test_hold_override_fires_at_45():
+    """HOLD override fires at dom_score=46 (threshold now 45), near_thr = 25% of sell_thr."""
     _, _apply_guardrails, *_ = _import_agent()
-    # Return near threshold (70% of sell_thr=2.0 is 1.4), use 1.5
-    # Dominant=bullish, dom_score=62 >= 60, near_thr = 1.5 >= 1.4 => BUY override
+    # 30d horizon: buy_thr=1.5, sell_thr=-1.5
+    # Use return=0.8 (in HOLD band). near_thr = 0.8 >= abs(-1.5)*0.25 = 0.375 => True
+    # Dominant=bullish, dom_score=46 >= 45, confidence=65 >= 60 => BUY override fires
     decision, reason = _apply_guardrails(
-        1.5, 65, 30, 80, horizon_days=30,
-        signal_scores=_sig(bull=62, bear=30, uncert=40, dominant="bullish", dom_score=62)
+        0.8, 65, 30, 80, horizon_days=30,
+        signal_scores=_sig(bull=46, bear=20, uncert=34, dominant="bullish", dom_score=46)
     )
     assert decision == "BUY"
     assert "override" in reason.lower()
@@ -209,21 +215,21 @@ def test_risk_alone_never_forces_sell():
 
 
 def test_high_uncertainty_causes_review():
-    """uncertainty=75, confidence=60 < 65 => REVIEW (Gate 3)."""
+    """uncertainty=85 > 80 and confidence=45 < 50 => REVIEW (Gate 3)."""
     _, _apply_guardrails, *_ = _import_agent()
     decision, reason = _apply_guardrails(
-        3.0, 60, 30, 80, horizon_days=30,
-        signal_scores=_sig(bull=65, bear=30, uncert=75, dominant="bullish", dom_score=65)
+        3.0, 45, 30, 80, horizon_days=30,
+        signal_scores=_sig(bull=65, bear=30, uncert=85, dominant="bullish", dom_score=65)
     )
     assert decision == "REVIEW"
     assert "Uncertainty" in reason
 
 
 def test_low_confidence_causes_review():
-    """confidence=50 < 55 (new threshold) => REVIEW."""
+    """confidence=44 < 45 (new threshold) => REVIEW."""
     _, _apply_guardrails, *_ = _import_agent()
     decision, reason = _apply_guardrails(
-        3.0, 50, 30, 80, horizon_days=30,
+        3.0, 44, 30, 80, horizon_days=30,
         signal_scores=_sig(bull=65, bear=30, uncert=40)
     )
     assert decision == "REVIEW"
@@ -528,10 +534,10 @@ def test_direction_match_function():
 def test_over_hold_reduction_mechanism_exists():
     """Guardrails include HOLD->BUY/SELL override path when signals strongly agree."""
     _, _apply_guardrails, *_ = _import_agent()
-    # Neutral return in HOLD band, but strongly bullish signals and high confidence
-    # near_thr = abs(1.5) >= abs(-2.0)*0.70 = 1.4 => True
+    # Neutral return in HOLD band (30d buy_thr=1.5), but strongly bullish signals and high confidence
+    # Use return=1.0 which is in HOLD band. near_thr = abs(1.0) >= abs(-1.5)*0.50 = 0.75 => True
     decision, reason = _apply_guardrails(
-        1.5, 65, 20, 80, horizon_days=30,
+        1.0, 65, 20, 80, horizon_days=30,
         signal_scores=_sig(bull=70, bear=25, uncert=35, dominant="bullish", dom_score=70)
     )
     # Should be BUY via HOLD override

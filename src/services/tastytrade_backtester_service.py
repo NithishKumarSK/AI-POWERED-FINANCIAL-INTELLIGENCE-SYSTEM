@@ -64,7 +64,7 @@ def build_equity_option_short_put_payload(
         BacktestLeg(
             type="equity-option",
             direction="short",
-            quantity=quantity,
+            quantity=min(quantity, 10),  # Tastytrade limit: 1–10
             side="put",
             days_until_expiration=dte,
             strike_selection="delta",
@@ -85,24 +85,46 @@ def build_custom_legs_payload(
     start_date: str,
     end_date: str,
     legs: List[Dict[str, Any]],
+    entry_frequency: str = "every day",
+    exit_rule: str = "Exit at target date",
+    stop_loss_pct: Optional[float] = None,
+    take_profit_pct: Optional[float] = None,
+    exit_after_days: Optional[int] = None,
 ) -> BacktestPayload:
-    """Build a payload from user-supplied leg definitions."""
+    """Build a payload from user-supplied leg definitions.
+
+    entry_frequency maps to Tastytrade entryConditions.frequency.
+    Confirmed working: "every day", "on_exact_dte_match".
+    Unverified: "weekly", "monthly" — may default to daily at API level.
+
+    exit_rule maps to Tastytrade exitConditions.
+    Confirmed working: "Exit at target date" (empty dict = API default).
+    Best-effort: "Target profit 50%", "Stop loss 200%", "Exit after N days".
+    """
     parsed_legs = []
     for leg_dict in legs:
         parsed_legs.append(BacktestLeg(
             type=leg_dict.get("type", "equity-option"),
             direction=leg_dict.get("direction", "short"),
-            quantity=int(leg_dict.get("quantity", 1)),
+            quantity=min(int(leg_dict.get("quantity", 1)), 10),
             side=leg_dict.get("side", "put"),
             days_until_expiration=int(leg_dict.get("daysUntilExpiration", 45)),
             strike_selection=leg_dict.get("strikeSelection", "delta"),
             delta=int(leg_dict.get("delta", 30)),
+            percentage_otm=leg_dict.get("percentageOtm"),
+            price_offset=leg_dict.get("priceOffset"),
+            premium_amount=leg_dict.get("premium"),
         ))
     return BacktestPayload(
         symbol=symbol.upper(),
         start_date=start_date,
         end_date=to_iso_datetime(end_date),
         legs=parsed_legs,
+        entry_frequency=entry_frequency,
+        exit_rule=exit_rule,
+        stop_loss_pct=stop_loss_pct,
+        take_profit_pct=take_profit_pct,
+        exit_after_days=exit_after_days,
     )
 
 
@@ -110,8 +132,52 @@ def build_custom_legs_payload(
 # API calls
 # ---------------------------------------------------------------------------
 
+def _post_backtest(url: str, body: Dict[str, Any], headers: Dict[str, str]) -> Tuple[Optional[str], str]:
+    """Internal: POST one backtest body, return (backtest_id_or_None, error_str)."""
+    resp = requests.post(url, json=body, headers=headers, timeout=30)
+    log_api_call(logger, "TastytradeBacktester", "POST /backtests", resp.status_code)
+
+    if resp.status_code in (200, 201):
+        data = resp.json()
+        backtest_id = (
+            data.get("id")
+            or data.get("backtestId")
+            or data.get("data", {}).get("id")
+        )
+        if backtest_id:
+            logger.info(f"[TastytradeBacktester] Created backtest {backtest_id}")
+            return str(backtest_id), ""
+        return None, "Backtest created but no ID returned."
+
+    if resp.status_code == 429:
+        _ra = resp.headers.get("Retry-After") or resp.headers.get("X-RateLimit-Reset-After") or "unknown"
+        return None, f"RATE_LIMITED:429:retry_after={_ra}"
+
+    _err_body = ""
+    try:
+        _err_body = (resp.text or "")[:2000]
+    except Exception:
+        pass
+    _field_hint = ""
+    try:
+        _err_json = resp.json()
+        _err_msg = str(_err_json.get("message") or _err_json.get("error") or _err_json.get("errors") or "")
+        if _err_msg:
+            _field_hint = f" | API_MSG: {_err_msg[:400]}"
+    except Exception:
+        pass
+
+    return None, f"BACKTEST_HTTP_{resp.status_code}{_field_hint}:{_err_body}"
+
+
 def create_backtest(payload: BacktestPayload) -> Tuple[Optional[str], str]:
-    """POST /backtests — returns (backtest_id, error_message)."""
+    """POST /backtests — returns (backtest_id, error_message).
+
+    Auto-retry strategy when HTTP 400 from exitConditions:
+      Attempt 1: full payload (combined exit conditions as flat struct)
+      Attempt 2: take-profit only (proven single-condition format)
+      Attempt 3: no exit conditions (guaranteed safe fallback)
+    """
     token, err = get_access_token()
     if not token:
         return None, err or "No access token available."
@@ -121,22 +187,55 @@ def create_backtest(payload: BacktestPayload) -> Tuple[Optional[str], str]:
 
     try:
         body = payload.to_dict()
-        resp = requests.post(url, json=body, headers=headers, timeout=30)
-        log_api_call(logger, "TastytradeBacktester", "POST /backtests", resp.status_code)
+        bid, err_msg = _post_backtest(url, body, headers)
+        if bid:
+            return bid, ""
 
-        if resp.status_code in (200, 201):
-            data = resp.json()
-            backtest_id = (
-                data.get("id")
-                or data.get("backtestId")
-                or data.get("data", {}).get("id")
+        # Retry only on HTTP 400 (payload/format issues)
+        if "BACKTEST_HTTP_400" not in err_msg and "RATE_LIMITED" not in err_msg:
+            logger.error(
+                f"[TastytradeBacktester] HTTP non-400 error from POST /backtests. "
+                f"Payload sent: {str(body)[:800]}."
             )
-            if backtest_id:
-                logger.info(f"[TastytradeBacktester] Created backtest {backtest_id}")
-                return str(backtest_id), ""
-            return None, "Backtest created but no ID returned."
+            return None, err_msg
 
-        return None, f"Failed to create backtest: HTTP {resp.status_code}"
+        # ── Retry 2: take-profit only ────────────────────────────────────────
+        ec = body.get("exitConditions", {})
+        has_combined = bool(ec.get("profitPercentage") and ec.get("lossPercentage"))
+        if has_combined:
+            body2 = {
+                **body,
+                "exitConditions": {
+                    "type": "profit_percentage",
+                    "profitPercentage": ec["profitPercentage"],
+                },
+            }
+            logger.warning(
+                "[TastytradeBacktester] Combined exitConditions rejected (HTTP 400). "
+                "Retrying with take-profit only."
+            )
+            bid2, err2 = _post_backtest(url, body2, headers)
+            if bid2:
+                return bid2, ""
+            err_msg = err2  # carry forward latest error
+
+        # ── Retry 3: no exit conditions (guaranteed fallback) ────────────────
+        if body.get("exitConditions"):
+            body3 = {**body, "exitConditions": {}}
+            logger.warning(
+                "[TastytradeBacktester] Exit conditions rejected. "
+                "Retrying with empty exitConditions (API default expiry)."
+            )
+            bid3, err3 = _post_backtest(url, body3, headers)
+            if bid3:
+                return bid3, "EXIT_COND_DROPPED:" + err_msg
+            err_msg = err3
+
+        logger.error(
+            f"[TastytradeBacktester] All retry attempts failed. "
+            f"Last error: {err_msg[:400]}. Payload: {str(body)[:600]}"
+        )
+        return None, err_msg
 
     except Exception as exc:
         log_error(logger, "TastytradeBacktester", exc)
@@ -348,11 +447,12 @@ def run_options_backtest(
     quantity: int = 1,
     num_legs: int = 2,
     custom_legs: Optional[List[Dict[str, Any]]] = None,
+    entry_frequency: str = "every day",
 ) -> Dict[str, Any]:
     """Create, poll, validate, and return a complete options backtest."""
     # Build payload
     if custom_legs:
-        payload = build_custom_legs_payload(symbol, start_date, end_date, custom_legs)
+        payload = build_custom_legs_payload(symbol, start_date, end_date, custom_legs, entry_frequency=entry_frequency)
     else:
         payload = build_equity_option_short_put_payload(
             symbol, start_date, end_date, dte=dte, delta=delta,

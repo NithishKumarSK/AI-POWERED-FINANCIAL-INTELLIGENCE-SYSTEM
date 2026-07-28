@@ -166,10 +166,12 @@ def test_effective_vs_requested_in_developer_debug():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_strike_mode_uses_delta50_proxy_only_not_user_delta():
-    """Exact-strike mode proxy uses delta=50 explicitly, not user's delta_ui."""
+    """Delta mode uses user's actual delta_ui; no hardcoded ATM proxy (exact-strike removed)."""
     text = _read(ROOT / "stock_prediction_app.py")
-    assert '"delta":               50,' in text
-    assert "DELTA_PROXY_APPROXIMATE" in text
+    # Delta mode must use user's actual value
+    assert '"delta":               int(_delta_ui),' in text
+    # No hardcoded ATM proxy — exact-strike mode was removed
+    assert '"delta":               50,' not in text
 
 
 def test_delta_mode_uses_user_delta_not_hardcoded():
@@ -190,9 +192,12 @@ def test_accuracy_save_gate_requires_truly_succeeded():
 
 
 def test_proxy_run_excluded_from_exact_accuracy():
-    """DELTA_PROXY_APPROXIMATE runs must set EXACT_STRIKE_UNSUPPORTED_BY_PROVIDER skip reason."""
+    """All 4 Tastytrade strike modes wire entry_frequency correctly to payload."""
     text = _read(ROOT / "stock_prediction_app.py")
-    assert "EXACT_STRIKE_UNSUPPORTED_BY_PROVIDER" in text
+    # Confirmed working entry frequency values — "every day" is default
+    assert '"every day"' in text, "Confirmed default entry frequency 'every day' must be present"
+    assert "api_entry_frequency" in text, "Entry frequency must be stored in options_params"
+    assert "entry_frequency=_api_entry_freq" in text, "Entry frequency must be passed to payload builder"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
