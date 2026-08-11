@@ -16,6 +16,7 @@ Security rules:
 from __future__ import annotations
 
 import time
+import uuid as _uuid_mod
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -40,6 +41,10 @@ logger = get_logger(__name__)
 _BASE = settings.tastytrade_backtester_base_url
 _MAX_POLL = 60
 _POLL_INTERVAL = 3
+
+# Cache for synchronous POST responses — when TT API returns the full result
+# in the POST body (no separate poll needed), store it here keyed by synthetic ID.
+_SYNC_RESULTS: Dict[str, Dict[str, Any]] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -139,14 +144,42 @@ def _post_backtest(url: str, body: Dict[str, Any], headers: Dict[str, str]) -> T
 
     if resp.status_code in (200, 201):
         data = resp.json()
+        # Try all known field name variants for the backtest ID
         backtest_id = (
             data.get("id")
             or data.get("backtestId")
+            or data.get("backtest_id")
+            or data.get("uuid")
             or data.get("data", {}).get("id")
+            or data.get("data", {}).get("backtest_id")
         )
         if backtest_id:
             logger.info(f"[TastytradeBacktester] Created backtest {backtest_id}")
+            # If API returned the full result synchronously, cache it now so poll finds it immediately
+            _resp_status = (data.get("status") or "").lower()
+            if _resp_status in ("complete", "completed", "success"):
+                _SYNC_RESULTS[str(backtest_id)] = data
+                logger.info(f"[TastytradeBacktester] Cached synchronous result for {backtest_id}")
             return str(backtest_id), ""
+
+        # No ID extracted — log response keys to diagnose format
+        _resp_keys = list(data.keys()) if isinstance(data, dict) else type(data).__name__
+        logger.warning(
+            f"[TastytradeBacktester] POST /backtests HTTP 200 but no ID found. "
+            f"Response keys: {_resp_keys}. Preview: {str(data)[:500]}"
+        )
+
+        # Last resort: POST returned a fully-completed result without an ID field.
+        # Generate a synthetic ID, cache the data, and let poll_backtest find it.
+        if isinstance(data, dict):
+            _direct_status = (data.get("status") or "").lower()
+            _has_results = bool(data.get("results") or data.get("trials") or data.get("statistics"))
+            if _direct_status in ("complete", "completed", "success") and _has_results:
+                _synth_id = f"direct-{_uuid_mod.uuid4().hex[:16]}"
+                _SYNC_RESULTS[_synth_id] = data
+                logger.info(f"[TastytradeBacktester] Cached direct POST result under synthetic ID {_synth_id}")
+                return _synth_id, ""
+
         return None, "Backtest created but no ID returned."
 
     if resp.status_code == 429:
@@ -173,10 +206,8 @@ def _post_backtest(url: str, body: Dict[str, Any], headers: Dict[str, str]) -> T
 def create_backtest(payload: BacktestPayload) -> Tuple[Optional[str], str]:
     """POST /backtests — returns (backtest_id, error_message).
 
-    Auto-retry strategy when HTTP 400 from exitConditions:
-      Attempt 1: full payload (combined exit conditions as flat struct)
-      Attempt 2: take-profit only (proven single-condition format)
-      Attempt 3: no exit conditions (guaranteed safe fallback)
+    Sends the payload exactly as built — no silent fallbacks that drop TP/SL.
+    If the API rejects the request, return the error clearly.
     """
     token, err = get_access_token()
     if not token:
@@ -191,49 +222,9 @@ def create_backtest(payload: BacktestPayload) -> Tuple[Optional[str], str]:
         if bid:
             return bid, ""
 
-        # Retry only on HTTP 400 (payload/format issues)
-        if "BACKTEST_HTTP_400" not in err_msg and "RATE_LIMITED" not in err_msg:
-            logger.error(
-                f"[TastytradeBacktester] HTTP non-400 error from POST /backtests. "
-                f"Payload sent: {str(body)[:800]}."
-            )
-            return None, err_msg
-
-        # ── Retry 2: take-profit only ────────────────────────────────────────
-        ec = body.get("exitConditions", {})
-        has_combined = bool(ec.get("profitPercentage") and ec.get("lossPercentage"))
-        if has_combined:
-            body2 = {
-                **body,
-                "exitConditions": {
-                    "type": "profit_percentage",
-                    "profitPercentage": ec["profitPercentage"],
-                },
-            }
-            logger.warning(
-                "[TastytradeBacktester] Combined exitConditions rejected (HTTP 400). "
-                "Retrying with take-profit only."
-            )
-            bid2, err2 = _post_backtest(url, body2, headers)
-            if bid2:
-                return bid2, ""
-            err_msg = err2  # carry forward latest error
-
-        # ── Retry 3: no exit conditions (guaranteed fallback) ────────────────
-        if body.get("exitConditions"):
-            body3 = {**body, "exitConditions": {}}
-            logger.warning(
-                "[TastytradeBacktester] Exit conditions rejected. "
-                "Retrying with empty exitConditions (API default expiry)."
-            )
-            bid3, err3 = _post_backtest(url, body3, headers)
-            if bid3:
-                return bid3, "EXIT_COND_DROPPED:" + err_msg
-            err_msg = err3
-
         logger.error(
-            f"[TastytradeBacktester] All retry attempts failed. "
-            f"Last error: {err_msg[:400]}. Payload: {str(body)[:600]}"
+            f"[TastytradeBacktester] POST /backtests failed: {err_msg[:400]}. "
+            f"Payload: {str(body)[:600]}"
         )
         return None, err_msg
 
@@ -244,6 +235,12 @@ def create_backtest(payload: BacktestPayload) -> Tuple[Optional[str], str]:
 
 def get_backtest_status(backtest_id: str) -> Tuple[Optional[Dict[str, Any]], str]:
     """GET /backtests/{id} — returns (data, error_message)."""
+    # Check synchronous result cache first (populated when POST returned a full result)
+    if backtest_id in _SYNC_RESULTS:
+        cached = _SYNC_RESULTS.pop(backtest_id)
+        logger.info(f"[TastytradeBacktester] Returning cached synchronous result for {backtest_id}")
+        return cached, ""
+
     token, err = get_access_token()
     if not token:
         return None, err or "No access token."

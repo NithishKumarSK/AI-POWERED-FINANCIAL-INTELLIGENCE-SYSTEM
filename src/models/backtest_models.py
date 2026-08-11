@@ -39,7 +39,7 @@ class BacktestLeg:
             "strikeSelection": self.strike_selection,
         }
         if self.strike_selection == "delta":
-            d["delta"] = self.delta
+            d["delta"] = int(self.delta)
         elif self.strike_selection == "percentageOtm":
             d["percentageOtm"] = self.percentage_otm
         elif self.strike_selection == "priceOffset":
@@ -47,7 +47,7 @@ class BacktestLeg:
         elif self.strike_selection == "premium":
             d["premium"] = self.premium_amount
         else:
-            d["delta"] = self.delta
+            d["delta"] = int(self.delta)
         return d
 
 
@@ -74,41 +74,34 @@ class BacktestPayload:
     exit_after_days: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        # TastyTrade exitConditions is a Go STRUCT (backtesting.ExitConditions),
-        # NOT a slice. Sending a JSON array causes HTTP 400:
-        #   "cannot unmarshal array into Go struct field Backtest.exitConditions"
-        # Always build a single flat dict — never a list.
-        # Include "type" field in all cases (single AND combined) matching proven working format.
+        # TastyTrade exitConditions is a Go STRUCT (backtesting.ExitConditions).
+        # CRITICAL: Do NOT include "type" field when both TP and SL are present.
+        # The "type" field acts as a discriminator — if type="profit_percentage" is set,
+        # the API IGNORES lossPercentage entirely (treats it as TP-only condition).
+        # The website sends NO "type" field for combined TP+SL, and that matches correctly.
+        # Only include "type" for single-condition cases (TP only or SL only).
         has_tp   = bool(self.take_profit_pct and self.take_profit_pct > 0)
         has_sl   = bool(self.stop_loss_pct   and self.stop_loss_pct   > 0)
         has_days = bool(self.exit_after_days  and self.exit_after_days > 0)
 
         exit_cond: Dict[str, Any] = {}
         if has_tp:
-            exit_cond["profitPercentage"] = float(self.take_profit_pct)
+            exit_cond["takeProfitPercentage"] = int(round(float(self.take_profit_pct)))
         if has_sl:
-            exit_cond["lossPercentage"] = float(self.stop_loss_pct)
+            exit_cond["stopLossPercentage"] = int(round(float(self.stop_loss_pct)))
         if has_days:
             exit_cond["daysHeld"] = int(self.exit_after_days)
-
-        # Always include type field — use primary condition's type as the struct discriminator.
-        # Combined (TP + SL): type="profit_percentage" with both percentage fields present.
-        if exit_cond:
-            if has_tp:
-                exit_cond["type"] = "profit_percentage"
-            elif has_sl:
-                exit_cond["type"] = "loss_percentage"
-            elif has_days:
-                exit_cond["type"] = "days_held"
 
         if not exit_cond:
             exit_cond = _EXIT_RULE_MAP.get(self.exit_rule, {})
 
+        # Use date-only endDate format — matches website format (no T23:59:59Z suffix)
+        end_date_clean = self.end_date[:10] if self.end_date else self.end_date
+
         return {
             "startDate": self.start_date,
-            "endDate": self.end_date,
+            "endDate": end_date_clean,
             "symbol": self.symbol,
-            "status": self.status,
             "entryConditions": {"frequency": self.entry_frequency},
             "exitConditions": exit_cond,
             "legs": [leg.to_dict() for leg in self.legs],

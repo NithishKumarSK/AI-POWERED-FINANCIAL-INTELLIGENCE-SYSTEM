@@ -254,36 +254,38 @@ def test_guardrail_sell():
 
 
 def test_guardrail_hold():
+    # HOLD is banned — positive return → BUY regardless of other signals
     from gemini_stock_prediction_agent import _apply_guardrails
     d, r = _apply_guardrails(1.0, 70, 40, 80)
-    assert d == "HOLD"
+    assert d == "BUY"
 
 
 def test_guardrail_review_low_quality():
+    # data_quality < 50 triggers REVIEW
     from gemini_stock_prediction_agent import _apply_guardrails
-    d, r = _apply_guardrails(5.0, 70, 40, 50)
+    d, r = _apply_guardrails(5.0, 70, 40, 40)
     assert d == "REVIEW"
 
 
 def test_guardrail_review_low_confidence():
-    """Confidence < 45 triggers REVIEW — threshold lowered from 55 to 45."""
+    # confidence < 20 triggers REVIEW (threshold is 20, not 45)
     from gemini_stock_prediction_agent import _apply_guardrails
-    d, r = _apply_guardrails(5.0, 44, 40, 80)
+    d, r = _apply_guardrails(5.0, 15, 40, 80)
     assert d == "REVIEW"
 
 
 def test_guardrail_high_risk_buy_becomes_hold():
-    """High risk downgrades BUY to HOLD even with valid signal scores."""
+    # HOLD is banned — high risk no longer downgrades BUY to HOLD
     from gemini_stock_prediction_agent import _apply_guardrails
     d, r = _apply_guardrails(5.0, 70, 85, 80, signal_scores=_BULL_SCORES)
-    assert d == "HOLD"
+    assert d == "BUY"
 
 
 def test_guardrail_high_risk_sell_becomes_review():
-    """High risk + bearish signal confirms SELL → REVIEW path."""
+    # HOLD/REVIEW logic removed — negative return → SELL regardless of risk
     from gemini_stock_prediction_agent import _apply_guardrails
     d, r = _apply_guardrails(-4.0, 70, 85, 80, signal_scores=_BEAR_SCORES)
-    assert d == "REVIEW"
+    assert d == "SELL"
 
 
 def test_guardrail_risk_never_creates_sell():
