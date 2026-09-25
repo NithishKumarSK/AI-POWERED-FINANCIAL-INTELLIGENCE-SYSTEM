@@ -1,0 +1,134 @@
+{
+  "generated_at": "2026-09-12T20:53:17.233179",
+  "symbols": [
+    "SPY",
+    "TSLA",
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "AMZN",
+    "GOOGL",
+    "META",
+    "QQQ",
+    "IWM"
+  ],
+  "horizons": [
+    7,
+    14,
+    30,
+    45
+  ],
+  "total_runs": 20,
+  "valid_runs": 17,
+  "failed_runs": 3,
+  "data_unavailable_count": 0,
+  "symbols_failed": [
+    "SPY"
+  ],
+  "decision_match_pct": 11.8,
+  "direction_match_pct": 11.8,
+  "avg_return_error_pp": 2.5496,
+  "hold_rate_pct": 0.0,
+  "false_buy_count": 10,
+  "false_sell_count": 5,
+  "over_hold_count": 0,
+  "match_by_symbol": {
+    "SPY": {
+      "runs": 17,
+      "matches": 2,
+      "match_pct": 11.8
+    },
+    "TSLA": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "AAPL": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "MSFT": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "NVDA": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "AMZN": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "GOOGL": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "META": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "QQQ": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "IWM": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    }
+  },
+  "match_by_horizon": {
+    "7": {
+      "runs": 17,
+      "matches": 2,
+      "match_pct": 11.8
+    },
+    "14": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "30": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "45": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    }
+  },
+  "top_failure_reasons": [
+    {
+      "reason": "WRONG_MAGNITUDE",
+      "count": 9
+    },
+    {
+      "reason": "FALSE_SELL",
+      "count": 3
+    },
+    {
+      "reason": "BENCHMARK_CONTEXT_MISSING",
+      "count": 2
+    },
+    {
+      "reason": "TREND_REVERSAL_MISSED",
+      "count": 1
+    }
+  ],
+  "recommended_prompt_changes": [
+    "TREND_REVERSAL_MISSED: inject news/earnings context into Gemini prompt.",
+    "FALSE_SELL: add RSI oversold check before SELL to prevent false downside calls.",
+    "WRONG_MAGNITUDE: recalibrate predicted_return_pct scaling vs actual by horizon.",
+    "BENCHMARK_CONTEXT_MISSING: ensure relative_strength vs SPY is in feature packet.",
+    "Match rate below 30% — investigate feature quality and prompt clarity."
+  ]
+}

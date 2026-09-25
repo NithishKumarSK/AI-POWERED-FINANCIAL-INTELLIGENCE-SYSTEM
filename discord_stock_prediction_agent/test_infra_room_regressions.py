@@ -1,0 +1,357 @@
+"""Known-answer regression tests from a real trading-alert-room corpus.
+
+A real Discord trading-alert room feed (SPX 0DTE scalps, percentage-based
+partial exits, "roll"/"runners" jargon) was run through classify_and_parse()
+and surfaced several real bugs, fixed alongside this file:
+
+  1. "Sold"/"Closed"/"Exited" (past-tense) option signals fell through to
+     order_action="unknown", which _option_order_route() in discord_agent.py
+     silently defaults to a BUY -- so a message reporting a position being
+     SOLD would have submitted an opposite-direction BUY order.
+  2. A bare CALL/PUT side-letter left over after strike digits were
+     stripped out by the root-token scan (e.g. the "C" in "7770C") could
+     leak through as a guessed root symbol, and "C" happens to be a real
+     ticker (Citigroup) -- so a message with no real root mention could
+     silently misroute to the wrong company.
+  3. The root-token scan capped words at 6 characters, splitting longer
+     words ("ALREADY") into fragments ("ALREAD" + "Y"); the leftover
+     fragment could itself look like a plausible ticker.
+  4. The bare word "roll" forced *any* message into strict multi-leg
+     parsing regardless of how many option legs were actually present,
+     so single-leg entries merely narrating profit-recycling ("Bought
+     SPX 7690C ... Roll using 20% Profit") were rejected outright.
+  5. Cash-settled index roots (SPX, NDX, RUT, DJX, VIX, XSP) and options
+     jargon (ITM/OTM/ATM) aren't excluded from signal_parser.py's equity
+     ticker guesser, so a bare "SPX" mention with no strike/side could
+     resolve through the symbol cache to an unrelated real equity ticker
+     (SPX -> SPXC, "SPX Technologies") instead of correctly falling
+     through to NO_TRADE.
+  6. "FLY" -- the near-universal retail shorthand for "butterfly" -- was
+     never recognized anywhere, so "Put FLY"/"Calls FLY" style messages
+     with no real strike misread the lotto fill price as the strike
+     (".50" -> strike $50), and compact multi-strike shorthand like
+     "7725/20/15P FLY" (meaning 7725/7720/7715) collapsed to a single
+     wrong-strike leg instead of a proper 3-leg butterfly, silently
+     dropping the defined-risk structure entirely. Fixed by recognizing
+     FLY as a butterfly-structure keyword (gated on an explicit side
+     reference so bare references like "Holding FLY" stay NO_TRADE) and
+     adding a compact-shorthand leg expander in multi_leg_contract.py.
+  7. "@here"/"@everyone"/"@channel" mention tokens survived normalization
+     and could leak through the root-token scan as a literal (nonexistent)
+     guessed ticker root.
+
+Run (from the project root):
+    venv\\Scripts\\python.exe -m discord_stock_prediction_agent.test_infra_room_regressions
+"""
+from __future__ import annotations
+
+from .daily_signal_context import (
+    classify_and_parse_with_daily_context,
+    clear_all as clear_daily_context,
+)
+from .options_parser import classify_and_parse
+from .signal_parser import _extract_symbol
+
+PASS = 0
+FAIL = 0
+
+
+def _assert(condition: bool, name: str, detail: str = "") -> None:
+    global PASS, FAIL
+    if condition:
+        PASS += 1
+        print(f"  PASS  {name}")
+    else:
+        FAIL += 1
+        print(f"  FAIL  {name}" + (f" -- {detail}" if detail else ""))
+
+
+def test_past_tense_close_maps_to_close_long() -> None:
+    print("\nTest: 'Sold'/'Closed'/'Exited' resolve to close_long, not unknown")
+    cases = [
+        "Sold 50% SPX 7565C at 5.80",
+        "SPX 7535P runners closed ITM at 18.15",
+        "Sold SPX 7700P runner at 6.20 Holding 5",
+        "Exited SPX 7680P at 4.50",
+    ]
+    for text in cases:
+        option = classify_and_parse(text).option
+        _assert(option is not None and option.valid, f"{text!r} parses as valid OPTION")
+        _assert(
+            option is not None and option.order_action == "close_long",
+            f"{text!r} order_action == close_long",
+            f"got {getattr(option, 'order_action', None)}",
+        )
+
+
+def test_bought_journal_tense_unchanged() -> None:
+    print("\nTest: 'Bought' journal-entry tense is untouched (regression guard)")
+    text = "Bought SPX 7570C at 1.40 EOD Lotto. Strangle is complete."
+    option = classify_and_parse(text).option
+    _assert(option is not None and option.valid, "still parses as valid OPTION")
+    _assert(option is not None and option.tense == "past", "tense stays 'past'", f"got {getattr(option, 'tense', None)}")
+
+
+def test_bare_side_letter_does_not_leak_as_root() -> None:
+    print("\nTest: leftover CALL/PUT side-letter isn't guessed as the root")
+    option = classify_and_parse("Sold 70% 7770C at 4 Already 100%").option
+    _assert(option is not None, "still routes to OPTION kind")
+    _assert(option.root == "", "root left empty rather than guessing 'C'", f"got {option.root!r}")
+    _assert(not option.valid, "correctly fails closed instead of misrouting")
+
+
+def test_explicit_single_letter_root_still_works() -> None:
+    print("\nTest: an explicitly-stated single-letter root (real regression guard)")
+    option = classify_and_parse("BTO 7 C 120C 08/21 @10.75 LIMIT").option
+    _assert(option is not None and option.valid, "still valid")
+    _assert(option is not None and option.root == "C", "root == C", f"got {getattr(option, 'root', None)}")
+
+
+def test_long_word_truncation_does_not_leak_fragment() -> None:
+    print("\nTest: words longer than 6 chars aren't sliced into a fake ticker")
+    option = classify_and_parse("Sold most SPX 7770C at 5.20. Too many roll already").option
+    _assert(option is not None and option.root == "SPX", "root correctly SPX, not a truncated fragment", f"got {getattr(option, 'root', None)}")
+
+
+def test_roll_commentary_single_leg_not_forced_multi_leg() -> None:
+    print("\nTest: single-leg 'roll' commentary no longer rejected as incomplete multi-leg")
+    option = classify_and_parse("SPX : Bought SPX 7690C at 2.50 Roll using 20% Profit").option
+    _assert(option is not None and option.valid, "parses as valid single-leg OPTION")
+    _assert(option is not None and not option.is_multi_leg, "stays single-leg")
+    _assert(option is not None and option.root == "SPX", "root == SPX")
+    _assert(option is not None and option.strike == 7690.0, "strike == 7690.0")
+
+
+def test_roll_two_leg_still_builds_multi_leg() -> None:
+    print("\nTest: a genuine 2-leg ROLL X TO Y instruction still builds multi-leg (no regression)")
+    option = classify_and_parse(
+        "ROLL NVDA 190C 09/19 TO NVDA 205C 10/17 FOR 1.40 Debit"
+    ).option
+    _assert(option is not None and option.valid, "valid")
+    _assert(option is not None and option.is_multi_leg, "still recognized as multi-leg")
+
+
+def test_index_root_mention_does_not_resolve_to_equity() -> None:
+    print("\nTest: bare index-root mentions don't resolve to an unrelated equity ticker")
+    cases = [
+        "SPX Holding 2 runners if get ITM",
+        "Small Trade Need to hold 7735",
+        "Better hold 7725",
+    ]
+    for text in cases:
+        symbol = _extract_symbol(text)
+        _assert(symbol == "", f"{text!r} -> no equity symbol guessed", f"got {symbol!r}")
+        kind = classify_and_parse(text).kind
+        _assert(kind == "NO_TRADE", f"{text!r} classifies as NO_TRADE", f"got {kind}")
+
+
+def test_daily_context_fills_missing_root_same_day() -> None:
+    print("\nTest: same-day channel memory fills a missing root")
+    clear_daily_context()
+    channel = "test-channel-1"
+    first = classify_and_parse_with_daily_context("SPX : Bought SPX 7665C at 4.80", channel)
+    _assert(first.kind == "OPTION" and first.option.valid, "first message parses normally")
+
+    followup = classify_and_parse_with_daily_context(
+        "Sold 70% 7770C at 4 Already 100%", channel
+    )
+    _assert(followup.kind == "OPTION" and followup.option is not None, "follow-up routes to OPTION")
+    _assert(
+        followup.option is not None and followup.option.valid and followup.option.root == "SPX",
+        "follow-up root filled in from same-day memory",
+        f"got root={getattr(followup.option, 'root', None)} valid={getattr(followup.option, 'valid', None)}",
+    )
+
+
+def test_daily_context_never_overrides_explicit_root() -> None:
+    print("\nTest: same-day memory never overrides a root the message itself states")
+    clear_daily_context()
+    channel = "test-channel-2"
+    classify_and_parse_with_daily_context("SPX : Bought SPX 7665C at 4.80", channel)
+    other = classify_and_parse_with_daily_context("BTO AAPL 240C 09/18 @3.45 QTY 2", channel)
+    _assert(
+        other.kind == "OPTION" and other.option is not None and other.option.root == "AAPL",
+        "explicitly-stated root (AAPL) is never overridden by remembered SPX",
+        f"got {getattr(other.option, 'root', None)}",
+    )
+
+
+def test_daily_context_isolated_per_channel() -> None:
+    print("\nTest: same-day memory is scoped per channel, not global")
+    clear_daily_context()
+    classify_and_parse_with_daily_context("SPX : Bought SPX 7665C at 4.80", "channel-A")
+    followup = classify_and_parse_with_daily_context(
+        "Sold 70% 7770C at 4 Already 100%", "channel-B"
+    )
+    _assert(
+        followup.option is not None and not followup.option.valid,
+        "a different channel does not inherit channel-A's remembered root",
+    )
+
+
+def test_daily_context_clears_on_new_day() -> None:
+    print("\nTest: memory is discarded once the UTC date rolls over")
+    from . import daily_signal_context as dsc
+
+    clear_daily_context()
+    channel = "test-channel-rollover"
+    classify_and_parse_with_daily_context("SPX : Bought SPX 7665C at 4.80", channel)
+    _assert(dsc.get_default_root(channel) == "SPX", "root remembered for today")
+
+    dsc._context[channel]["date"] = "2000-01-01"
+    _assert(dsc.get_default_root(channel) == "", "stale-day memory is discarded on read")
+
+    followup = classify_and_parse_with_daily_context(
+        "Sold 70% 7770C at 4 Already 100%", channel
+    )
+    _assert(
+        followup.option is not None and not followup.option.valid,
+        "no stale-day root is applied to a new day's ambiguous message",
+    )
+
+
+def test_bare_spread_commentary_single_leg_not_forced_multi_leg() -> None:
+    print("\nTest: single-leg message mentioning 'spread' in passing isn't forced multi-leg")
+    text = (
+        "Rolled down SPX strike to 7765C at 1.80. Approx .65 premiums left.\n"
+        "Not adding any funds just rolling down the strike. This can help hedge Credit spread as well"
+    )
+    option = classify_and_parse(text).option
+    _assert(option is not None and option.valid, "parses as valid single-leg OPTION")
+    _assert(option is not None and not option.is_multi_leg, "stays single-leg")
+    _assert(option is not None and option.root == "SPX", "root == SPX")
+    _assert(option is not None and option.strike == 7765.0, "strike == 7765.0")
+
+
+def test_genuine_two_leg_spread_still_builds_multi_leg() -> None:
+    print("\nTest: a genuine 2-leg spread instruction still builds multi-leg (no regression)")
+    option = classify_and_parse(
+        "BTO AAPL 240C / STO AAPL 250C 09/19 @4.60 Debit Credit spread"
+    ).option
+    _assert(option is not None and option.valid, "valid")
+    _assert(option is not None and option.is_multi_leg, "still recognized as multi-leg")
+
+
+def test_commentary_words_do_not_leak_as_equity_tickers() -> None:
+    print("\nTest: common trading-room commentary words aren't guessed as equity tickers")
+    cases = [
+        "Small Hedge for long portfolio. Can avoid if got nothing to hedge",
+        "Take profit here level might hold",
+        "Sold most at 3.50 Might hold yesterday low",
+        "SPX : ES Long 7768 Stoploss 7760",
+        "Sold last 2 runners at 7.80 Holding FLY",
+        "Will need to hold 7740",
+    ]
+    for text in cases:
+        symbol = _extract_symbol(text)
+        _assert(symbol == "", f"{text!r} -> no equity symbol guessed", f"got {symbol!r}")
+        kind = classify_and_parse(text).kind
+        _assert(kind == "NO_TRADE", f"{text!r} classifies as NO_TRADE", f"got {kind}")
+
+
+def test_fly_shorthand_expands_to_correct_butterfly_legs() -> None:
+    print("\nTest: compact 'FLY' shorthand strikes expand to a correct 3-leg butterfly")
+    cases = [
+        # (text, expected [strike, ratio, action] triples in leg order)
+        (
+            "SPX : Bought SPX 7600/7550/7500P FLY around 1.80",
+            [(7600.0, 1, "open_long"), (7550.0, 2, "open_short"), (7500.0, 1, "open_long")],
+        ),
+        (
+            "SPX : Bought SPX 7725/20/15P FLY at .80",  # abbreviated middle/last strikes
+            [(7725.0, 1, "open_long"), (7720.0, 2, "open_short"), (7715.0, 1, "open_long")],
+        ),
+        (
+            "SPX : Bought SPX 7780C/7790/7800C FLY Lotto at .50",  # side letters on outer legs only
+            [(7780.0, 1, "open_long"), (7790.0, 2, "open_short"), (7800.0, 1, "open_long")],
+        ),
+    ]
+    for text, expected in cases:
+        routed = classify_and_parse(text)
+        _assert(routed.kind == "OPTION", f"{text!r} routes to OPTION", str(routed.kind))
+        option = routed.option
+        _assert(option is not None and option.valid, f"{text!r} parses as valid", str(routed.reason))
+        _assert(option.is_multi_leg and len(option.legs) == 3, f"{text!r} builds exactly 3 legs", str(option.legs))
+        actual = [(leg.strike, leg.ratio_qty, leg.order_action) for leg in option.legs]
+        _assert(actual == expected, f"{text!r} legs match expected wing/body/wing", f"got {actual}")
+
+
+def test_fly_with_no_strikes_rejected_not_misparsed() -> None:
+    print("\nTest: a FLY mention with no real strikes is rejected, not misread as one with the lotto price as strike")
+    cases = [
+        "SPX : Bought Put FLY Lotto at .50",
+        "SPX : Calls FLY around 1",
+        "SPX : EOD Call FLY Lotto at .70",
+        "SPX : EOD Put FLY Lotto around 1.10.  No stoploss",
+    ]
+    for text in cases:
+        routed = classify_and_parse(text)
+        option = routed.option
+        _assert(
+            option is not None and not option.valid,
+            f"{text!r} is recognized as an incomplete options signal, not silently accepted",
+            str(routed),
+        )
+        _assert(
+            option is None or option.strike != 50.0 and option.strike != 1.0,
+            f"{text!r} never mistakes the lotto price for a strike",
+            str(option.strike if option else None),
+        )
+
+
+def test_bare_fly_reference_without_side_stays_no_trade() -> None:
+    print("\nTest: a bare 'FLY' reference to an existing position (no side word) stays NO_TRADE")
+    cases = [
+        "Sold last 2 runners at 7.80 Holding FLY",
+        "SPX : Adding cheap FLY",
+    ]
+    for text in cases:
+        kind = classify_and_parse(text).kind
+        _assert(kind == "NO_TRADE", f"{text!r} classifies as NO_TRADE", f"got {kind}")
+
+
+def test_here_mention_does_not_leak_as_root() -> None:
+    print("\nTest: '@here' never resolves to a literal (nonexistent) ticker root")
+    routed = classify_and_parse("@here Calls up 40% incase want to take profit")
+    root = routed.option.root if routed.option else ""
+    _assert(root != "HERE", "'@here' is not guessed as the options root", root)
+
+
+def run_all() -> None:
+    print("=" * 60)
+    print("TRADING-ALERT-ROOM REGRESSION TEST HARNESS")
+    print("Known-answer cases from a real Discord alert-room corpus")
+    print("=" * 60)
+
+    test_past_tense_close_maps_to_close_long()
+    test_bought_journal_tense_unchanged()
+    test_bare_side_letter_does_not_leak_as_root()
+    test_explicit_single_letter_root_still_works()
+    test_long_word_truncation_does_not_leak_fragment()
+    test_roll_commentary_single_leg_not_forced_multi_leg()
+    test_roll_two_leg_still_builds_multi_leg()
+    test_index_root_mention_does_not_resolve_to_equity()
+    test_daily_context_fills_missing_root_same_day()
+    test_daily_context_never_overrides_explicit_root()
+    test_daily_context_isolated_per_channel()
+    test_daily_context_clears_on_new_day()
+    test_bare_spread_commentary_single_leg_not_forced_multi_leg()
+    test_genuine_two_leg_spread_still_builds_multi_leg()
+    test_commentary_words_do_not_leak_as_equity_tickers()
+    test_fly_shorthand_expands_to_correct_butterfly_legs()
+    test_fly_with_no_strikes_rejected_not_misparsed()
+    test_bare_fly_reference_without_side_stays_no_trade()
+    test_here_mention_does_not_leak_as_root()
+
+    print("\n" + "=" * 60)
+    print(f"Results: {PASS} passed, {FAIL} failed")
+    print("=" * 60)
+
+    if FAIL == 0:
+        print("\nALL TRADING-ALERT-ROOM REGRESSION TESTS PASSED")
+    else:
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    run_all()

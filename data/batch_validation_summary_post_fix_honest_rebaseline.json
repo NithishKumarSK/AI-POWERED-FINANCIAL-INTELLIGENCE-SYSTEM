@@ -1,0 +1,54 @@
+{
+  "generated_at": "2026-09-12T18:07:38.259092",
+  "symbols": [
+    "TSLA"
+  ],
+  "horizons": [
+    30
+  ],
+  "total_runs": 11,
+  "valid_runs": 11,
+  "failed_runs": 0,
+  "data_unavailable_count": 0,
+  "symbols_failed": [],
+  "decision_match_pct": 54.5,
+  "direction_match_pct": 54.5,
+  "avg_return_error_pp": 12.2849,
+  "hold_rate_pct": 0.0,
+  "false_buy_count": 3,
+  "false_sell_count": 2,
+  "over_hold_count": 0,
+  "match_by_symbol": {
+    "TSLA": {
+      "runs": 11,
+      "matches": 6,
+      "match_pct": 54.5
+    }
+  },
+  "match_by_horizon": {
+    "30": {
+      "runs": 11,
+      "matches": 6,
+      "match_pct": 54.5
+    }
+  },
+  "top_failure_reasons": [
+    {
+      "reason": "TREND_REVERSAL_MISSED",
+      "count": 3
+    },
+    {
+      "reason": "FALSE_SELL",
+      "count": 1
+    },
+    {
+      "reason": "BENCHMARK_CONTEXT_MISSING",
+      "count": 1
+    }
+  ],
+  "recommended_prompt_changes": [
+    "TREND_REVERSAL_MISSED: inject news/earnings context into Gemini prompt.",
+    "FALSE_SELL: add RSI oversold check before SELL to prevent false downside calls.",
+    "BENCHMARK_CONTEXT_MISSING: ensure relative_strength vs SPY is in feature packet."
+  ]
+}

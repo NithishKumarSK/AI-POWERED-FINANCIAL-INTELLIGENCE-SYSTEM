@@ -1,0 +1,337 @@
+//@version=6
+indicator("All-In-One SPX/ES Dashboard (RSI/MACD/ADX/ATR/SMA/EMA/BB/VWAP/Pivots/Stoch/VIX + Bias)", overlay=true, max_labels_count=50)
+
+// ============================================================
+// Combines the indicators used by the SPX/ES analysis report's
+// "Technicals & Trend Bias" panel PLUS the most commonly-watched
+// popular indicators for SPX/ES day trading, into one script:
+//   - SMA 20/50/100/200, EMA 9/21, Bollinger Bands(20,2), VWAP
+//   - Daily classic floor pivots (PP, R1-R3, S1-S3)
+//   - RSI(14), ADX/DI, MACD, ATR(14), Stochastic(14,3,3)
+//   - VIX (SPX's own companion volatility index)
+//   - The same 6-vote bias score used in the Python report
+// Oscillators (RSI/MACD/ADX/Stoch) are shown as live numbers in
+// the dashboard table rather than separate sub-panes, since Pine
+// can't cleanly stack multiple differently-scaled panes in one
+// script.
+// ============================================================
+
+// ---- Inputs ----
+rsiLen    = input.int(14, "RSI Length", group="Oscillators")
+atrLen    = input.int(14, "ATR Length", group="Oscillators")
+adxLen    = input.int(14, "ADX/DI Length", group="Oscillators")
+macdFast  = input.int(12, "MACD Fast", group="Oscillators")
+macdSlow  = input.int(26, "MACD Slow", group="Oscillators")
+macdSig   = input.int(9,  "MACD Signal", group="Oscillators")
+stochLen  = input.int(14, "Stochastic %K Length", group="Oscillators")
+stochSmoK = input.int(3,  "Stochastic %K Smoothing", group="Oscillators")
+stochSmoD = input.int(3,  "Stochastic %D Smoothing", group="Oscillators")
+
+smaLen1  = input.int(20,  "SMA 1", group="Moving Averages")
+smaLen2  = input.int(50,  "SMA 2", group="Moving Averages")
+smaLen3  = input.int(100, "SMA 3", group="Moving Averages")
+smaLen4  = input.int(200, "SMA 4", group="Moving Averages")
+emaLen1  = input.int(9,   "EMA 1", group="Moving Averages")
+emaLen2  = input.int(21,  "EMA 2", group="Moving Averages")
+
+showVWAP    = input.bool(true, "Show VWAP (intraday charts only)", group="Overlays")
+showBB      = input.bool(true, "Show Bollinger Bands", group="Overlays")
+bbLen       = input.int(20, "BB Length", group="Overlays")
+bbMult      = input.float(2.0, "BB Std Dev Mult", group="Overlays")
+showPivots  = input.bool(true, "Show Daily Pivot Points", group="Overlays")
+showVIX     = input.bool(true, "Show VIX in dashboard", group="Overlays")
+showPriorLevels   = input.bool(true, "Show Prior Day/Week/Month/Year High-Low", group="Overlays")
+showRollingLevels = input.bool(true, "Show Rolling Last-2-Weeks/Last-2-Months High-Low", group="Overlays")
+
+// ---- Moving averages ----
+sma20  = ta.sma(close, smaLen1)
+sma50  = ta.sma(close, smaLen2)
+sma100 = ta.sma(close, smaLen3)
+sma200 = ta.sma(close, smaLen4)
+ema9   = ta.ema(close, emaLen1)
+ema21  = ta.ema(close, emaLen2)
+
+plot(sma20,  "SMA20",  color=color.new(color.blue, 0),   linewidth=1)
+plot(sma50,  "SMA50",  color=color.new(color.orange, 0), linewidth=1)
+plot(sma100, "SMA100", color=color.new(color.purple, 0), linewidth=1)
+plot(sma200, "SMA200", color=color.new(color.red, 0),    linewidth=2)
+plot(ema9,   "EMA9",   color=color.new(color.yellow, 0), linewidth=1)
+plot(ema21,  "EMA21",  color=color.new(color.fuchsia, 0), linewidth=1)
+
+vwapVal = ta.vwap(hlc3)
+plot(showVWAP ? vwapVal : na, "VWAP", color=color.new(color.aqua, 0), linewidth=2)
+
+// ---- Bollinger Bands ----
+bbBasis = ta.sma(close, bbLen)
+bbDev   = bbMult * ta.stdev(close, bbLen)
+bbUpper = bbBasis + bbDev
+bbLower = bbBasis - bbDev
+bbUpperPlot = plot(showBB ? bbUpper : na, "BB Upper", color=color.new(color.gray, 40))
+bbLowerPlot = plot(showBB ? bbLower : na, "BB Lower", color=color.new(color.gray, 40))
+fill(bbUpperPlot, bbLowerPlot, color=color.new(color.gray, 90), title="BB Fill")
+
+// ---- Daily classic floor pivots (prior day's H/L/C) ----
+dailyHigh  = request.security(syminfo.tickerid, "D", high[1],  lookahead=barmerge.lookahead_off)
+dailyLow   = request.security(syminfo.tickerid, "D", low[1],   lookahead=barmerge.lookahead_off)
+dailyClose = request.security(syminfo.tickerid, "D", close[1], lookahead=barmerge.lookahead_off)
+
+pp = (dailyHigh + dailyLow + dailyClose) / 3
+r1 = 2 * pp - dailyLow
+s1 = 2 * pp - dailyHigh
+r2 = pp + (dailyHigh - dailyLow)
+s2 = pp - (dailyHigh - dailyLow)
+r3 = dailyHigh + 2 * (pp - dailyLow)
+s3 = dailyLow - 2 * (dailyHigh - pp)
+
+plot(showPivots ? pp : na, "Pivot (PP)", color=color.new(color.white, 0), style=plot.style_linebr, linewidth=1)
+plot(showPivots ? r1 : na, "R1", color=color.new(color.red, 30), style=plot.style_linebr)
+plot(showPivots ? r2 : na, "R2", color=color.new(color.red, 15), style=plot.style_linebr)
+plot(showPivots ? r3 : na, "R3", color=color.new(color.red, 0),  style=plot.style_linebr)
+plot(showPivots ? s1 : na, "S1", color=color.new(color.green, 30), style=plot.style_linebr)
+plot(showPivots ? s2 : na, "S2", color=color.new(color.green, 15), style=plot.style_linebr)
+plot(showPivots ? s3 : na, "S3", color=color.new(color.green, 0),  style=plot.style_linebr)
+
+// ---- Prior-period high/low (previous COMPLETED day/week/month/year) ----
+// dailyHigh/dailyLow above already give prior day's H/L (used for pivots) -- reused here.
+prevWeekHigh  = request.security(syminfo.tickerid, "W",   high[1], lookahead=barmerge.lookahead_off)
+prevWeekLow   = request.security(syminfo.tickerid, "W",   low[1],  lookahead=barmerge.lookahead_off)
+prevMonthHigh = request.security(syminfo.tickerid, "M",   high[1], lookahead=barmerge.lookahead_off)
+prevMonthLow  = request.security(syminfo.tickerid, "M",   low[1],  lookahead=barmerge.lookahead_off)
+prevYearHigh  = request.security(syminfo.tickerid, "12M", high[1], lookahead=barmerge.lookahead_off)
+prevYearLow   = request.security(syminfo.tickerid, "12M", low[1],  lookahead=barmerge.lookahead_off)
+
+plot(showPriorLevels ? dailyHigh : na,     "Prev Day High",   color=color.new(color.silver, 0),  style=plot.style_linebr)
+plot(showPriorLevels ? dailyLow  : na,     "Prev Day Low",    color=color.new(color.silver, 0),  style=plot.style_linebr)
+plot(showPriorLevels ? prevWeekHigh : na,  "Prev Week High",  color=color.new(color.teal, 0),    style=plot.style_linebr)
+plot(showPriorLevels ? prevWeekLow  : na,  "Prev Week Low",   color=color.new(color.teal, 0),    style=plot.style_linebr)
+plot(showPriorLevels ? prevMonthHigh : na, "Prev Month High", color=color.new(color.olive, 0),   style=plot.style_linebr)
+plot(showPriorLevels ? prevMonthLow  : na, "Prev Month Low",  color=color.new(color.olive, 0),   style=plot.style_linebr)
+plot(showPriorLevels ? prevYearHigh : na,  "Prev Year High",  color=color.new(color.maroon, 0),  style=plot.style_linebr, linewidth=2)
+plot(showPriorLevels ? prevYearLow  : na,  "Prev Year Low",   color=color.new(color.maroon, 0),  style=plot.style_linebr, linewidth=2)
+
+// ---- Rolling lookback high/low (trailing N trading days on the CURRENT chart) ----
+// "Last 2 weeks"/"last 2 months" are rolling windows, not a single discrete period --
+// mirrors the same multi-timeframe approach used in the Python SPX/ES report (1w/1m/3m/1y windows).
+last2WeekHigh  = ta.highest(high, 10)
+last2WeekLow   = ta.lowest(low, 10)
+last2MonthHigh = ta.highest(high, 42)
+last2MonthLow  = ta.lowest(low, 42)
+
+plot(showRollingLevels ? last2WeekHigh  : na, "Last 2W High", color=color.new(color.blue, 40),   style=plot.style_line)
+plot(showRollingLevels ? last2WeekLow   : na, "Last 2W Low",  color=color.new(color.blue, 40),   style=plot.style_line)
+plot(showRollingLevels ? last2MonthHigh : na, "Last 2M High", color=color.new(color.purple, 40), style=plot.style_line)
+plot(showRollingLevels ? last2MonthLow  : na, "Last 2M Low",  color=color.new(color.purple, 40), style=plot.style_line)
+
+// ---- Prior day high/low break (classic, widely-watched breakout signal) ----
+brokePrevDayHigh = ta.crossover(close, dailyHigh)
+brokePrevDayLow  = ta.crossunder(close, dailyLow)
+plotshape(showPriorLevels and brokePrevDayHigh, title="Broke Prior Day High", style=shape.arrowup,   location=location.belowbar, color=color.new(color.silver, 0), size=size.small)
+plotshape(showPriorLevels and brokePrevDayLow,  title="Broke Prior Day Low",  style=shape.arrowdown, location=location.abovebar, color=color.new(color.silver, 0), size=size.small)
+alertcondition(brokePrevDayHigh, title="Broke Prior Day High (bullish)", message="{{ticker}} broke above the prior day's high at {{close}}")
+alertcondition(brokePrevDayLow,  title="Broke Prior Day Low (bearish)",  message="{{ticker}} broke below the prior day's low at {{close}}")
+
+// ---- RSI ----
+rsiVal = ta.rsi(close, rsiLen)
+
+// ---- ATR ----
+atrVal = ta.atr(atrLen)
+
+// ---- ADX / DI ----
+[diPlus, diMinus, adxVal] = ta.dmi(adxLen, adxLen)
+
+// ---- MACD ----
+[macdLine, signalLine, histLine] = ta.macd(close, macdFast, macdSlow, macdSig)
+
+// ---- Stochastic ----
+stochRaw = ta.stoch(close, high, low, stochLen)
+stochK   = ta.sma(stochRaw, stochSmoK)
+stochD   = ta.sma(stochK, stochSmoD)
+
+// ---- VIX (SPX's own companion volatility index) ----
+vixClose = request.security("CBOE:VIX", timeframe.period, close, lookahead=barmerge.lookahead_off)
+vixPrevClose = request.security("CBOE:VIX", "D", close[1], lookahead=barmerge.lookahead_off)
+vixChange = vixClose - vixPrevClose
+
+// ---- Level break detection ----
+// IMPORTANT: this detects a break the instant it happens (close crosses the
+// level) -- it does NOT predict a break before it occurs. No indicator can
+// see the future; this is a real-time signal, not a forecast.
+brokeR1 = ta.crossover(close, r1)
+brokeR2 = ta.crossover(close, r2)
+brokeR3 = ta.crossover(close, r3)
+brokeS1 = ta.crossunder(close, s1)
+brokeS2 = ta.crossunder(close, s2)
+brokeS3 = ta.crossunder(close, s3)
+brokeBBUpper = ta.crossover(close, bbUpper)
+brokeBBLower = ta.crossunder(close, bbLower)
+
+plotshape(showPivots and brokeR1, title="Broke R1", style=shape.triangleup, location=location.belowbar, color=color.new(color.green, 40), size=size.tiny)
+plotshape(showPivots and brokeR2, title="Broke R2", style=shape.triangleup, location=location.belowbar, color=color.new(color.green, 20), size=size.small)
+plotshape(showPivots and brokeR3, title="Broke R3", style=shape.triangleup, location=location.belowbar, color=color.new(color.green, 0),  size=size.normal)
+plotshape(showPivots and brokeS1, title="Broke S1", style=shape.triangledown, location=location.abovebar, color=color.new(color.red, 40), size=size.tiny)
+plotshape(showPivots and brokeS2, title="Broke S2", style=shape.triangledown, location=location.abovebar, color=color.new(color.red, 20), size=size.small)
+plotshape(showPivots and brokeS3, title="Broke S3", style=shape.triangledown, location=location.abovebar, color=color.new(color.red, 0),  size=size.normal)
+plotshape(showBB and brokeBBUpper, title="BB Breakout Up",   style=shape.diamond, location=location.belowbar, color=color.new(color.aqua, 0),    size=size.tiny)
+plotshape(showBB and brokeBBLower, title="BB Breakdown Down", style=shape.diamond, location=location.abovebar, color=color.new(color.fuchsia, 0), size=size.tiny)
+
+anyBullishBreak = brokeR1 or brokeR2 or brokeR3
+anyBearishBreak = brokeS1 or brokeS2 or brokeS3
+
+alertcondition(brokeR1, title="Broke R1 (bullish)",        message="{{ticker}} broke above Pivot R1 at {{close}}")
+alertcondition(brokeR2, title="Broke R2 (bullish)",        message="{{ticker}} broke above Pivot R2 at {{close}}")
+alertcondition(brokeR3, title="Broke R3 (strong bullish)", message="{{ticker}} broke above Pivot R3 at {{close}}")
+alertcondition(brokeS1, title="Broke S1 (bearish)",        message="{{ticker}} broke below Pivot S1 at {{close}}")
+alertcondition(brokeS2, title="Broke S2 (bearish)",        message="{{ticker}} broke below Pivot S2 at {{close}}")
+alertcondition(brokeS3, title="Broke S3 (strong bearish)", message="{{ticker}} broke below Pivot S3 at {{close}}")
+alertcondition(brokeBBUpper, title="BB Upper Breakout",  message="{{ticker}} broke above the upper Bollinger Band at {{close}}")
+alertcondition(brokeBBLower, title="BB Lower Breakdown", message="{{ticker}} broke below the lower Bollinger Band at {{close}}")
+alertcondition(anyBullishBreak, title="ANY Resistance Break (bullish)", message="{{ticker}} broke a resistance pivot level at {{close}}")
+alertcondition(anyBearishBreak, title="ANY Support Break (bearish)",    message="{{ticker}} broke a support pivot level at {{close}}")
+
+// ---- Cumulative break counts (how many times each level has broken, up vs down) ----
+// Counts accumulate over every bar Pine has loaded for this chart/timeframe -- NOT a fixed
+// 5-year window like the Python report's price-grid "touches" stat. How far back that goes
+// depends on your TradingView plan and the symbol's available history.
+var int countR1 = 0
+var int countR2 = 0
+var int countR3 = 0
+var int countS1 = 0
+var int countS2 = 0
+var int countS3 = 0
+var int countBBUp   = 0
+var int countBBDown = 0
+var int countPrevDayHighBreaks = 0
+var int countPrevDayLowBreaks  = 0
+
+if brokeR1
+    countR1 := countR1 + 1
+if brokeR2
+    countR2 := countR2 + 1
+if brokeR3
+    countR3 := countR3 + 1
+if brokeS1
+    countS1 := countS1 + 1
+if brokeS2
+    countS2 := countS2 + 1
+if brokeS3
+    countS3 := countS3 + 1
+if brokeBBUpper
+    countBBUp := countBBUp + 1
+if brokeBBLower
+    countBBDown := countBBDown + 1
+if brokePrevDayHigh
+    countPrevDayHighBreaks := countPrevDayHighBreaks + 1
+if brokePrevDayLow
+    countPrevDayLowBreaks := countPrevDayLowBreaks + 1
+
+// "Last break" state, persists on the dashboard until the next break occurs
+var string lastBreakText  = "None yet this chart"
+var color  lastBreakColor = color.new(color.gray, 20)
+
+if brokeR3
+    lastBreakText := "R3 (strong bullish breakout)"
+    lastBreakColor := color.new(color.green, 0)
+else if brokeR2
+    lastBreakText := "R2 (bullish breakout)"
+    lastBreakColor := color.new(color.green, 15)
+else if brokeR1
+    lastBreakText := "R1 (bullish breakout)"
+    lastBreakColor := color.new(color.green, 30)
+else if brokeS3
+    lastBreakText := "S3 (strong bearish breakdown)"
+    lastBreakColor := color.new(color.red, 0)
+else if brokeS2
+    lastBreakText := "S2 (bearish breakdown)"
+    lastBreakColor := color.new(color.red, 15)
+else if brokeS1
+    lastBreakText := "S1 (bearish breakdown)"
+    lastBreakColor := color.new(color.red, 30)
+
+// ---- Bias vote score (mirrors the Python technicals engine exactly -- unchanged by the additions above) ----
+score = 0
+score := score + (close > sma20 ? 1 : close < sma20 ? -1 : 0)          // price vs SMA20
+score := score + (close > sma50 ? 1 : close < sma50 ? -1 : 0)          // price vs SMA50
+score := score + (sma20 > sma50 ? 1 : sma20 < sma50 ? -1 : 0)          // SMA20 vs SMA50 trend
+score := score + (rsiVal > 55 ? 1 : rsiVal < 45 ? -1 : 0)              // RSI momentum
+score := score + (histLine > 0 ? 1 : histLine < 0 ? -1 : 0)            // MACD histogram
+score := score + (diPlus > diMinus ? 1 : diPlus < diMinus ? -1 : 0)    // DI+/DI- direction
+
+biasLabel = score >= 3 ? "BULLISH" : score <= -3 ? "BEARISH" : score > 0 ? "Mildly Bullish" : score < 0 ? "Mildly Bearish" : "NEUTRAL"
+biasColor = score >= 3 ? color.new(color.green, 0) : score <= -3 ? color.new(color.red, 0) : score > 0 ? color.new(color.lime, 20) : score < 0 ? color.new(color.orange, 20) : color.new(color.gray, 20)
+
+// ---- Dashboard table (top-right, updates on the latest bar) ----
+var table dash = table.new(position.top_right, 2, 24, border_width=1, border_color=color.new(color.gray, 50))
+
+if barstate.islast
+    table.cell(dash, 0, 0, "Indicator", bgcolor=color.new(color.black, 0), text_color=color.white, text_halign=text.align_left)
+    table.cell(dash, 1, 0, "Value",     bgcolor=color.new(color.black, 0), text_color=color.white, text_halign=text.align_left)
+
+    table.cell(dash, 0, 1, "RSI(" + str.tostring(rsiLen) + ")", text_halign=text.align_left)
+    table.cell(dash, 1, 1, str.tostring(math.round(rsiVal, 1)), text_halign=text.align_left)
+
+    table.cell(dash, 0, 2, "Stoch %K / %D", text_halign=text.align_left)
+    table.cell(dash, 1, 2, str.tostring(math.round(stochK, 1)) + " / " + str.tostring(math.round(stochD, 1)), text_halign=text.align_left)
+
+    table.cell(dash, 0, 3, "ADX(" + str.tostring(adxLen) + ")", text_halign=text.align_left)
+    table.cell(dash, 1, 3, str.tostring(math.round(adxVal, 1)), text_halign=text.align_left)
+
+    table.cell(dash, 0, 4, "+DI / -DI", text_halign=text.align_left)
+    table.cell(dash, 1, 4, str.tostring(math.round(diPlus, 1)) + " / " + str.tostring(math.round(diMinus, 1)), text_halign=text.align_left)
+
+    table.cell(dash, 0, 5, "MACD Hist", text_halign=text.align_left)
+    table.cell(dash, 1, 5, str.tostring(math.round(histLine, 2)), text_halign=text.align_left)
+
+    table.cell(dash, 0, 6, "ATR(" + str.tostring(atrLen) + ")", text_halign=text.align_left)
+    table.cell(dash, 1, 6, str.tostring(math.round(atrVal, 1)), text_halign=text.align_left)
+
+    table.cell(dash, 0, 7, "SMA 20/50/100/200", text_halign=text.align_left)
+    table.cell(dash, 1, 7, str.tostring(math.round(sma20)) + " / " + str.tostring(math.round(sma50)) + " / " +
+                           str.tostring(math.round(sma100)) + " / " + str.tostring(math.round(sma200)), text_halign=text.align_left)
+
+    table.cell(dash, 0, 8, "EMA 9 / 21", text_halign=text.align_left)
+    table.cell(dash, 1, 8, str.tostring(math.round(ema9)) + " / " + str.tostring(math.round(ema21)), text_halign=text.align_left)
+
+    table.cell(dash, 0, 9, "BB Upper / Lower", text_halign=text.align_left)
+    table.cell(dash, 1, 9, str.tostring(math.round(bbUpper)) + " / " + str.tostring(math.round(bbLower)), text_halign=text.align_left)
+
+    table.cell(dash, 0, 10, "VIX (chg)", text_halign=text.align_left)
+    table.cell(dash, 1, 10, showVIX ? str.tostring(math.round(vixClose, 2)) + " (" + (vixChange >= 0 ? "+" : "") + str.tostring(math.round(vixChange, 2)) + ")" : "off", text_halign=text.align_left)
+
+    table.cell(dash, 0, 11, "Prev Day H/L", text_halign=text.align_left)
+    table.cell(dash, 1, 11, str.tostring(math.round(dailyHigh)) + " / " + str.tostring(math.round(dailyLow)), text_halign=text.align_left)
+
+    table.cell(dash, 0, 12, "Prev Week H/L", text_halign=text.align_left)
+    table.cell(dash, 1, 12, str.tostring(math.round(prevWeekHigh)) + " / " + str.tostring(math.round(prevWeekLow)), text_halign=text.align_left)
+
+    table.cell(dash, 0, 13, "Prev Month H/L", text_halign=text.align_left)
+    table.cell(dash, 1, 13, str.tostring(math.round(prevMonthHigh)) + " / " + str.tostring(math.round(prevMonthLow)), text_halign=text.align_left)
+
+    table.cell(dash, 0, 14, "Prev Year H/L", text_halign=text.align_left)
+    table.cell(dash, 1, 14, str.tostring(math.round(prevYearHigh)) + " / " + str.tostring(math.round(prevYearLow)), text_halign=text.align_left)
+
+    table.cell(dash, 0, 15, "Last 2W H/L", text_halign=text.align_left)
+    table.cell(dash, 1, 15, str.tostring(math.round(last2WeekHigh)) + " / " + str.tostring(math.round(last2WeekLow)), text_halign=text.align_left)
+
+    table.cell(dash, 0, 16, "Last 2M H/L", text_halign=text.align_left)
+    table.cell(dash, 1, 16, str.tostring(math.round(last2MonthHigh)) + " / " + str.tostring(math.round(last2MonthLow)), text_halign=text.align_left)
+
+    table.cell(dash, 0, 17, "R1/S1 Breaks (Up/Dn)", text_halign=text.align_left)
+    table.cell(dash, 1, 17, str.tostring(countR1) + " / " + str.tostring(countS1), text_halign=text.align_left)
+
+    table.cell(dash, 0, 18, "R2/S2 Breaks (Up/Dn)", text_halign=text.align_left)
+    table.cell(dash, 1, 18, str.tostring(countR2) + " / " + str.tostring(countS2), text_halign=text.align_left)
+
+    table.cell(dash, 0, 19, "R3/S3 Breaks (Up/Dn)", text_halign=text.align_left)
+    table.cell(dash, 1, 19, str.tostring(countR3) + " / " + str.tostring(countS3), text_halign=text.align_left)
+
+    table.cell(dash, 0, 20, "BB Breaks (Up/Dn)", text_halign=text.align_left)
+    table.cell(dash, 1, 20, str.tostring(countBBUp) + " / " + str.tostring(countBBDown), text_halign=text.align_left)
+
+    table.cell(dash, 0, 21, "Prior Day H/L Breaks (Up/Dn)", text_halign=text.align_left)
+    table.cell(dash, 1, 21, str.tostring(countPrevDayHighBreaks) + " / " + str.tostring(countPrevDayLowBreaks), text_halign=text.align_left)
+
+    table.cell(dash, 0, 22, "BIAS", bgcolor=biasColor, text_color=color.white, text_halign=text.align_left)
+    table.cell(dash, 1, 22, biasLabel + " (" + str.tostring(score) + ")", bgcolor=biasColor, text_color=color.white, text_halign=text.align_left)
+
+    table.cell(dash, 0, 23, "Last Break", bgcolor=lastBreakColor, text_color=color.white, text_halign=text.align_left)
+    table.cell(dash, 1, 23, lastBreakText, bgcolor=lastBreakColor, text_color=color.white, text_halign=text.align_left)

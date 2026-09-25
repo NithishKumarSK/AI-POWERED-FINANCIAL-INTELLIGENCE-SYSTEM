@@ -1,0 +1,135 @@
+{
+  "generated_at": "2026-09-13T15:26:00.093263",
+  "symbols": [
+    "SPY",
+    "TSLA",
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "AMZN",
+    "GOOGL",
+    "META",
+    "QQQ",
+    "IWM"
+  ],
+  "horizons": [
+    7,
+    14,
+    30,
+    45
+  ],
+  "total_runs": 20,
+  "valid_runs": 16,
+  "failed_runs": 4,
+  "data_unavailable_count": 0,
+  "symbols_failed": [
+    "GOOGL",
+    "AMZN"
+  ],
+  "decision_match_pct": 25.0,
+  "direction_match_pct": 25.0,
+  "avg_return_error_pp": 9.9373,
+  "hold_rate_pct": 18.8,
+  "false_buy_count": 1,
+  "false_sell_count": 8,
+  "over_hold_count": 3,
+  "match_by_symbol": {
+    "SPY": {
+      "runs": 3,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "TSLA": {
+      "runs": 3,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "AAPL": {
+      "runs": 3,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "MSFT": {
+      "runs": 3,
+      "matches": 3,
+      "match_pct": 100.0
+    },
+    "NVDA": {
+      "runs": 3,
+      "matches": 1,
+      "match_pct": 33.3
+    },
+    "AMZN": {
+      "runs": 1,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "GOOGL": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "META": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "QQQ": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "IWM": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    }
+  },
+  "match_by_horizon": {
+    "7": {
+      "runs": 6,
+      "matches": 2,
+      "match_pct": 33.3
+    },
+    "14": {
+      "runs": 5,
+      "matches": 1,
+      "match_pct": 20.0
+    },
+    "30": {
+      "runs": 5,
+      "matches": 1,
+      "match_pct": 20.0
+    },
+    "45": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    }
+  },
+  "top_failure_reasons": [
+    {
+      "reason": "FALSE_SELL",
+      "count": 4
+    },
+    {
+      "reason": "VOLATILITY_SHIFT_MISSED",
+      "count": 3
+    },
+    {
+      "reason": "WRONG_MAGNITUDE",
+      "count": 3
+    },
+    {
+      "reason": "TREND_REVERSAL_MISSED",
+      "count": 2
+    }
+  ],
+  "recommended_prompt_changes": [
+    "VOLATILITY_SHIFT_MISSED: add vol-regime change detection to feature packet.",
+    "TREND_REVERSAL_MISSED: inject news/earnings context into Gemini prompt.",
+    "FALSE_SELL: add RSI oversold check before SELL to prevent false downside calls.",
+    "WRONG_MAGNITUDE: recalibrate predicted_return_pct scaling vs actual by horizon.",
+    "Match rate below 30% — investigate feature quality and prompt clarity."
+  ]
+}

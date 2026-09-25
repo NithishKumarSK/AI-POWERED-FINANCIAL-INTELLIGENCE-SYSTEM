@@ -1,0 +1,6 @@
+run_id,input_hash,symbol,mode,origin_date,target_date,horizon_days,price_basis,context_start_date,bars_visible_to_ai,last_ai_bar_date,origin_price,target_price,ai_decision,actual_decision,agreement,predicted_return_pct,actual_return_pct,return_error_pp,predicted_target_price,confidence,risk,bullish_score,bearish_score,uncertainty_score,data_quality_score,trend_regime,volatility_regime,benchmark_return_20d,relative_strength_20d,validation_status,exact_validation_status,proxy_validation_status,validation_type,accuracy_eligible,failure_reason,recommended_fix,provider_status
+85D65859,,TSLA,stock,2026-08-01,2026-08-15,14,,,,,,,,,,,,,,,,,,,,,,,,DATA_UNAVAILABLE,,,,False,DATA_UNAVAILABLE,DATA_UNAVAILABLE,FAILED
+5D10D2BF,,TSLA,stock,2026-07-01,2026-07-15,14,,,,,,,,,,,,,,,,,,,,,,,,DATA_UNAVAILABLE,,,,False,DATA_UNAVAILABLE,DATA_UNAVAILABLE,FAILED
+41634DEA,,TSLA,stock,2026-06-01,2026-06-15,14,,,,,,,,,,,,,,,,,,,,,,,,DATA_UNAVAILABLE,,,,False,DATA_UNAVAILABLE,DATA_UNAVAILABLE,FAILED
+FE13AB24,,TSLA,stock,2026-05-01,2026-05-15,14,,,,,,,,,,,,,,,,,,,,,,,,DATA_UNAVAILABLE,,,,False,DATA_UNAVAILABLE,DATA_UNAVAILABLE,FAILED
+27DACD4B,,TSLA,stock,2026-04-01,2026-04-15,14,,,,,,,,,,,,,,,,,,,,,,,,DATA_UNAVAILABLE,,,,False,DATA_UNAVAILABLE,DATA_UNAVAILABLE,FAILED

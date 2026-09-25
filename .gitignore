@@ -1,0 +1,89 @@
+# Environment variables — never commit real credentials
+.env
+.env.real
+.env.local
+.env.*
+!.env.example
+*.key
+*.pem
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+portfolio_holdings.xlsx
+test_portfolio.xlsx
+temp_portfolio_holdings.xlsx
+temp_portfolio_manage.xlsx
+
+# Google Cloud
+service-account-key.json
+*.pem
+
+# Logs
+logs/
+*.log
+
+# Discord agent runtime state (may contain user signals and order metadata)
+discord_stock_prediction_agent/agent_state.json
+discord_stock_prediction_agent/agent_state.backup.json
+discord_stock_prediction_agent/options_validation_cache.json
+discord_stock_prediction_agent/symbol_cache.json
+discord_stock_prediction_agent/signal_queue.sqlite3
+discord_stock_prediction_agent/signal_queue.sqlite3-shm
+discord_stock_prediction_agent/signal_queue.sqlite3-wal
+discord_stock_prediction_agent/pending_market_orders.sqlite3
+discord_stock_prediction_agent/pending_market_orders.sqlite3-shm
+discord_stock_prediction_agent/pending_market_orders.sqlite3-wal
+discord_stock_prediction_agent/*.tmp
+discord_stock_prediction_agent/logs/
+discord_stock_prediction_agent/discord_agent.lock
+
+# Evaluation artifacts (local only)
+evaluation_runs.jsonl
+institutional_runs.jsonl
+decision_memory.jsonl
+recommendation_accuracy_runs.jsonl
+pending_future_predictions.jsonl
+pending_future_predictions.local_backup_*.jsonl
+stock_prediction_evaluation_runs.jsonl
+stock_prediction_evaluation_runs.jsonl.lock
+data/accuracy_backup_*.jsonl
+__pycache__/

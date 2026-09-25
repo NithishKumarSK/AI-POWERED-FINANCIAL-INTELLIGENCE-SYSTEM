@@ -1,0 +1,2273 @@
+"""Integration checks for the actual `!automate_agent` command -- the async
+orchestration in discord_agent.py, not just the pure decision logic in
+automate_agent.py (already covered by test_automate_agent.py).
+
+Uses a fake Alpaca client and a mocked prediction engine so nothing here
+touches a real network, Gemini, or broker call.
+"""
+from __future__ import annotations
+
+import asyncio
+from datetime import date, datetime, timedelta
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from zoneinfo import ZoneInfo
+
+from . import discord_agent, state_store
+from .automate_agent import AUTOMATE_AGENT_TAG
+
+# This whole file is about the equity buy/evict/cap mechanism (options-mode
+# tests opt back in explicitly via _with_asset_mode). Production's actual
+# default asset_mode/watchlist changed to "options"/TSLA-only for the live
+# TSLA-options pivot, so pin an explicit, stable test configuration here
+# instead -- decoupling this file's assumptions from whatever production
+# happens to default to today. This must happen at *module* setup, not
+# inside _with_runtime's per-test async setup: several tests compute their
+# `predictions` dict from discord_agent.config.automate_agent_watchlist[0]
+# in the test function's own top-level code, before ever calling
+# _with_runtime, so the pin has to already be in place by then.
+#
+# Needs at least automate_agent_max_positions (20) symbols: several
+# cap/eviction tests fill every slot by indexing watchlist[0:max_positions],
+# plus one more for _with_extra_watchlist_symbol's fresh-candidate symbol.
+_TEST_WATCHLIST = (
+    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AMD", "AVGO", "NFLX",
+    "CRM", "ORCL", "ADBE", "INTC", "QCOM", "TXN", "IBM", "CSCO", "UBER", "PYPL",
+)
+_original_asset_mode: str | None = None
+_original_watchlist: tuple[str, ...] | None = None
+
+
+def setup_module(module) -> None:
+    global _original_asset_mode, _original_watchlist
+    _original_asset_mode = discord_agent.config.automate_agent_asset_mode
+    _original_watchlist = discord_agent.config.automate_agent_watchlist
+    # This is the one place in the whole suite that can still observe the
+    # *live* discord_agent.config singleton before this file's own pin
+    # overwrites it below -- every test in this file runs after that pin,
+    # so a test asserting against a fresh AgentConfig() (see
+    # test_default_asset_mode_is_both_on_tsla) can only ever re-validate
+    # the class-level literal in config.py, never catch the live singleton
+    # actually drifting at runtime (a startup hook, a forgotten teardown
+    # elsewhere). Assert it here instead, once, before the pin.
+    assert _original_asset_mode == "both", (
+        f"automate_agent_asset_mode was {_original_asset_mode!r} before this file's setup_module pinned "
+        "it -- either the production default silently changed, or an earlier test left it mutated "
+        "without restoring it in its own teardown."
+    )
+    assert _original_watchlist == ("TSLA",), (
+        f"automate_agent_watchlist was {_original_watchlist!r} before this file's setup_module pinned it."
+    )
+    object.__setattr__(discord_agent.config, "automate_agent_asset_mode", "equity")
+    object.__setattr__(discord_agent.config, "automate_agent_watchlist", _TEST_WATCHLIST)
+
+
+def teardown_module(module) -> None:
+    object.__setattr__(discord_agent.config, "automate_agent_asset_mode", _original_asset_mode)
+    object.__setattr__(discord_agent.config, "automate_agent_watchlist", _original_watchlist)
+
+
+class FakeAutomateAlpaca:
+    def __init__(self) -> None:
+        self.market_open = True
+        self.prices: dict[str, float] = {}
+        self.quantities: dict[str, float] = {}
+        self.submissions: list[dict] = []
+        self.orders: dict[str, dict] = {}
+        self.equity = 50_000.0
+        self.account_ok = True
+        # options-mode fakes: option_contracts_by_expiry maps an ISO expiry
+        # date string -> list of {"symbol", "strike_price"} dicts, matching
+        # Alpaca's real /v2/options/contracts shape closely enough for
+        # get_option_contracts's ATM-nearest-strike selection to work.
+        self.option_contracts_by_expiry: dict[str, list[dict]] = {}
+        self.option_premiums: dict[str, float] = {}
+        # Optional per-symbol (bid, ask) override for tests exercising the
+        # liquidity/spread filter -- symbols not listed here get a
+        # zero-spread synthetic quote (bid == ask == mid) derived from
+        # option_premiums, so every existing test that only ever sets
+        # option_premiums is unaffected by the filter.
+        self.option_spreads: dict[str, tuple[float, float]] = {}
+        self.options_trading_enabled = True
+        # ISO8601 next_close for get_clock, matching Alpaca's real /v2/clock
+        # shape -- used by _automate_agent_resolve_cutoff to cap an on-demand
+        # afternoon window at N minutes before the real market close. Tests
+        # that exercise that path set this explicitly; the default (far in
+        # the future) means it never binds unless a test cares about it.
+        self.next_close_iso = "2026-08-24T20:00:00Z"
+
+    def ready(self):
+        return True
+
+    def is_market_open(self):
+        return self.market_open, ""
+
+    def get_clock(self):
+        return {"is_open": self.market_open, "next_close": self.next_close_iso}, ""
+
+    def get_account(self):
+        if not self.account_ok:
+            return None, "account temporarily unavailable"
+        return {"equity": str(self.equity)}, ""
+
+    def get_position(self, symbol: str):
+        qty = self.quantities.get(symbol, 0.0)
+        if qty == 0:
+            return None, "not found"
+        return {"symbol": symbol, "qty": str(qty), "current_price": str(self.prices.get(symbol, 0.0))}, ""
+
+    def get_latest_price(self, symbol: str):
+        price = self.prices.get(symbol, 0.0)
+        return (price, "") if price else (None, "no quote")
+
+    def submit_market_order(self, symbol: str, side: str, qty: float, client_order_id: str = ""):
+        # status starts "accepted", not "filled" -- reconciliation tests
+        # simulate the broker confirming the fill in a later call to
+        # get_order, matching how a real market order isn't instantaneous.
+        order = {
+            "id": f"auto-{len(self.submissions) + 1}", "symbol": symbol, "side": side, "qty": str(qty),
+            "status": "accepted", "filled_qty": "0", "filled_avg_price": "0",
+        }
+        self.submissions.append(order)
+        self.orders[order["id"]] = order
+        return dict(order), ""
+
+    def get_order(self, order_id: str):
+        order = self.orders.get(order_id)
+        return (dict(order), "") if order else (None, "not found")
+
+    def mark_order_filled(self, order_id: str, fill_price: float | None = None) -> None:
+        """Test helper: simulate the broker confirming a fill."""
+        order = self.orders.get(order_id)
+        if not order:
+            return
+        price = fill_price if fill_price is not None else self.prices.get(order["symbol"], 0.0)
+        order.update(status="filled", filled_qty=order["qty"], filled_avg_price=str(price))
+
+    def get_option_contracts(self, underlying: str, expiration_date=None, strike=None, option_type=None):
+        contracts = self.option_contracts_by_expiry.get(str(expiration_date or ""), [])
+        if not contracts:
+            return None, "No tradable option contract found."
+        return list(contracts), ""
+
+    def has_options_trading(self):
+        return self.options_trading_enabled, "" if self.options_trading_enabled else "options trading not enabled"
+
+    def submit_option_order(self, occ_symbol, side, qty, order_type="market", limit_price=None, position_intent=None, client_order_id=""):
+        order = {
+            "id": f"autoopt-{len(self.submissions) + 1}", "symbol": occ_symbol, "side": side, "qty": str(qty),
+            "status": "accepted", "filled_qty": "0", "filled_avg_price": "0", "position_intent": position_intent,
+        }
+        self.submissions.append(order)
+        self.orders[order["id"]] = order
+        return dict(order), ""
+
+    def get_option_quote(self, occ_symbol: str):
+        mid = self.option_premiums.get(occ_symbol, 0.0)
+        if not mid:
+            return None, "no quote"
+        bid, ask = self.option_spreads.get(occ_symbol, (mid, mid))
+        return {"bid": bid, "ask": ask, "mid": mid}, ""
+
+    def get_latest_option_price(self, occ_symbol: str):
+        price = self.option_premiums.get(occ_symbol, 0.0)
+        return (price, "") if price else (None, "no quote")
+
+
+async def _with_runtime(test_body, predictions: dict[str, object]) -> None:
+    """predictions maps symbol -> either a bare decision string
+    ("BUY"/"HOLD"/"SELL"), or a dict with a "decision" key plus optional
+    "confidence_score"/"predicted_return_pct"/"needs_human_review" entries
+    to exercise the ai_prediction extraction path in
+    _scan_automate_agent_watchlist. Any watchlist symbol not present in the
+    map is treated as a failed lookup (status != SUCCESS), matching a real
+    provider error for that symbol.
+    """
+    def fake_predict(symbol: str, horizon_days=None):
+        if symbol not in predictions:
+            return {"status": "FAILED", "symbol": symbol, "decision": "REVIEW"}
+        spec = predictions[symbol]
+        if isinstance(spec, dict):
+            ai_prediction = {k: v for k, v in spec.items() if k != "decision"}
+            return {
+                "status": "SUCCESS", "symbol": symbol,
+                "decision": spec.get("decision", "BUY"),
+                "ai_prediction": ai_prediction,
+            }
+        return {"status": "SUCCESS", "symbol": symbol, "decision": spec}
+
+    with TemporaryDirectory() as tmp:
+        original_state = state_store.STATE_PATH
+        original_alpaca = discord_agent.alpaca
+        original_predict = discord_agent.run_project_prediction
+        original_send = discord_agent._send_channel
+        state_store.STATE_PATH = Path(tmp) / "agent_state.json"
+        fake = FakeAutomateAlpaca()
+        sent: list[tuple[int, str]] = []
+
+        async def capture_send(channel_id: int, content: str = "", embed=None) -> None:
+            sent.append((channel_id, content))
+
+        discord_agent.alpaca = fake
+        discord_agent.run_project_prediction = fake_predict
+        discord_agent._send_channel = capture_send
+        # The cooldown/lock are module-level globals so they persist across
+        # sequential test runs in the same process -- reset both so each
+        # test starts from a clean slate regardless of run order.
+        discord_agent._automate_agent_last_run = 0.0
+        if discord_agent._automate_agent_lock.locked():
+            discord_agent._automate_agent_lock.release()
+        try:
+            await test_body(fake, sent)
+        finally:
+            state_store.STATE_PATH = original_state
+            discord_agent.alpaca = original_alpaca
+            discord_agent.run_project_prediction = original_predict
+            discord_agent._send_channel = original_send
+
+
+def test_one_stuck_symbol_prediction_does_not_freeze_the_whole_scan() -> None:
+    """Regression: nothing previously bounded a single watchlist symbol's
+    prediction call. A stalled data-fetch/AI call on one symbol would block
+    asyncio.gather forever -- and since the scan runs inside
+    _automate_agent_lock, that would permanently freeze !automate_agent and
+    the autoscan loop, not just delay one cycle.
+
+    Uses loop.run_until_complete directly rather than asyncio.run: asyncio.run
+    cancels and awaits every remaining task (including the deliberately
+    orphaned, still-sleeping stuck-symbol task) as part of its own teardown,
+    which would make this test measure that unrelated cleanup wait instead of
+    what actually matters -- how quickly _build_automate_agent_text itself
+    returns control, which is what frees the lock for the next cycle in the
+    real long-running bot process."""
+    import time
+
+    watchlist = discord_agent.config.automate_agent_watchlist
+    stuck_symbol, good_symbol = watchlist[0], watchlist[1]
+
+    def slow_predict(symbol: str, horizon_days=None):
+        if symbol == stuck_symbol:
+            time.sleep(5)  # far longer than the test's scan timeout below
+            return {"status": "SUCCESS", "symbol": symbol, "decision": "BUY"}
+        if symbol == good_symbol:
+            return {
+                "status": "SUCCESS", "symbol": symbol, "decision": "BUY",
+                "ai_prediction": {"confidence_score": 75},
+            }
+        return {"status": "FAILED", "symbol": symbol, "decision": "REVIEW"}
+
+    with TemporaryDirectory() as tmp:
+        original_state = state_store.STATE_PATH
+        original_alpaca = discord_agent.alpaca
+        original_predict = discord_agent.run_project_prediction
+        original_send = discord_agent._send_channel
+        original_timeout = discord_agent.config.automate_agent_scan_timeout_seconds
+        state_store.STATE_PATH = Path(tmp) / "agent_state.json"
+        fake = FakeAutomateAlpaca()
+        fake.prices[good_symbol] = 60.0
+
+        async def capture_send(channel_id: int, content: str = "", embed=None) -> None:
+            pass
+
+        discord_agent.alpaca = fake
+        discord_agent.run_project_prediction = slow_predict
+        discord_agent._send_channel = capture_send
+        discord_agent._automate_agent_last_run = 0.0
+        if discord_agent._automate_agent_lock.locked():
+            discord_agent._automate_agent_lock.release()
+        object.__setattr__(discord_agent.config, "automate_agent_scan_timeout_seconds", 1)
+        loop = asyncio.new_event_loop()
+        try:
+            started = time.monotonic()
+            loop.run_until_complete(discord_agent._build_automate_agent_text())
+            elapsed = time.monotonic() - started
+            assert elapsed < 4, f"scan should time out the stuck symbol quickly, took {elapsed:.1f}s"
+            assert good_symbol in {p["symbol"] for p in state_store.list_positions()}, (
+                "a stuck symbol must not prevent other candidates from being traded"
+            )
+        finally:
+            # The stuck-symbol task is deliberately left running/orphaned --
+            # don't wait for it, just drop the loop (matches how the real,
+            # long-running bot process would behave: nothing else waits on it).
+            loop.close()
+            state_store.STATE_PATH = original_state
+            discord_agent.alpaca = original_alpaca
+            discord_agent.run_project_prediction = original_predict
+            discord_agent._send_channel = original_send
+            object.__setattr__(discord_agent.config, "automate_agent_scan_timeout_seconds", original_timeout)
+
+
+def _inject_today_outcome(pnl_value: float, opened_by: str = AUTOMATE_AGENT_TAG) -> None:
+    """Directly writes a closed-trade outcome record for today (UTC),
+    bypassing the full open/close position lifecycle -- lets the circuit
+    breaker test control the exact realized P&L figure it's checking
+    against, rather than reverse-engineering entry/exit prices to hit one.
+    """
+    state = state_store.load_state()
+    state.setdefault("trade_outcomes", []).append({
+        "symbol": "TESTSYM",
+        "pnl_value": pnl_value,
+        "opened_by": opened_by,
+        "closed_at": state_store._utcstamp(),
+    })
+    state_store.save_state(state)
+
+
+def test_daily_loss_circuit_breaker_blocks_new_positions() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        fake.equity = 50_000.0
+        # -3% of 50,000 is the default trip point (-1,500); simulate a
+        # worse loss already realized today from automate_agent's own trades.
+        _inject_today_outcome(-2000.0, opened_by=AUTOMATE_AGENT_TAG)
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+
+        text = await discord_agent._build_automate_agent_text()
+
+        assert "circuit breaker" in text.lower()
+        assert not fake.submissions, "no new order should be placed once tripped"
+        assert not state_store.list_positions()
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: "BUY"}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_daily_loss_circuit_breaker_ignores_a_real_users_losses() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        fake.equity = 50_000.0
+        # A large loss on a REAL user's own trade today should never trip
+        # automate_agent's breaker -- it's scoped to automate_agent's own
+        # realized P&L only.
+        _inject_today_outcome(-10_000.0, opened_by="")
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+
+        text = await discord_agent._build_automate_agent_text()
+
+        assert "circuit breaker" not in text.lower()
+        assert len(fake.submissions) == 1, "automate_agent should still trade normally"
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_manual_daily_paper_trade_limit_ignores_automate_agent_orders() -> None:
+    """Regression: count_today_order_events() used to count every order
+    event regardless of source, so a busy automate_agent day (up to 25
+    orders) could push a configured MAX_DAILY_PAPER_TRADES limit over the
+    top and block a real user's next manually-typed signal -- even though
+    that user hadn't placed a single trade of their own yet. This is the
+    same automate_agent-vs-manual boundary as the daily-loss circuit
+    breaker and the position cap; the manual path's own daily limit must
+    only ever count the manual path's own orders."""
+    with TemporaryDirectory() as tmp:
+        original_state = state_store.STATE_PATH
+        state_store.STATE_PATH = Path(tmp) / "agent_state.json"
+        try:
+            for i in range(10):
+                state_store.record_order_event(
+                    {"symbol": f"FAKE{i}", "side": "buy", "status": "submitted", "detail": "automate_agent_buy"}
+                )
+            assert state_store.count_today_order_events(exclude_automate_agent=True) == 0, (
+                "a busy automate_agent day alone must not count toward the manual daily-trade limit"
+            )
+            assert state_store.count_today_order_events() == 10, (
+                "the unscoped count still reflects everything, for callers that genuinely want the raw total"
+            )
+
+            state_store.record_order_event(
+                {"symbol": "AAPL", "side": "buy", "status": "submitted", "detail": "manual_signal"}
+            )
+            assert state_store.count_today_order_events(exclude_automate_agent=True) == 1, (
+                "a real manual order is still counted normally"
+            )
+        finally:
+            state_store.STATE_PATH = original_state
+
+
+def test_unverifiable_equity_blocks_the_cycle_instead_of_trading_blind() -> None:
+    """Regression: when alpaca.get_account() fails, equity resolved to 0 and
+    `if equity > 0` silently skipped the daily-loss circuit-breaker check
+    entirely -- then fell back to fixed-notional sizing and traded anyway.
+    That's fail-open exactly when account health can't be verified. It must
+    fail-safe: skip the cycle instead."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        fake.account_ok = False
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+
+        text = await discord_agent._build_automate_agent_text()
+
+        assert "skipping this cycle" in text.lower()
+        assert not fake.submissions, "must not trade blind when equity can't be verified"
+        assert not state_store.list_positions()
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_position_sizing_scales_with_account_equity() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+        fake.equity = 100_000.0  # double the 50k default
+
+        await discord_agent._build_automate_agent_text()
+
+        # risk_pct default 2% of 100,000 = 2,000 budget @ $100/share = 20 sh,
+        # vs. 10 sh at the 50k default used elsewhere in this file.
+        assert fake.submissions[0]["qty"] == "20"
+
+    # confidence_score=75 is the exact midpoint of confidence_scaled_risk_multiplier
+    # (see test_automate_agent.py), which resolves to a neutral 1.0x multiplier --
+    # keeps this test isolated to equity-based scaling only, not conflated with
+    # the separate confidence-based scaling covered by
+    # test_position_sizing_scales_with_confidence.
+    predictions = {
+        discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75},
+    }
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_general_agent_off_does_not_affect_automate_agent() -> None:
+    """automate_agent is deliberately independent of the general agent mode
+    -- agent_on/agent_off only governs whether manual/human-typed signals go
+    through the prediction decision gate or straight to paper-order
+    handling. Turning the general agent mode OFF must not stop
+    automate_agent; only !automate_agent_off (its own switch) does that."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        state_store.set_agent_mode("OFF")
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+        text = await discord_agent._build_automate_agent_text()
+        assert "agent mode is off" not in text.lower()
+        assert len(fake.submissions) == 1, "automate_agent must still trade with the general agent mode OFF"
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_automate_agent_off_blocks_it_even_when_general_agent_mode_is_on() -> None:
+    """automate_agent's own switch (!automate_agent_on/!automate_agent_off)
+    is independent of the general agent mode (!agent_on/!agent_off) that
+    gates manual signals -- turning automate_agent off specifically must
+    stop it even while the general agent mode stays ON."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        state_store.set_agent_mode("ON")
+        state_store.set_automate_agent_mode("OFF")
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+
+        text = await discord_agent._build_automate_agent_text()
+
+        assert "automate_agent mode is off" in text.lower()
+        assert not state_store.list_positions()
+        assert not fake.submissions
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_automate_agent_on_by_default_runs_normally() -> None:
+    """automate_agent's own switch defaults to ON, so a fresh state with no
+    explicit toggle at all must still let it trade normally."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        assert state_store.get_automate_agent_mode() == "ON"
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+
+        await discord_agent._build_automate_agent_text()
+
+        assert len(fake.submissions) == 1
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_cooldown_blocks_immediate_re_run() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+        first = await discord_agent._build_automate_agent_text()
+        assert len(fake.submissions) == 1, "first run buys normally"
+
+        second = await discord_agent._build_automate_agent_text()
+        assert "cooling down" in second.lower()
+        assert len(fake.submissions) == 1, "no second order placed during cooldown"
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_concurrent_invocations_do_not_double_fill_slots() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        for sym in discord_agent.config.automate_agent_watchlist:
+            fake.prices[sym] = 50.0
+        results = await asyncio.gather(
+            discord_agent._build_automate_agent_text(),
+            discord_agent._build_automate_agent_text(),
+        )
+        assert any("already running" in r.lower() for r in results), (
+            "the second overlapping call should see the lock, not run a second scan"
+        )
+        positions = state_store.list_positions()
+        assert len(positions) <= discord_agent.config.automate_agent_max_positions
+
+    predictions = {sym: "BUY" for sym in discord_agent.config.automate_agent_watchlist}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_one_symbol_erroring_during_buy_does_not_abort_the_cycle() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        watchlist = discord_agent.config.automate_agent_watchlist
+        bad_symbol, good_symbol = watchlist[0], watchlist[1]
+        fake.prices[good_symbol] = 80.0
+        fake.prices[bad_symbol] = 80.0
+
+        original_submit = fake.submit_market_order
+        def flaky_submit(symbol, side, qty, client_order_id=""):
+            if symbol == bad_symbol and side == "buy":
+                raise RuntimeError("simulated transient broker error")
+            return original_submit(symbol, side, qty, client_order_id)
+        fake.submit_market_order = flaky_submit
+
+        text = await discord_agent._build_automate_agent_text()
+        symbols_bought = {p["symbol"] for p in state_store.list_positions()}
+        assert good_symbol in symbols_bought, "the good symbol still gets bought"
+        assert bad_symbol not in symbols_bought, "the erroring symbol is skipped, not crashing the cycle"
+        assert "unexpected error" in text.lower()
+
+    predictions = {
+        discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75},
+        discord_agent.config.automate_agent_watchlist[1]: {"decision": "BUY", "confidence_score": 75},
+    }
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_market_closed_takes_no_action() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        fake.market_open = False
+        text = await discord_agent._build_automate_agent_text()
+        assert "market is closed" in text.lower()
+        assert not state_store.list_positions()
+        assert not fake.submissions
+        assert not sent  # nothing posted to the review channel either
+
+    asyncio.run(_with_runtime(scenario, predictions={}))
+
+
+def test_no_buy_candidates_places_no_trades() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        text = await discord_agent._build_automate_agent_text()
+        assert "no trades placed" in text.lower()
+        assert not state_store.list_positions()
+        assert not fake.submissions
+
+    watchlist_all_hold = {sym: "HOLD" for sym in discord_agent.config.automate_agent_watchlist}
+    asyncio.run(_with_runtime(scenario, predictions=watchlist_all_hold))
+
+
+def test_open_market_buys_a_boom_candidate_and_tags_it() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+        text = await discord_agent._build_automate_agent_text()
+
+        assert len(fake.submissions) == 1
+        assert fake.submissions[0]["symbol"] == symbol
+        assert fake.submissions[0]["side"] == "buy"
+
+        positions = state_store.list_positions()
+        assert len(positions) == 1
+        assert positions[0]["symbol"] == symbol
+        assert positions[0]["opened_by"] == AUTOMATE_AGENT_TAG
+        assert positions[0]["exit_before_market_close"] is True
+        assert positions[0]["stop_loss_pct"] == discord_agent.config.equity_stop_loss_pct
+        assert positions[0]["take_profit_pct"] == discord_agent.config.equity_take_profit_pct
+
+        # Summary must reach the stock-review channel, not stay silent.
+        assert any(symbol in content for _, content in sent)
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_equity_buy_times_out_instead_of_freezing_the_cycle() -> None:
+    """Regression: nothing previously bounded the whole per-symbol buy
+    attempt, only its individual sub-calls (each Alpaca request has its
+    own timeout, but nothing wrapped the sequence as a whole) -- a slow-
+    but-not-literally-failing call anywhere in that sequence could hold
+    _automate_agent_lock, and so delay every later cycle, far longer than
+    intended. automate_agent_buy_timeout_seconds bounds the whole
+    attempt, not just its parts."""
+    import time
+
+    def scenario_factory():
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            symbol = discord_agent.config.automate_agent_watchlist[0]
+            fake.prices[symbol] = 100.0
+            original_get_latest_price = fake.get_latest_price
+
+            def slow_get_latest_price(sym: str):
+                if sym == symbol:
+                    time.sleep(2)  # far longer than the 1s timeout below
+                return original_get_latest_price(sym)
+
+            fake.get_latest_price = slow_get_latest_price
+            original_timeout = discord_agent.config.automate_agent_buy_timeout_seconds
+            object.__setattr__(discord_agent.config, "automate_agent_buy_timeout_seconds", 1)
+            try:
+                started = time.monotonic()
+                text = await discord_agent._build_automate_agent_text()
+                elapsed = time.monotonic() - started
+            finally:
+                object.__setattr__(discord_agent.config, "automate_agent_buy_timeout_seconds", original_timeout)
+
+            assert elapsed < 4, f"the buy attempt should time out quickly, took {elapsed:.1f}s"
+            assert "took longer than 1s" in text, text
+            assert not fake.submissions, "no order should have been submitted once the attempt timed out"
+
+        return scenario
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+    asyncio.run(_with_runtime(scenario_factory(), predictions=predictions))
+
+
+def _with_extra_watchlist_symbol(test_fn) -> None:
+    """max_positions defaults to the same size as the real watchlist, so
+    "at the cap" tests need one extra candidate symbol beyond the cap to
+    prove eviction-for-a-better-pick still works. Temporarily extends the
+    watchlist by one symbol not otherwise in it, then restores it."""
+    original_watchlist = discord_agent.config.automate_agent_watchlist
+    extra_symbol = "ZZZTEST"
+    object.__setattr__(
+        discord_agent.config, "automate_agent_watchlist", original_watchlist + (extra_symbol,)
+    )
+    try:
+        test_fn(extra_symbol)
+    finally:
+        object.__setattr__(discord_agent.config, "automate_agent_watchlist", original_watchlist)
+
+
+def _stagger_updated_at(symbols: list[str]) -> None:
+    """Force strictly increasing updated_at timestamps, oldest first, for
+    the given symbols' tracked positions.
+
+    upsert_position's timestamp only has second resolution, so several
+    positions opened in a tight test loop can tie -- and state is persisted
+    as JSON with sort_keys=True, so list_positions() comes back in
+    alphabetical order after any save/reload, not insertion order. Without
+    this, "the oldest position" degrades into "whichever symbol sorts
+    first alphabetically among the tied ones" -- a coincidence, not a real
+    FIFO -- which is exactly the ambiguity a real oldest-position lookup
+    must not have.
+    """
+    state = state_store.load_state()
+    positions = state.get("agent_positions", {})
+    for index, symbol in enumerate(symbols):
+        if symbol in positions:
+            positions[symbol]["updated_at"] = f"2020-01-01T00:00:{index:02d}Z"
+    state_store.save_state(state)
+
+
+def test_at_cap_evicts_oldest_automate_position_before_buying() -> None:
+    def run(extra_symbol: str) -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            watchlist = discord_agent.config.automate_agent_watchlist
+            max_positions = discord_agent.config.automate_agent_max_positions
+            # Fill the cap with automate_agent-tagged positions, oldest first.
+            for i in range(max_positions):
+                sym = watchlist[i]
+                state_store.upsert_position(sym, 1, 50.0, "", 1.0, 10.0, "long", AUTOMATE_AGENT_TAG, True)
+                fake.quantities[sym] = 1
+                fake.prices[sym] = 50.0
+            _stagger_updated_at(list(watchlist[:max_positions]))
+            fake.prices[extra_symbol] = 75.0  # not yet held
+
+            text = await discord_agent._build_automate_agent_text()
+
+            symbols_after = {p["symbol"] for p in state_store.list_positions()}
+            assert extra_symbol in symbols_after, "the new BUY candidate was bought"
+            # Regression: the eviction sell is only *submitted* here -- the
+            # position must stay tracked (and protected by stop_loss_monitor)
+            # until Alpaca actually confirms the fill, matching every other exit
+            # path in this codebase. Deleting it immediately on mere order
+            # acceptance would silently drop protection if the sell never fills.
+            assert watchlist[0] in symbols_after, (
+                "the evicted position must remain tracked until the exit fill is reconciled"
+            )
+            evict_order_id = next(
+                o["id"] for o in fake.submissions if o["symbol"] == watchlist[0] and o["side"] == "sell"
+            )
+            fake.mark_order_filled(evict_order_id)
+            await discord_agent._reconcile_pending_exit_orders()
+
+            symbols_after_reconcile = {p["symbol"] for p in state_store.list_positions()}
+            assert watchlist[0] not in symbols_after_reconcile, (
+                "the oldest automate position was evicted once the sell was confirmed filled"
+            )
+            assert len(symbols_after_reconcile) == max_positions, "still at, not above, the cap"
+
+        predictions = {extra_symbol: {"decision": "BUY", "confidence_score": 75}}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_extra_watchlist_symbol(run)
+
+
+def test_pending_eviction_does_not_count_toward_the_cap_on_the_next_cycle() -> None:
+    """Regression: a position mid-eviction (sell submitted, not yet
+    reconciled) is still physically present in list_positions() -- the
+    replacement buy for its slot lands immediately via upsert_position, but
+    remove_position for the evicted symbol only happens once
+    _reconcile_pending_exit_orders later confirms the fill. Left
+    unaccounted for, a second cycle running before that reconciliation would
+    see the stale evicted position as still occupying a slot, forcing yet
+    another eviction it doesn't actually need -- transiently exceeding
+    automate_agent_max_positions by one per pending eviction (observed live:
+    21 open against a cap of 20). automate_agent must instead recognize an
+    in-flight eviction as an already-freed slot and buy straight into it
+    without evicting again."""
+    def run(extra_symbol: str) -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            watchlist = discord_agent.config.automate_agent_watchlist
+            max_positions = discord_agent.config.automate_agent_max_positions
+            for i in range(max_positions):
+                sym = watchlist[i]
+                state_store.upsert_position(sym, 1, 50.0, "", 1.0, 10.0, "long", AUTOMATE_AGENT_TAG, True)
+                fake.quantities[sym] = 1
+                fake.prices[sym] = 50.0
+            _stagger_updated_at(list(watchlist[:max_positions]))
+            # Simulate a prior cycle's eviction sell that was submitted but
+            # hasn't reconciled yet -- exactly like the AVY case found live.
+            evicted_symbol = watchlist[0]
+            state_store.add_pending_exit_order({
+                "order_id": "stale-eviction-1",
+                "symbol": evicted_symbol,
+                "asset_type": "equity",
+                "reason": "automate_agent_evict",
+                "requested_qty": 1,
+            })
+            fake.prices[extra_symbol] = 75.0  # the one fresh BUY candidate
+
+            await discord_agent._build_automate_agent_text()
+
+            buy_submissions = [o for o in fake.submissions if o["side"] == "buy"]
+            sell_submissions = [o for o in fake.submissions if o["side"] == "sell"]
+            assert len(buy_submissions) == 1 and buy_submissions[0]["symbol"] == extra_symbol, (
+                "the free slot from the pending eviction was used directly"
+            )
+            assert not sell_submissions, (
+                "must not evict a second position -- one slot was already freed"
+            )
+            symbols_after = {p["symbol"] for p in state_store.list_positions()}
+            assert len(symbols_after) == max_positions + 1, (
+                "still exactly one over cap (the still-unreconciled eviction), not two"
+            )
+
+        predictions = {extra_symbol: {"decision": "BUY", "confidence_score": 75}}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_extra_watchlist_symbol(run)
+
+
+def test_evicted_position_loss_counts_toward_the_daily_loss_circuit_breaker() -> None:
+    """Regression: eviction previously called the bare remove_position,
+    which never records a trade_outcomes entry -- so a real loss realized by
+    evicting a losing position was invisible to
+    today_realized_pnl(AUTOMATE_AGENT_TAG), the exact figure the daily-loss
+    circuit breaker checks. Routing eviction through the same
+    track-then-reconcile path as every other exit fixes this."""
+    def run(extra_symbol: str) -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            watchlist = discord_agent.config.automate_agent_watchlist
+            max_positions = discord_agent.config.automate_agent_max_positions
+            for i in range(max_positions):
+                sym = watchlist[i]
+                state_store.upsert_position(sym, 1, 100.0, "", 1.0, 10.0, "long", AUTOMATE_AGENT_TAG, True)
+                fake.quantities[sym] = 1
+                fake.prices[sym] = 100.0
+            _stagger_updated_at(list(watchlist[:max_positions]))
+            # The oldest position (watchlist[0]) will be evicted at a loss.
+            fake.prices[watchlist[0]] = 90.0
+            fake.prices[extra_symbol] = 75.0
+
+            await discord_agent._build_automate_agent_text()
+            assert state_store.today_realized_pnl(AUTOMATE_AGENT_TAG) == 0.0, (
+                "must not count the loss before the eviction sell is confirmed filled"
+            )
+
+            evict_order_id = next(
+                o["id"] for o in fake.submissions if o["symbol"] == watchlist[0] and o["side"] == "sell"
+            )
+            fake.mark_order_filled(evict_order_id, fill_price=90.0)
+            await discord_agent._reconcile_pending_exit_orders()
+
+            assert state_store.today_realized_pnl(AUTOMATE_AGENT_TAG) == -10.0, (
+                "the -$10 eviction loss (1 sh, $100 -> $90) must now count toward "
+                "automate_agent's own daily-loss circuit breaker"
+            )
+
+        predictions = {extra_symbol: {"decision": "BUY", "confidence_score": 75}}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_extra_watchlist_symbol(run)
+
+
+def test_buy_skipped_when_a_single_share_would_exceed_the_risk_budget() -> None:
+    """Regression: max(1, int(risk_budget // price)) used to force a 1-share
+    buy even when that single share cost far more than the risk-based
+    budget -- silently defeating fixed-fractional sizing for any stock
+    pricier than the budget. It must skip instead of oversizing."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.equity = 1_000.0  # 2% risk_pct * confidence-neutral 1.0x = $20 budget
+        fake.prices[symbol] = 50.0  # a single share already costs 2.5x the budget
+
+        text = await discord_agent._build_automate_agent_text()
+
+        assert not fake.submissions, "must not buy a share that costs more than the entire risk budget"
+        assert not state_store.list_positions()
+        assert "exceeds the" in text and "risk budget" in text
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_position_sizing_scales_with_confidence() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        watchlist = discord_agent.config.automate_agent_watchlist
+        high_conf_symbol, low_conf_symbol = watchlist[0], watchlist[1]
+        fake.prices[high_conf_symbol] = 100.0
+        fake.prices[low_conf_symbol] = 100.0
+        fake.equity = 50_000.0
+
+        await discord_agent._build_automate_agent_text()
+
+        submitted = {o["symbol"]: int(o["qty"]) for o in fake.submissions}
+        # risk_pct=2% of 50,000 = 1,000 base budget @ $100/sh = 10 sh baseline.
+        # confidence 95 -> x1.2 multiplier -> 12 sh; confidence 60 (the
+        # min-confidence floor itself, so it's still eligible) -> x0.85 -> 8 sh.
+        assert submitted[high_conf_symbol] == 12, submitted
+        assert submitted[low_conf_symbol] == 8, submitted
+        assert submitted[high_conf_symbol] > submitted[low_conf_symbol], (
+            "higher-conviction pick must get a larger position, not an identical one"
+        )
+
+    predictions = {
+        discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 95},
+        discord_agent.config.automate_agent_watchlist[1]: {"decision": "BUY", "confidence_score": 60},
+    }
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_needs_human_review_candidate_is_not_bought() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        watchlist = discord_agent.config.automate_agent_watchlist
+        risky, safe = watchlist[0], watchlist[1]
+        fake.prices[risky] = 50.0
+        fake.prices[safe] = 60.0
+
+        await discord_agent._build_automate_agent_text()
+
+        symbols_bought = {p["symbol"] for p in state_store.list_positions()}
+        assert risky not in symbols_bought, "needs_human_review candidate must never be auto-bought"
+        assert safe in symbols_bought, "the non-flagged candidate is still bought normally"
+
+    predictions = {
+        discord_agent.config.automate_agent_watchlist[0]: {
+            "decision": "BUY", "confidence_score": 95, "needs_human_review": True,
+        },
+        discord_agent.config.automate_agent_watchlist[1]: {
+            "decision": "BUY", "confidence_score": 65, "needs_human_review": False,
+        },
+    }
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_buy_summary_shows_confidence_and_predicted_return() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+
+        text = await discord_agent._build_automate_agent_text()
+
+        assert "confidence 82" in text, text
+        assert "predicted return +3.50%" in text, text
+
+    predictions = {
+        discord_agent.config.automate_agent_watchlist[0]: {
+            "decision": "BUY", "confidence_score": 82, "predicted_return_pct": 3.5,
+        },
+    }
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_a_failed_symbol_lookup_does_not_abort_the_whole_scan() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        watchlist = discord_agent.config.automate_agent_watchlist
+        good_symbol = watchlist[1]
+        fake.prices[good_symbol] = 60.0
+        # watchlist[0] is deliberately absent from `predictions`, simulating
+        # a provider failure for that one symbol.
+        text = await discord_agent._build_automate_agent_text()
+        assert any(p["symbol"] == good_symbol for p in state_store.list_positions())
+
+    watchlist = None
+    async def _run():
+        wl = discord_agent.config.automate_agent_watchlist
+        await _with_runtime(scenario, predictions={wl[1]: {"decision": "BUY", "confidence_score": 75}})
+    asyncio.run(_run())
+
+
+def test_autoscan_task_is_a_noop_when_disabled() -> None:
+    """The recurring task must not run the scan-and-trade cycle at all when
+    AUTOMATE_AGENT_AUTOSCAN_ENABLED is off, even if the loop object itself
+    gets ticked -- regardless of what the shipped default currently is."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+        original = discord_agent.config.automate_agent_autoscan_enabled
+        object.__setattr__(discord_agent.config, "automate_agent_autoscan_enabled", False)
+        try:
+            await discord_agent.automate_agent_autoscan.coro()
+            assert not fake.submissions, "disabled autoscan must not place any trade"
+            assert not state_store.list_positions()
+        finally:
+            object.__setattr__(discord_agent.config, "automate_agent_autoscan_enabled", original)
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_autoscan_task_runs_the_cycle_when_enabled() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+        original = discord_agent.config.automate_agent_autoscan_enabled
+        object.__setattr__(discord_agent.config, "automate_agent_autoscan_enabled", True)
+        try:
+            await discord_agent.automate_agent_autoscan.coro()
+            assert len(fake.submissions) == 1, "enabled autoscan runs the same cycle as !automate_agent"
+        finally:
+            object.__setattr__(discord_agent.config, "automate_agent_autoscan_enabled", original)
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_default_asset_mode_is_both_on_tsla() -> None:
+    # Pins the current product decision, per direction from the user's
+    # senior: automate_agent trades normal TSLA shares AND single-leg
+    # options (calls on BUY, puts on SELL) side by side by default, on a
+    # narrow TSLA-only watchlist -- scanning the whole S&P 500 is paused
+    # (not removed) and can be switched back on via
+    # AUTOMATE_AGENT_ASSET_MODE/AUTOMATE_AGENT_WATCHLIST. If this ever
+    # flips silently, automate_agent's live behavior would diverge from
+    # what was actually decided without anyone noticing.
+    #
+    # Asserts against a *fresh* AgentConfig(), not discord_agent.config --
+    # this module's own setup_module pins the live config to "equity" plus
+    # a wide watchlist for the rest of this file's equity-focused tests,
+    # so reading the live singleton here would just be asserting our own
+    # test pin back at ourselves.
+    from .config import AgentConfig
+
+    fresh = AgentConfig()
+    assert fresh.automate_agent_asset_mode == "both"
+    assert fresh.automate_agent_watchlist == ("TSLA",)
+    assert fresh.automate_agent_exit_time_et == "12:00"
+    assert fresh.automate_agent_min_options_trades_per_window == 5
+    assert fresh.automate_agent_min_total_trades_per_window == 10
+    assert fresh.automate_agent_max_trades_per_window == 40
+
+
+def test_config_rejects_max_trades_per_window_below_the_minimum() -> None:
+    """A misconfigured pair here (max below the options minimum) would
+    silently make the compulsory minimum permanently unreachable -- the
+    max-trades gate stops all new orders (equity and options alike) for
+    the rest of the window before the relaxed-confidence logic ever gets
+    a chance to reach the higher options-minimum target. Must fail loudly
+    at construction instead."""
+    from .config import AgentConfig
+
+    try:
+        AgentConfig(automate_agent_min_options_trades_per_window=10, automate_agent_max_trades_per_window=5)
+        raise AssertionError("must reject max_trades_per_window < min_options_trades_per_window")
+    except ValueError as exc:
+        assert "AUTOMATE_AGENT_MAX_TRADES_PER_WINDOW" in str(exc)
+
+
+def test_config_rejects_max_trades_per_window_below_the_total_minimum() -> None:
+    from .config import AgentConfig
+
+    try:
+        AgentConfig(automate_agent_min_total_trades_per_window=50, automate_agent_max_trades_per_window=40)
+        raise AssertionError("must reject max_trades_per_window < min_total_trades_per_window")
+    except ValueError as exc:
+        assert "AUTOMATE_AGENT_MAX_TRADES_PER_WINDOW" in str(exc)
+
+
+def test_config_rejects_options_minimum_above_the_total_minimum() -> None:
+    """Options trades are a subset of total trades -- requiring more
+    options trades than the total floor itself would be a contradiction
+    no cycle could ever resolve."""
+    from .config import AgentConfig
+
+    try:
+        AgentConfig(automate_agent_min_options_trades_per_window=20, automate_agent_min_total_trades_per_window=10)
+        raise AssertionError("must reject min_options_trades_per_window > min_total_trades_per_window")
+    except ValueError as exc:
+        assert "AUTOMATE_AGENT_MIN_OPTIONS_TRADES_PER_WINDOW" in str(exc)
+
+
+def test_config_rejects_force_trade_minutes_above_the_relax_minutes() -> None:
+    """The force-past-backtest window is meant to be the tail end of the
+    confidence-relax window, not wider than it."""
+    from .config import AgentConfig
+
+    try:
+        AgentConfig(automate_agent_force_trade_minutes=90, automate_agent_min_trades_relax_minutes=60)
+        raise AssertionError("must reject force_trade_minutes > min_trades_relax_minutes")
+    except ValueError as exc:
+        assert "AUTOMATE_AGENT_FORCE_TRADE_MINUTES" in str(exc)
+
+
+def _with_asset_mode(mode: str, test_fn) -> None:
+    original = discord_agent.config.automate_agent_asset_mode
+    object.__setattr__(discord_agent.config, "automate_agent_asset_mode", mode)
+    try:
+        test_fn()
+    finally:
+        object.__setattr__(discord_agent.config, "automate_agent_asset_mode", original)
+
+
+def test_options_buy_times_out_instead_of_freezing_the_cycle() -> None:
+    """Same protection as test_equity_buy_times_out_instead_of_freezing_
+    the_cycle, for the options path -- which chains more calls (a live
+    quote, contract-listing per expiry-fallback offset, concurrent
+    premium fetches, the backtest gate) and so has more places a slow-
+    but-not-literally-failing call could hide."""
+    import time
+
+    def run() -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            symbol = discord_agent.config.automate_agent_watchlist[0]
+            fake.prices[symbol] = 100.0
+            today = date.today().isoformat()
+            occ_symbol = f"{symbol}260101C00100000"
+            fake.option_contracts_by_expiry[today] = [{"symbol": occ_symbol, "strike_price": "100"}]
+            fake.option_premiums[occ_symbol] = 2.0
+
+            original_get_option_contracts = fake.get_option_contracts
+
+            def slow_get_option_contracts(underlying, expiration_date=None, strike=None, option_type=None):
+                time.sleep(2)  # far longer than the 1s timeout below
+                return original_get_option_contracts(underlying, expiration_date, strike, option_type)
+
+            fake.get_option_contracts = slow_get_option_contracts
+            original_timeout = discord_agent.config.automate_agent_buy_timeout_seconds
+            object.__setattr__(discord_agent.config, "automate_agent_buy_timeout_seconds", 1)
+            try:
+                started = time.monotonic()
+                text = await discord_agent._build_automate_agent_text()
+                elapsed = time.monotonic() - started
+            finally:
+                object.__setattr__(discord_agent.config, "automate_agent_buy_timeout_seconds", original_timeout)
+
+            assert elapsed < 4, f"the buy attempt should time out quickly, took {elapsed:.1f}s"
+            assert "took longer than 1s" in text, text
+            assert not fake.submissions, "no order should have been submitted once the attempt timed out"
+            assert not state_store.list_option_positions()
+
+        predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_asset_mode("options", run)
+
+
+def test_options_mode_buys_an_atm_call_when_backtest_confirms_buy() -> None:
+    def run() -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            symbol = discord_agent.config.automate_agent_watchlist[0]
+            fake.prices[symbol] = 100.0
+            today = date.today().isoformat()
+            occ_symbol = f"{symbol}260101C00100000"
+            fake.option_contracts_by_expiry[today] = [
+                {"symbol": f"{symbol}260101C00095000", "strike_price": "95"},
+                {"symbol": occ_symbol, "strike_price": "100"},  # nearest to the $100 underlying -> ATM
+                {"symbol": f"{symbol}260101C00110000", "strike_price": "110"},
+            ]
+            fake.option_premiums[occ_symbol] = 2.0
+
+            original_validate = discord_agent.run_options_strategy_validation
+            discord_agent.run_options_strategy_validation = lambda option: {
+                "status": "SUCCESS", "decision": "BUY",
+            }
+            try:
+                await discord_agent._build_automate_agent_text()
+
+                # The buy is only *submitted* here -- matching every other
+                # option entry in this codebase, the position is created by
+                # reconciliation once Alpaca confirms the fill.
+                assert not state_store.list_option_positions(), (
+                    "option position must not appear before the entry fill is reconciled"
+                )
+                entry_order_id = next(
+                    o["id"] for o in fake.submissions if o["symbol"] == occ_symbol and o["side"] == "buy"
+                )
+                fake.mark_order_filled(entry_order_id, fill_price=2.0)
+                await discord_agent._reconcile_pending_option_entry_orders()
+            finally:
+                discord_agent.run_options_strategy_validation = original_validate
+
+            assert not fake.quantities.get(symbol), "options mode must not also buy shares"
+            option_positions = state_store.list_option_positions()
+            assert len(option_positions) == 1, option_positions
+            position = option_positions[0]
+            assert position["occ_symbol"] == occ_symbol
+            assert position["strike"] == 100.0, "must pick the ATM strike, not the nearby OTM ones"
+            assert position["opened_by"] == AUTOMATE_AGENT_TAG
+            # Per direction from the user's senior: automate_agent's own
+            # option positions use a premium-based 20%/25% stop-loss/take-
+            # profit (option premium moves far more than the underlying),
+            # not the equity_stop_loss_pct automate_agent's equity positions
+            # use, and not the default OPTION_STOP_LOSS_PCT every other
+            # (human-originated) option position uses.
+            assert abs(
+                position["stop_loss"] - 2.0 * (1 - discord_agent.config.automate_agent_option_stop_loss_pct / 100)
+            ) < 1e-6
+
+        predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_asset_mode("options", run)
+
+
+def test_options_mode_picks_the_best_expected_payoff_strike_not_just_atm() -> None:
+    """New behavior for the TSLA-options pivot: when more than one nearby
+    strike is actually quoted, automate_agent buys whichever has the best
+    expected payoff at the model's own predicted_target_price
+    (automate_agent.select_best_strike), not simply whichever is closest
+    to the current price."""
+    def run() -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            symbol = discord_agent.config.automate_agent_watchlist[0]
+            fake.prices[symbol] = 100.0
+            today = date.today().isoformat()
+            occ_95 = f"{symbol}260101C00095000"
+            occ_100 = f"{symbol}260101C00100000"  # nearest-the-money
+            occ_105 = f"{symbol}260101C00105000"  # best expected payoff at a $110 target
+            fake.option_contracts_by_expiry[today] = [
+                {"symbol": occ_95, "strike_price": "95"},
+                {"symbol": occ_100, "strike_price": "100"},
+                {"symbol": occ_105, "strike_price": "105"},
+            ]
+            fake.option_premiums[occ_95] = 7.0
+            fake.option_premiums[occ_100] = 4.0
+            fake.option_premiums[occ_105] = 1.0
+
+            original_validate = discord_agent.run_options_strategy_validation
+            discord_agent.run_options_strategy_validation = lambda option: {
+                "status": "SUCCESS", "decision": "BUY",
+            }
+            try:
+                await discord_agent._build_automate_agent_text()
+                entry_order_id = next(
+                    o["id"] for o in fake.submissions if o["symbol"] == occ_105 and o["side"] == "buy"
+                )
+                fake.mark_order_filled(entry_order_id, fill_price=1.0)
+                await discord_agent._reconcile_pending_option_entry_orders()
+            finally:
+                discord_agent.run_options_strategy_validation = original_validate
+
+            option_positions = state_store.list_option_positions()
+            assert len(option_positions) == 1, option_positions
+            assert option_positions[0]["occ_symbol"] == occ_105, (
+                "the $105 strike (best expected payoff at the $110 target) must win over the $100 ATM strike"
+            )
+
+        predictions = {
+            discord_agent.config.automate_agent_watchlist[0]: {
+                "decision": "BUY", "confidence_score": 75, "predicted_target_price": 110.0,
+            }
+        }
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_asset_mode("options", run)
+
+
+def test_options_mode_buys_an_atm_put_on_a_sell_signal() -> None:
+    """New behavior for the TSLA-options pivot: a SELL-decision candidate is
+    actionable in options mode too -- automate_agent buys a PUT (profiting
+    from an expected decline) rather than shorting stock, which it has no
+    path to do at all."""
+    def run() -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            symbol = discord_agent.config.automate_agent_watchlist[0]
+            fake.prices[symbol] = 100.0
+            today = date.today().isoformat()
+            occ_symbol = f"{symbol}260101P00100000"
+            fake.option_contracts_by_expiry[today] = [{"symbol": occ_symbol, "strike_price": "100"}]
+            fake.option_premiums[occ_symbol] = 2.0
+
+            original_validate = discord_agent.run_options_strategy_validation
+            discord_agent.run_options_strategy_validation = lambda option: {
+                "status": "SUCCESS", "decision": "BUY",
+            }
+            try:
+                text = await discord_agent._build_automate_agent_text()
+
+                entry_order_id = next(
+                    o["id"] for o in fake.submissions if o["symbol"] == occ_symbol and o["side"] == "buy"
+                )
+                fake.mark_order_filled(entry_order_id, fill_price=2.0)
+                await discord_agent._reconcile_pending_option_entry_orders()
+            finally:
+                discord_agent.run_options_strategy_validation = original_validate
+
+            assert "put contract" in text.lower(), text
+            option_positions = state_store.list_option_positions()
+            assert len(option_positions) == 1, option_positions
+            assert option_positions[0]["side"] == "PUT"
+            assert option_positions[0]["occ_symbol"] == occ_symbol
+
+        predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "SELL", "confidence_score": 75}}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_asset_mode("options", run)
+
+
+def test_options_mode_skips_when_backtest_does_not_confirm_buy() -> None:
+    """Outside the force-trade window (see the two tests below for inside
+    it), a backtest that doesn't confirm BUY is still a hard no."""
+    def run() -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            symbol = discord_agent.config.automate_agent_watchlist[0]
+            fake.prices[symbol] = 100.0
+            today = date.today().isoformat()
+            fake.option_contracts_by_expiry[today] = [{"symbol": f"{symbol}260101C00100000", "strike_price": "100"}]
+            fake.option_premiums[f"{symbol}260101C00100000"] = 2.0
+
+            original_validate = discord_agent.run_options_strategy_validation
+            discord_agent.run_options_strategy_validation = lambda option: {
+                "status": "REVIEW", "decision": "HOLD",
+            }
+            # Pinned outside both the relax and force windows of the
+            # default 12:00 cutoff -- without this, running the suite
+            # during the real force window (11:45-12:00 ET) would make
+            # forcing True unexpectedly and this test flaky.
+            original_now_et = discord_agent._now_et
+            discord_agent._now_et = lambda: datetime(2026, 8, 24, 10, 0, tzinfo=ZoneInfo("America/New_York"))
+            try:
+                await discord_agent._build_automate_agent_text()
+            finally:
+                discord_agent.run_options_strategy_validation = original_validate
+                discord_agent._now_et = original_now_et
+
+            assert not state_store.list_option_positions(), "must never place a trade the backtest didn't confirm"
+            assert not fake.submissions
+
+        predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_asset_mode("options", run)
+
+
+def test_options_mode_still_skips_backtest_veto_within_relax_window_but_outside_force_window() -> None:
+    """Relaxing the confidence bar (last 60 min) is not the same as
+    forcing past the backtest (last 15 min, a subset of the 60). 30
+    minutes out is inside the relax window but outside the force one --
+    the backtest veto must still hold."""
+    def run() -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            symbol = discord_agent.config.automate_agent_watchlist[0]
+            fake.prices[symbol] = 100.0
+            today = date.today().isoformat()
+            fake.option_contracts_by_expiry[today] = [{"symbol": f"{symbol}260101C00100000", "strike_price": "100"}]
+            fake.option_premiums[f"{symbol}260101C00100000"] = 2.0
+
+            original_validate = discord_agent.run_options_strategy_validation
+            discord_agent.run_options_strategy_validation = lambda option: {
+                "status": "REVIEW", "decision": "HOLD",
+            }
+            original_now_et = discord_agent._now_et
+            discord_agent._now_et = lambda: datetime(2026, 8, 24, 11, 30, tzinfo=ZoneInfo("America/New_York"))
+            try:
+                await discord_agent._build_automate_agent_text()
+            finally:
+                discord_agent.run_options_strategy_validation = original_validate
+                discord_agent._now_et = original_now_et
+
+            assert not state_store.list_option_positions(), "relax window alone must not force past the backtest"
+            assert not fake.submissions
+
+        predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_asset_mode("options", run)
+
+
+def test_options_mode_forces_a_trade_past_backtest_veto_within_force_window() -> None:
+    """Regression for the live 2026-08-31 incident: a candidate cleared
+    the relaxed confidence bar but the real backtest still vetoed it, and
+    nothing forced it through, so the window closed at 0 trades despite
+    the compulsory minimum. Within the force window (last 15 min), the
+    trade must go through anyway, clearly labeled as forced."""
+    def run() -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            symbol = discord_agent.config.automate_agent_watchlist[0]
+            fake.prices[symbol] = 100.0
+            today = date.today().isoformat()
+            occ_symbol = f"{symbol}260101C00100000"
+            fake.option_contracts_by_expiry[today] = [{"symbol": occ_symbol, "strike_price": "100"}]
+            fake.option_premiums[occ_symbol] = 2.0
+
+            original_validate = discord_agent.run_options_strategy_validation
+            discord_agent.run_options_strategy_validation = lambda option: {
+                "status": "SUCCESS_POLYGON_STRIKE", "decision": "HOLD",
+            }
+            # 11:50 ET, 10 min before the default 12:00 cutoff -- inside
+            # both the relax window (60 min) and the force window (15 min).
+            original_now_et = discord_agent._now_et
+            discord_agent._now_et = lambda: datetime(2026, 8, 24, 11, 50, tzinfo=ZoneInfo("America/New_York"))
+            try:
+                text = await discord_agent._build_automate_agent_text()
+            finally:
+                discord_agent.run_options_strategy_validation = original_validate
+                discord_agent._now_et = original_now_et
+
+            assert "FORCED past backtest veto" in text, text
+            order_ids = [o["id"] for o in fake.submissions if o["symbol"] == occ_symbol and o["side"] == "buy"]
+            assert len(order_ids) == 1, "the trade must still be placed despite the HOLD verdict"
+            fake.mark_order_filled(order_ids[0], fill_price=2.0)
+            await discord_agent._reconcile_pending_option_entry_orders()
+
+            option_positions = state_store.list_option_positions()
+            assert len(option_positions) == 1, option_positions
+            assert option_positions[0]["occ_symbol"] == occ_symbol
+
+        predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_asset_mode("options", run)
+
+
+def test_scan_is_skipped_entirely_once_the_cutoff_has_passed() -> None:
+    """Regression for the live 2026-09-01 incident: the autoscan kept
+    running full-length watchlist scans (a real AI prediction call per
+    symbol, minutes long) well after the daily cutoff, even though nothing
+    bought that late could ever be anything but wasted work -- existing
+    positions are force-closed independently by stop_loss_monitor's own
+    fast loop. Once the cutoff has passed, _build_automate_agent_text must
+    return immediately without ever calling the watchlist scan."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        def _boom(*_args, **_kwargs):
+            raise AssertionError("the watchlist scan must not run once the cutoff has passed")
+
+        original_scan = discord_agent._scan_automate_agent_watchlist
+        discord_agent._scan_automate_agent_watchlist = _boom
+        original_now_et = discord_agent._now_et
+        # 5 minutes past the default 12:00 ET cutoff.
+        discord_agent._now_et = lambda: datetime(2026, 8, 24, 12, 5, tzinfo=ZoneInfo("America/New_York"))
+        try:
+            text = await discord_agent._build_automate_agent_text()
+        finally:
+            discord_agent._scan_automate_agent_watchlist = original_scan
+            discord_agent._now_et = original_now_et
+
+        assert "cutoff already passed" in text, text
+        assert not fake.submissions
+        assert not state_store.list_positions()
+        assert not state_store.list_option_positions()
+
+    asyncio.run(_with_runtime(scenario, predictions={}))
+
+
+def test_options_mode_tries_the_next_ranked_strike_when_the_backtest_rejects_the_top_one() -> None:
+    """The payoff-ranking heuristic can legitimately disagree with the
+    real backtest -- exactly what happened live on 2026-08-31. Rather
+    than giving up (or needing to force past the veto) the moment its #1
+    pick is rejected, automate_agent now offers the backtest more than
+    one real candidate and uses whichever one it actually confirms."""
+    def run() -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            symbol = discord_agent.config.automate_agent_watchlist[0]
+            fake.prices[symbol] = 100.0
+            today = date.today().isoformat()
+            occ_100 = f"{symbol}260101C00100000"  # ATM -- ranked #1 (no predicted target -> nearest-the-money)
+            occ_95 = f"{symbol}260101C00095000"   # ranked #2
+            fake.option_contracts_by_expiry[today] = [
+                {"symbol": occ_100, "strike_price": "100"},
+                {"symbol": occ_95, "strike_price": "95"},
+            ]
+            fake.option_premiums[occ_100] = 4.0
+            fake.option_premiums[occ_95] = 7.0
+
+            original_validate = discord_agent.run_options_strategy_validation
+
+            def fake_validate(option):
+                if option.strike == 100.0:
+                    return {"status": "SUCCESS_POLYGON_STRIKE", "decision": "HOLD"}
+                return {"status": "SUCCESS_POLYGON_STRIKE", "decision": "BUY"}
+
+            discord_agent.run_options_strategy_validation = fake_validate
+            try:
+                text = await discord_agent._build_automate_agent_text()
+            finally:
+                discord_agent.run_options_strategy_validation = original_validate
+
+            assert "FORCED" not in text, "must not need forcing -- the #2 candidate genuinely passed on its own"
+            bought_95 = [o for o in fake.submissions if o["symbol"] == occ_95 and o["side"] == "buy"]
+            bought_100 = [o for o in fake.submissions if o["symbol"] == occ_100]
+            assert len(bought_95) == 1, "must fall through to the #2-ranked strike once #1 is rejected"
+            assert not bought_100, "the backtest-rejected top pick must never be bought"
+
+        predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_asset_mode("options", run)
+
+
+def test_options_mode_skips_an_illiquid_strike_in_favor_of_a_tighter_spread() -> None:
+    """A strike that scores well on the expected-payoff heuristic but has
+    a wide bid/ask spread is likely to fill far worse than its quoted
+    mid -- it must never even be offered to the backtest when a tighter,
+    still-affordable alternative is available."""
+    def run() -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            symbol = discord_agent.config.automate_agent_watchlist[0]
+            fake.prices[symbol] = 100.0
+            today = date.today().isoformat()
+            occ_100 = f"{symbol}260101C00100000"  # ATM -- would rank #1, but illiquid
+            occ_95 = f"{symbol}260101C00095000"   # ranked #2, tight spread
+            fake.option_contracts_by_expiry[today] = [
+                {"symbol": occ_100, "strike_price": "100"},
+                {"symbol": occ_95, "strike_price": "95"},
+            ]
+            fake.option_premiums[occ_100] = 4.0
+            fake.option_premiums[occ_95] = 7.0
+            fake.option_spreads[occ_100] = (2.0, 6.0)   # 100% spread -- illiquid
+            fake.option_spreads[occ_95] = (6.9, 7.1)    # ~2.9% spread -- fine
+
+            original_validate = discord_agent.run_options_strategy_validation
+            validated_symbols: list[str] = []
+
+            def fake_validate(option):
+                validated_symbols.append(f"{symbol}{option.strike:g}")
+                return {"status": "SUCCESS_POLYGON_STRIKE", "decision": "BUY"}
+
+            discord_agent.run_options_strategy_validation = fake_validate
+            try:
+                await discord_agent._build_automate_agent_text()
+            finally:
+                discord_agent.run_options_strategy_validation = original_validate
+
+            assert f"{symbol}100" not in validated_symbols, (
+                "the illiquid ATM strike must be filtered out before the backtest ever sees it"
+            )
+            bought_95 = [o for o in fake.submissions if o["symbol"] == occ_95 and o["side"] == "buy"]
+            bought_100 = [o for o in fake.submissions if o["symbol"] == occ_100]
+            assert len(bought_95) == 1, "the liquid alternative must still be bought"
+            assert not bought_100, "the illiquid strike must never be bought regardless of its payoff score"
+
+        predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_asset_mode("options", run)
+
+
+def test_options_mode_forces_the_top_ranked_candidate_when_none_of_several_pass() -> None:
+    """When forcing kicks in and multiple candidates were offered to the
+    backtest but every one of them was rejected, the forced fallback must
+    still use the single best-ranked one (highest expected payoff), not
+    an arbitrary one from the list."""
+    def run() -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            symbol = discord_agent.config.automate_agent_watchlist[0]
+            fake.prices[symbol] = 100.0
+            today = date.today().isoformat()
+            occ_100 = f"{symbol}260101C00100000"  # ATM -- ranked #1
+            occ_95 = f"{symbol}260101C00095000"   # ranked #2
+            fake.option_contracts_by_expiry[today] = [
+                {"symbol": occ_100, "strike_price": "100"},
+                {"symbol": occ_95, "strike_price": "95"},
+            ]
+            fake.option_premiums[occ_100] = 4.0
+            fake.option_premiums[occ_95] = 7.0
+
+            original_validate = discord_agent.run_options_strategy_validation
+            discord_agent.run_options_strategy_validation = lambda option: {
+                "status": "SUCCESS_POLYGON_STRIKE", "decision": "HOLD",
+            }
+            original_now_et = discord_agent._now_et
+            discord_agent._now_et = lambda: datetime(2026, 8, 24, 11, 50, tzinfo=ZoneInfo("America/New_York"))
+            try:
+                text = await discord_agent._build_automate_agent_text()
+            finally:
+                discord_agent.run_options_strategy_validation = original_validate
+                discord_agent._now_et = original_now_et
+
+            assert "FORCED past backtest veto" in text, text
+            bought_100 = [o for o in fake.submissions if o["symbol"] == occ_100 and o["side"] == "buy"]
+            bought_95 = [o for o in fake.submissions if o["symbol"] == occ_95]
+            assert len(bought_100) == 1, "forced fallback must use the top-ranked (ATM) candidate"
+            assert not bought_95, "must not force a lower-ranked candidate when the top one is available to force"
+
+        predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_asset_mode("options", run)
+
+
+def test_options_mode_skips_symbol_with_no_listed_contract_within_fallback_window() -> None:
+    def run() -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            symbol = discord_agent.config.automate_agent_watchlist[0]
+            fake.prices[symbol] = 100.0
+            # fake.option_contracts_by_expiry stays empty for every date --
+            # nothing listed today or within the fallback window.
+            text = await discord_agent._build_automate_agent_text()
+            assert not state_store.list_option_positions()
+            assert "no listed" in text.lower()
+
+        predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_asset_mode("options", run)
+
+
+def test_both_mode_shares_the_position_cap_between_equity_and_options() -> None:
+    """Regression: the shared 1-10 cap must actually be enforced across both
+    asset classes -- naively reusing plan.to_buy for both loops would let
+    "both" mode open 2x max_positions (one equity + one option per
+    candidate) instead of sharing the same ceiling."""
+    def run() -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            max_positions = discord_agent.config.automate_agent_max_positions
+            watchlist = discord_agent.config.automate_agent_watchlist
+            # Fill the cap entirely with equity positions first.
+            for i in range(max_positions):
+                sym = watchlist[i]
+                state_store.upsert_position(sym, 1, 50.0, "", 1.0, 10.0, "long", AUTOMATE_AGENT_TAG, True)
+                fake.quantities[sym] = 1
+                fake.prices[sym] = 50.0
+
+            original_validate = discord_agent.run_options_strategy_validation
+            discord_agent.run_options_strategy_validation = lambda option: {
+                "status": "SUCCESS", "decision": "BUY",
+            }
+            try:
+                await discord_agent._build_automate_agent_text()
+            finally:
+                discord_agent.run_options_strategy_validation = original_validate
+
+            # At the cap with only equity's own (capped) eviction running,
+            # no option positions should have been opened on top.
+            assert not state_store.list_option_positions(), (
+                "must not exceed the shared cap by adding options on top of an already-full equity book"
+            )
+
+        predictions = {sym: {"decision": "BUY", "confidence_score": 75} for sym in discord_agent.config.automate_agent_watchlist}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_asset_mode("both", run)
+
+
+def test_both_mode_sell_signal_never_buys_equity_shares() -> None:
+    """Regression: "both" mode used to share a single ranked plan between
+    the equity and options loops. Since that plan includes SELL-decision
+    candidates (so options can buy a put), the equity loop -- which has no
+    reference to each candidate's decision at all -- ended up buying long
+    shares on a bearish SELL signal too. Equity's own plan must always be
+    ranked BUY-only regardless of asset mode."""
+    def run() -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            symbol = discord_agent.config.automate_agent_watchlist[0]
+            fake.prices[symbol] = 100.0
+            today = date.today().isoformat()
+            occ_symbol = f"{symbol}260101P00100000"
+            fake.option_contracts_by_expiry[today] = [{"symbol": occ_symbol, "strike_price": "100"}]
+            fake.option_premiums[occ_symbol] = 2.0
+
+            original_validate = discord_agent.run_options_strategy_validation
+            discord_agent.run_options_strategy_validation = lambda option: {
+                "status": "SUCCESS", "decision": "BUY",
+            }
+            try:
+                text = await discord_agent._build_automate_agent_text()
+            finally:
+                discord_agent.run_options_strategy_validation = original_validate
+
+            assert not fake.quantities.get(symbol), (
+                f"a SELL signal must never result in long equity shares -- got {fake.quantities.get(symbol)}"
+            )
+            equity_buy_orders = [o for o in fake.submissions if o["symbol"] == symbol and o["side"] == "buy"]
+            assert not equity_buy_orders, "no equity buy order should have been submitted for a SELL signal"
+            put_orders = [o for o in fake.submissions if o["symbol"] == occ_symbol and o["side"] == "buy"]
+            assert len(put_orders) == 1, "the put purchase (the actually-correct action for a SELL) must still happen"
+
+        predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "SELL", "confidence_score": 80}}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_asset_mode("both", run)
+
+
+def test_both_mode_equity_position_does_not_block_the_option_leg() -> None:
+    """Regression: plan_automate_trades' held_symbols check didn't
+    distinguish asset type, so once a symbol was held as equity it looked
+    "already held" for the options plan too (and vice versa) -- silently
+    preventing "both" mode's whole point (holding shares AND an option on
+    the same symbol at once) from ever completing whenever one leg's buy
+    landed before the other's."""
+    def run() -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            symbol = discord_agent.config.automate_agent_watchlist[0]
+            # Equity already holds this symbol from an earlier cycle --
+            # the options leg must still be free to buy a call for it.
+            state_store.upsert_position(symbol, 1, 100.0, "", 1.0, 10.0, "long", AUTOMATE_AGENT_TAG, True)
+            fake.quantities[symbol] = 1
+            fake.prices[symbol] = 100.0
+            today = date.today().isoformat()
+            occ_symbol = f"{symbol}260101C00100000"
+            fake.option_contracts_by_expiry[today] = [{"symbol": occ_symbol, "strike_price": "100"}]
+            fake.option_premiums[occ_symbol] = 2.0
+
+            original_validate = discord_agent.run_options_strategy_validation
+            discord_agent.run_options_strategy_validation = lambda option: {
+                "status": "SUCCESS", "decision": "BUY",
+            }
+            try:
+                await discord_agent._build_automate_agent_text()
+            finally:
+                discord_agent.run_options_strategy_validation = original_validate
+
+            call_orders = [o for o in fake.submissions if o["symbol"] == occ_symbol and o["side"] == "buy"]
+            assert len(call_orders) == 1, (
+                "an existing equity position for this symbol must not block automate_agent from also "
+                "opening an option position for the same symbol"
+            )
+
+        predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_asset_mode("both", run)
+
+
+def test_options_mode_skips_duplicate_buy_while_entry_is_still_pending() -> None:
+    """Regression: option entries are tracked then reconciled on confirmed
+    fill (like every other option entry in this codebase), so a slow-to-fill
+    order held over from a prior cycle wouldn't show up in
+    list_option_positions() yet. Without an explicit pending-entry check, a
+    later cycle (after the cooldown elapses) could submit a second buy for
+    the same root before the first one even confirms."""
+    def run() -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            symbol = discord_agent.config.automate_agent_watchlist[0]
+            fake.prices[symbol] = 100.0
+            today = date.today().isoformat()
+            occ_symbol = f"{symbol}260101C00100000"
+            fake.option_contracts_by_expiry[today] = [{"symbol": occ_symbol, "strike_price": "100"}]
+            fake.option_premiums[occ_symbol] = 2.0
+
+            original_validate = discord_agent.run_options_strategy_validation
+            discord_agent.run_options_strategy_validation = lambda option: {
+                "status": "SUCCESS", "decision": "BUY",
+            }
+            try:
+                await discord_agent._build_automate_agent_text()
+                assert len(fake.submissions) == 1, "first cycle should submit the option buy"
+
+                # Simulate the next scan cycle -- same candidate, but the
+                # first entry has deliberately not been reconciled yet. The
+                # pending entry makes plan_automate_trades' own held_symbols
+                # filter treat the root as already-held before the cycle even
+                # reaches _automate_agent_buy_option's own pending check, so
+                # the resulting text is "no candidates," not a per-symbol
+                # skip message -- either way, the key guarantee is no second
+                # submission.
+                discord_agent._automate_agent_last_run = 0.0
+                text = await discord_agent._build_automate_agent_text()
+                assert len(fake.submissions) == 1, (
+                    "must not submit a second buy for the same root while its first entry is still pending"
+                )
+                assert "no buy/sell-decision candidates" in text.lower()
+            finally:
+                discord_agent.run_options_strategy_validation = original_validate
+
+        predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_asset_mode("options", run)
+
+
+def test_pending_option_entries_count_toward_the_shared_cap() -> None:
+    """Regression: a submitted-but-not-yet-reconciled option entry from a
+    prior cycle must still count against automate_agent_max_positions, or a
+    slow-to-fill order could let a later cycle buy in believing there was
+    more room than will actually exist once that entry confirms."""
+    def run() -> None:
+        async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+            original_max = discord_agent.config.automate_agent_max_positions
+            object.__setattr__(discord_agent.config, "automate_agent_max_positions", 1)
+            try:
+                # A pending automate_agent option entry for a symbol NOT in
+                # play this cycle -- it alone should already fill the cap.
+                state_store.add_pending_option_entry_order({
+                    "order_id": "already-pending-1",
+                    "occ_symbol": "MSFT260101C00100000",
+                    "root": "MSFT",
+                    "requested_qty": 1,
+                    "opened_by": AUTOMATE_AGENT_TAG,
+                })
+
+                symbol = discord_agent.config.automate_agent_watchlist[0]
+                fake.prices[symbol] = 100.0
+                today = date.today().isoformat()
+                occ_symbol = f"{symbol}260101C00100000"
+                fake.option_contracts_by_expiry[today] = [{"symbol": occ_symbol, "strike_price": "100"}]
+                fake.option_premiums[occ_symbol] = 2.0
+
+                original_validate = discord_agent.run_options_strategy_validation
+                discord_agent.run_options_strategy_validation = lambda option: {
+                    "status": "SUCCESS", "decision": "BUY",
+                }
+                try:
+                    await discord_agent._build_automate_agent_text()
+                finally:
+                    discord_agent.run_options_strategy_validation = original_validate
+
+                assert not fake.submissions, (
+                    "the cap (1) is already consumed by the pending MSFT entry alone"
+                )
+            finally:
+                object.__setattr__(discord_agent.config, "automate_agent_max_positions", original_max)
+
+        predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+        asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+    _with_asset_mode("options", run)
+
+
+def test_daily_report_lists_trades_with_entry_exit_and_total_pnl() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        state_store.upsert_position("AAPL", 5, 200.0, "buy-1", 1.0, 10.0, "long", AUTOMATE_AGENT_TAG, True)
+        state_store.close_position_with_outcome("AAPL", 5, 220.0, "protection_take_profit")
+        state_store.upsert_position("MSFT", 3, 400.0, "buy-2", 1.0, 10.0, "long", AUTOMATE_AGENT_TAG, True)
+        state_store.close_position_with_outcome("MSFT", 3, 396.0, "protection_stop_loss")
+        # A trade not opened by automate_agent must not appear in its report.
+        state_store.upsert_position("TSLA", 1, 100.0, "buy-3", 1.0, 10.0)
+        state_store.close_position_with_outcome("TSLA", 1, 105.0, "manual_sell")
+
+        text = discord_agent._build_automate_agent_daily_report_text("2026-08-24")
+        assert "- AAPL: 5 share(s), entered $200.00 -> exited $220.00 (+100.00 USD, +10.00%)" in text
+        assert "- MSFT: 3 share(s), entered $400.00 -> exited $396.00 (-12.00 USD, -1.00%)" in text
+        assert "TSLA" not in text
+        assert "Total trades: 2 (1 win / 1 loss)" in text
+        assert "Total P&L for the day: +88.00 USD" in text
+
+    asyncio.run(_with_runtime(scenario, predictions={}))
+
+
+def test_daily_report_covers_both_equity_and_option_trades_together() -> None:
+    """New requirement for the "both" pivot: automate_agent trades normal
+    TSLA shares and single-leg options side by side, so one day's report
+    must list both kinds of closed trades -- not just equity."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        state_store.upsert_position("TSLA", 10, 300.0, "buy-1", 1.0, 10.0, "long", AUTOMATE_AGENT_TAG, True)
+        state_store.close_position_with_outcome("TSLA", 10, 315.0, "protection_take_profit")
+        state_store.upsert_option_position(
+            "TSLA260101C00350000", "TSLA", "CALL", 350.0, "2026-01-01",
+            2, 2.0, "opt-buy-1", opened_by=AUTOMATE_AGENT_TAG,
+        )
+        state_store.close_option_position_with_outcome("TSLA260101C00350000", 2, 2.5, "protection_take_profit")
+
+        text = discord_agent._build_automate_agent_daily_report_text("2026-08-31")
+        assert "- TSLA: 10 share(s), entered $300.00 -> exited $315.00 (+150.00 USD, +5.00%)" in text
+        assert "- TSLA260101C00350000: 2 contract(s), entered $2.00 -> exited $2.50" in text
+        assert "Total trades: 2 (2 win / 0 loss)" in text
+
+    asyncio.run(_with_runtime(scenario, predictions={}))
+
+
+def test_daily_report_waits_for_a_still_open_option_position_too() -> None:
+    """Regression: _maybe_post_automate_agent_daily_report's still_open
+    check only ever looked at list_positions() (equity) -- an automate_agent
+    option position still open past the cutoff would be silently ignored,
+    letting an incomplete report post (and then never post again, since
+    the report date gets marked as already-reported for the day)."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        state_store.upsert_option_position(
+            "TSLA260101C00350000", "TSLA", "CALL", 350.0, "2026-01-01",
+            1, 2.0, "opt-buy-1", opened_by=AUTOMATE_AGENT_TAG,
+        )
+        original_now_et = discord_agent._now_et
+        discord_agent._now_et = lambda: datetime(2026, 8, 24, 13, 0, tzinfo=ZoneInfo("America/New_York"))
+        try:
+            await discord_agent._maybe_post_automate_agent_daily_report()
+        finally:
+            discord_agent._now_et = original_now_et
+
+        assert not sent, "must not post the daily report while an automate_agent option position is still open"
+        assert not state_store.get_automate_agent_report_date(), "must not mark today as reported either"
+
+    asyncio.run(_with_runtime(scenario, predictions={}))
+
+
+def test_daily_report_says_no_trades_when_empty() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        text = discord_agent._build_automate_agent_daily_report_text("2026-08-24")
+        assert text == "automate_agent daily report (2026-08-24): no trades were closed today."
+
+    asyncio.run(_with_runtime(scenario, predictions={}))
+
+
+def test_auto_report_waits_for_open_positions_then_posts_exactly_once() -> None:
+    """Regression-shaped test for a real correctness requirement: the
+    automatic report must not fire while an automate_agent position from
+    today is still open (its P&L isn't final yet), must fire once all of
+    today's positions have actually settled, and must never post twice for
+    the same ET calendar day."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        state_store.upsert_position("AAPL", 5, 200.0, "buy-1", 1.0, 10.0, "long", AUTOMATE_AGENT_TAG, True)
+        original_now_et = discord_agent._now_et
+        discord_agent._now_et = lambda: datetime(2026, 8, 24, 12, 30, tzinfo=ZoneInfo("America/New_York"))
+        try:
+            await discord_agent._maybe_post_automate_agent_daily_report()
+            assert not any("automate_agent daily report" in content for _, content in sent), (
+                "must not report while a position from today is still open"
+            )
+            assert state_store.get_automate_agent_report_date() == ""
+
+            state_store.close_position_with_outcome("AAPL", 5, 220.0, "protection_take_profit")
+            await discord_agent._maybe_post_automate_agent_daily_report()
+            assert any("automate_agent daily report" in content for _, content in sent)
+            # Scoped to the specific cutoff (date|HH:MM), not just the date --
+            # so a same-day on-demand afternoon window gets its own report
+            # instead of being silently skipped as "already reported today".
+            assert state_store.get_automate_agent_report_date() == "2026-08-24|12:00"
+
+            sent.clear()
+            await discord_agent._maybe_post_automate_agent_daily_report()
+            assert not sent, "must not post a second report for the same day"
+        finally:
+            discord_agent._now_et = original_now_et
+
+    asyncio.run(_with_runtime(scenario, predictions={}))
+
+
+def test_auto_report_does_not_fire_before_the_cutoff() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        state_store.upsert_position("AAPL", 5, 200.0, "buy-1", 1.0, 10.0, "long", AUTOMATE_AGENT_TAG, True)
+        state_store.close_position_with_outcome("AAPL", 5, 220.0, "protection_take_profit")
+        original_now_et = discord_agent._now_et
+        discord_agent._now_et = lambda: datetime(2026, 8, 24, 11, 0, tzinfo=ZoneInfo("America/New_York"))
+        try:
+            await discord_agent._maybe_post_automate_agent_daily_report()
+            assert not sent
+            assert state_store.get_automate_agent_report_date() == ""
+        finally:
+            discord_agent._now_et = original_now_et
+
+    asyncio.run(_with_runtime(scenario, predictions={}))
+
+
+def test_autoscan_never_starts_an_on_demand_window_past_the_fixed_cutoff() -> None:
+    """allow_new_window=False (the autoscan loop's call, and every
+    non-manual caller) must never spin up a new afternoon window on its
+    own -- only a human typing !automate_agent (manual_trigger=True) can.
+    Otherwise autoscan would start a fresh 150-minute window on its own
+    every time it happened to tick past the previous one's cutoff, with no
+    human involved at all."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        now_et = datetime(2026, 8, 24, 13, 0, tzinfo=ZoneInfo("America/New_York"))
+        cutoff = await discord_agent._automate_agent_resolve_cutoff(now_et, allow_new_window=False)
+        assert cutoff == discord_agent.config.automate_agent_exit_time_et
+        assert state_store.get_automate_agent_window() == {}
+
+    asyncio.run(_with_runtime(scenario, predictions={}))
+
+
+def test_manual_trigger_starts_an_on_demand_window_after_the_fixed_cutoff() -> None:
+    """The core new behavior: !automate_agent typed between the fixed
+    morning cutoff and market close starts a bounded on-demand window
+    running for automate_agent_on_demand_window_minutes (150), capped at
+    automate_agent_on_demand_close_buffer_minutes (5) before the real
+    close. Once persisted, autoscan (allow_new_window=False) picks the
+    same window back up on its own for the rest of its duration."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        fake.next_close_iso = "2026-08-24T20:00:00Z"  # 16:00 ET (EDT, UTC-4)
+        now_et = datetime(2026, 8, 24, 13, 0, tzinfo=ZoneInfo("America/New_York"))
+        cutoff = await discord_agent._automate_agent_resolve_cutoff(now_et, allow_new_window=True)
+        assert cutoff == "15:30", cutoff  # min(13:00+150min, 16:00-5min) = min(15:30, 15:55)
+
+        window = state_store.get_automate_agent_window()
+        assert window["date"] == "2026-08-24"
+        assert window["cutoff_et"] == "15:30"
+        assert window["start_utc"] == "2026-08-24T17:00:00Z"  # 13:00 EDT -> 17:00 UTC
+
+        later_et = datetime(2026, 8, 24, 14, 0, tzinfo=ZoneInfo("America/New_York"))
+        cutoff_again = await discord_agent._automate_agent_resolve_cutoff(later_et, allow_new_window=False)
+        assert cutoff_again == "15:30", "autoscan must pick up the already-started window, not the fixed cutoff"
+
+    asyncio.run(_with_runtime(scenario, predictions={}))
+
+
+def test_on_demand_window_is_capped_by_the_close_buffer() -> None:
+    """Started close enough to market close that the full 150 minutes
+    would run past it -- the window must be capped at the close buffer,
+    not extend the default duration into a closed market."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        fake.next_close_iso = "2026-08-24T20:00:00Z"  # 16:00 ET
+        now_et = datetime(2026, 8, 24, 15, 50, tzinfo=ZoneInfo("America/New_York"))
+        cutoff = await discord_agent._automate_agent_resolve_cutoff(now_et, allow_new_window=True)
+        assert cutoff == "15:55", cutoff  # min(15:50+150min=18:20, 16:00-5min=15:55)
+
+    asyncio.run(_with_runtime(scenario, predictions={}))
+
+
+def test_on_demand_window_refuses_to_start_too_close_to_close() -> None:
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        fake.next_close_iso = "2026-08-24T20:00:00Z"  # 16:00 ET
+        now_et = datetime(2026, 8, 24, 15, 57, tzinfo=ZoneInfo("America/New_York"))
+        cutoff = await discord_agent._automate_agent_resolve_cutoff(now_et, allow_new_window=True)
+        assert cutoff == ""
+        assert state_store.get_automate_agent_window() == {}
+
+    asyncio.run(_with_runtime(scenario, predictions={}))
+
+
+def test_manual_trigger_too_close_to_close_returns_a_clear_message_and_skips_the_scan() -> None:
+    def _boom(*_a, **_k):
+        raise AssertionError("must not scan when there isn't enough time left to start a window")
+
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        fake.next_close_iso = "2026-08-24T20:00:00Z"
+        original_scan = discord_agent._scan_automate_agent_watchlist
+        discord_agent._scan_automate_agent_watchlist = _boom
+        original_now_et = discord_agent._now_et
+        discord_agent._now_et = lambda: datetime(2026, 8, 24, 15, 57, tzinfo=ZoneInfo("America/New_York"))
+        try:
+            text = await discord_agent._build_automate_agent_text(manual_trigger=True)
+        finally:
+            discord_agent._scan_automate_agent_watchlist = original_scan
+            discord_agent._now_et = original_now_et
+        assert "too close to market close" in text, text
+
+    asyncio.run(_with_runtime(scenario, predictions={}))
+
+
+def test_manual_trigger_after_the_fixed_cutoff_actually_scans_and_can_buy() -> None:
+    """End-to-end: a human running !automate_agent between the fixed
+    morning cutoff and market close must not be met with "cutoff already
+    passed" -- it should start a fresh on-demand window and actually run
+    the scan-and-trade cycle, same as any other cycle."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        fake.next_close_iso = "2026-08-24T20:00:00Z"  # 16:00 ET
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 60.0
+        original_now_et = discord_agent._now_et
+        discord_agent._now_et = lambda: datetime(2026, 8, 24, 13, 0, tzinfo=ZoneInfo("America/New_York"))
+        try:
+            text = await discord_agent._build_automate_agent_text(manual_trigger=True)
+        finally:
+            discord_agent._now_et = original_now_et
+
+        assert "cutoff already passed" not in text, text
+        assert symbol in {p["symbol"] for p in state_store.list_positions()}
+        window = state_store.get_automate_agent_window()
+        assert window.get("cutoff_et") == "15:30"
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 75}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_on_demand_window_report_only_covers_trades_since_the_window_started() -> None:
+    """A same-day on-demand window's report must not repeat trades the
+    morning window already reported -- it should cover only trades closed
+    since this window's own start (start_utc), not the whole day."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        # Stands in for a trade the morning window already reported. Backdated
+        # by a minute (close_position_with_outcome always stamps real
+        # wall-clock time, with only second precision) so it's unambiguously
+        # before window_start_utc below rather than racing it within the
+        # same second.
+        state_store.upsert_position("AAPL", 5, 200.0, "buy-1", 1.0, 10.0, "long", AUTOMATE_AGENT_TAG, True)
+        state_store.close_position_with_outcome("AAPL", 5, 220.0, "protection_take_profit")
+        backdated_state = state_store.load_state()
+        backdated_state["trade_outcomes"][-1]["closed_at"] = (
+            datetime.utcnow() - timedelta(minutes=1)
+        ).isoformat(timespec="seconds") + "Z"
+        state_store.save_state(backdated_state)
+
+        window_start_utc = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        state_store.set_automate_agent_window("2026-08-24", window_start_utc, "15:30")
+
+        # A trade closed after the on-demand window started.
+        state_store.upsert_position("MSFT", 3, 300.0, "buy-2", 1.0, 10.0, "long", AUTOMATE_AGENT_TAG, True)
+        state_store.close_position_with_outcome("MSFT", 3, 330.0, "protection_take_profit")
+
+        original_now_et = discord_agent._now_et
+        discord_agent._now_et = lambda: datetime(2026, 8, 24, 15, 35, tzinfo=ZoneInfo("America/New_York"))
+        try:
+            await discord_agent._maybe_post_automate_agent_daily_report()
+        finally:
+            discord_agent._now_et = original_now_et
+
+        reports = [content for _, content in sent if "automate_agent daily report" in content]
+        assert len(reports) == 1, reports
+        assert "MSFT" in reports[0]
+        assert "AAPL" not in reports[0]
+        assert state_store.get_automate_agent_report_date() == "2026-08-24|15:30"
+
+    asyncio.run(_with_runtime(scenario, predictions={}))
+
+
+def test_no_spurious_second_report_on_a_day_with_only_an_afternoon_window() -> None:
+    """Regression for a bug caught in review: _maybe_post_automate_agent_
+    daily_report must not fall back to treating the fixed morning cutoff
+    as a second, separate report key once the afternoon window's own
+    cutoff has passed -- a day with only an on-demand afternoon window (no
+    morning session at all) must get exactly one report, not two."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        state_store.upsert_position("MSFT", 3, 300.0, "buy-1", 1.0, 10.0, "long", AUTOMATE_AGENT_TAG, True)
+        state_store.close_position_with_outcome("MSFT", 3, 330.0, "protection_take_profit")
+        window_start_utc = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        state_store.set_automate_agent_window("2026-08-24", window_start_utc, "13:15")
+
+        original_now_et = discord_agent._now_et
+        try:
+            discord_agent._now_et = lambda: datetime(2026, 8, 24, 13, 20, tzinfo=ZoneInfo("America/New_York"))
+            await discord_agent._maybe_post_automate_agent_daily_report()
+            assert len(sent) == 1, sent
+
+            # Later the same day, well after both the window's own cutoff
+            # AND the fixed 12:00 cutoff (which was never actually a real
+            # window today) -- must not report a second time.
+            discord_agent._now_et = lambda: datetime(2026, 8, 24, 14, 0, tzinfo=ZoneInfo("America/New_York"))
+            await discord_agent._maybe_post_automate_agent_daily_report()
+            assert len(sent) == 1, sent
+        finally:
+            discord_agent._now_et = original_now_et
+
+    asyncio.run(_with_runtime(scenario, predictions={}))
+
+
+def _record_fake_automate_buys(count: int, asset_type: str = "") -> None:
+    for i in range(count):
+        event = {"symbol": f"FAKE{i}", "side": "buy", "status": "submitted", "detail": "automate_agent_buy"}
+        if asset_type:
+            event["asset_type"] = asset_type
+        state_store.record_order_event(event)
+
+
+def test_compulsory_minimum_relaxes_confidence_bar_within_relax_window() -> None:
+    """A BUY candidate below the normal 60-confidence bar is skipped
+    outside the relax window (unchanged, high-quality-only behavior), but
+    gets bought once few enough trades have been placed today and the
+    relax window (last N minutes before the daily cutoff) has started --
+    the compulsory minimum-trades-per-window requirement."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+        original_now_et = discord_agent._now_et
+        discord_agent._now_et = lambda: datetime(2026, 8, 24, 11, 30, tzinfo=ZoneInfo("America/New_York"))
+        try:
+            text = await discord_agent._build_automate_agent_text()
+        finally:
+            discord_agent._now_et = original_now_et
+
+        assert len(fake.submissions) == 1, "the low-confidence candidate was bought once relaxed"
+        assert "compulsory minimum-trades fill" in text
+        positions = state_store.list_positions()
+        assert positions[0]["symbol"] == symbol
+        assert positions[0]["stop_loss_pct"] == discord_agent.config.equity_stop_loss_pct
+        assert positions[0]["take_profit_pct"] == discord_agent.config.equity_take_profit_pct
+        assert positions[0]["exit_before_market_close"] is True, "protection still applies to a forced fill"
+
+    # Confidence 30 is well below automate_agent_min_confidence (60).
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 30}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_compulsory_minimum_does_not_relax_outside_the_relax_window() -> None:
+    """The same low-confidence candidate is left alone when the relax
+    window hasn't started yet -- the normal quality bar still governs most
+    of the trading window."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+        original_now_et = discord_agent._now_et
+        discord_agent._now_et = lambda: datetime(2026, 8, 24, 10, 0, tzinfo=ZoneInfo("America/New_York"))
+        try:
+            text = await discord_agent._build_automate_agent_text()
+        finally:
+            discord_agent._now_et = original_now_et
+
+        assert not fake.submissions
+        assert "no buy-decision candidates found" in text.lower()
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 30}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_compulsory_minimum_does_not_relax_once_quota_already_met() -> None:
+    """Once both compulsory floors (options-specific and total) have
+    already been met today, the confidence bar stays at its normal level
+    even inside the relax window -- the quota is a floor, not a standing
+    invitation to keep lowering the bar for the rest of the day."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        # Recording this many options-tagged buys satisfies both floors at
+        # once: automate_agent_min_total_trades_per_window (10) is >=
+        # automate_agent_min_options_trades_per_window (5), and every one
+        # of these is an options buy, so both counters clear their bar.
+        _record_fake_automate_buys(discord_agent.config.automate_agent_min_total_trades_per_window, "option")
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+        original_now_et = discord_agent._now_et
+        discord_agent._now_et = lambda: datetime(2026, 8, 24, 11, 30, tzinfo=ZoneInfo("America/New_York"))
+        try:
+            text = await discord_agent._build_automate_agent_text()
+        finally:
+            discord_agent._now_et = original_now_et
+
+        assert not fake.submissions, "quota already met -- must not relax further"
+        assert "no buy-decision candidates found" in text.lower()
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 30}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_compulsory_total_minimum_still_relaxes_when_options_minimum_is_already_met() -> None:
+    """The two floors are independent -- meeting the options-specific one
+    doesn't excuse the total one. Exactly enough options trades to clear
+    automate_agent_min_options_trades_per_window, but still short of
+    automate_agent_min_total_trades_per_window overall, must still
+    relax."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        _record_fake_automate_buys(discord_agent.config.automate_agent_min_options_trades_per_window, "option")
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+        original_now_et = discord_agent._now_et
+        discord_agent._now_et = lambda: datetime(2026, 8, 24, 11, 30, tzinfo=ZoneInfo("America/New_York"))
+        try:
+            text = await discord_agent._build_automate_agent_text()
+        finally:
+            discord_agent._now_et = original_now_et
+
+        assert "compulsory minimums not yet met" in text.lower(), text
+        min_options = discord_agent.config.automate_agent_min_options_trades_per_window
+        assert f"options {min_options}/{min_options}" in text, text
+        assert len(fake.submissions) == 1, "the low-confidence candidate was still bought once relaxed"
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 30}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_compulsory_options_minimum_ignores_equity_trades() -> None:
+    """The options-specific compulsory minimum is about single-leg TSLA
+    options trades -- plenty of equity buys recorded today (enough to
+    satisfy the *total* floor on their own) must not satisfy the options
+    one. A day that only ever traded shares should still relax the
+    confidence bar looking for an options trade."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        # Comfortably more equity-tagged buys than either floor requires,
+        # and none of them are options trades -- satisfies the total
+        # minimum but not the options-specific one.
+        _record_fake_automate_buys(discord_agent.config.automate_agent_max_trades_per_window - 1, "equity")
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+        original_now_et = discord_agent._now_et
+        discord_agent._now_et = lambda: datetime(2026, 8, 24, 11, 30, tzinfo=ZoneInfo("America/New_York"))
+        try:
+            text = await discord_agent._build_automate_agent_text()
+        finally:
+            discord_agent._now_et = original_now_et
+
+        assert "compulsory minimums not yet met" in text.lower(), text
+        assert f"options 0/{discord_agent.config.automate_agent_min_options_trades_per_window}" in text, text
+        assert len(fake.submissions) == 1, "the low-confidence candidate was still bought once relaxed"
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 30}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_max_trades_per_window_blocks_new_buys_once_reached() -> None:
+    """Per the user's senior: at most automate_agent_max_trades_per_window
+    (15) orders in the whole trading window, regardless of how much
+    position-cap headroom eviction churn might otherwise free up. This is
+    a hard ceiling on total orders placed, distinct from
+    automate_agent_max_positions (which only bounds concurrent holdings)."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        _record_fake_automate_buys(discord_agent.config.automate_agent_max_trades_per_window)
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+
+        text = await discord_agent._build_automate_agent_text()
+
+        assert not fake.submissions, "quota already reached -- must not place another order"
+        assert "order quota" in text.lower()
+        assert str(discord_agent.config.automate_agent_max_trades_per_window) in text
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 95}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_max_trades_per_window_still_allows_buys_below_the_cap() -> None:
+    """One order short of the cap must still go through normally -- the
+    quota only blocks *once* the ceiling is actually reached."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        _record_fake_automate_buys(discord_agent.config.automate_agent_max_trades_per_window - 1)
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+
+        await discord_agent._build_automate_agent_text()
+
+        assert len(fake.submissions) == 1, "one slot remained under the cap"
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 95}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+def test_compulsory_minimum_never_overrides_the_daily_loss_circuit_breaker() -> None:
+    """A tripped daily-loss circuit breaker still blocks all new entries,
+    even inside the relax window with the quota unmet -- capital
+    protection always wins over a trade-count quota."""
+    async def scenario(fake: FakeAutomateAlpaca, sent: list) -> None:
+        # A big enough automate_agent loss today to trip the breaker.
+        state_store.upsert_position("ZZZLOSS", 100, 100.0, "", 1.0, 10.0, "long", AUTOMATE_AGENT_TAG, True)
+        state_store.close_position_with_outcome("ZZZLOSS", 100, 50.0, "protection_stop_loss")
+        symbol = discord_agent.config.automate_agent_watchlist[0]
+        fake.prices[symbol] = 100.0
+        original_now_et = discord_agent._now_et
+        discord_agent._now_et = lambda: datetime(2026, 8, 24, 11, 30, tzinfo=ZoneInfo("America/New_York"))
+        try:
+            text = await discord_agent._build_automate_agent_text()
+        finally:
+            discord_agent._now_et = original_now_et
+
+        assert not fake.submissions
+        assert "circuit breaker" in text.lower()
+
+    predictions = {discord_agent.config.automate_agent_watchlist[0]: {"decision": "BUY", "confidence_score": 30}}
+    asyncio.run(_with_runtime(scenario, predictions=predictions))
+
+
+if __name__ == "__main__":
+    setup_module(None)
+    test_daily_loss_circuit_breaker_blocks_new_positions()
+    test_daily_loss_circuit_breaker_ignores_a_real_users_losses()
+    test_position_sizing_scales_with_account_equity()
+    test_agent_off_takes_no_action()
+    test_cooldown_blocks_immediate_re_run()
+    test_concurrent_invocations_do_not_double_fill_slots()
+    test_one_symbol_erroring_during_buy_does_not_abort_the_cycle()
+    test_market_closed_takes_no_action()
+    test_no_buy_candidates_places_no_trades()
+    test_open_market_buys_a_boom_candidate_and_tags_it()
+    test_at_cap_evicts_oldest_automate_position_before_buying()
+    test_position_sizing_scales_with_confidence()
+    test_needs_human_review_candidate_is_not_bought()
+    test_buy_summary_shows_confidence_and_predicted_return()
+    test_a_failed_symbol_lookup_does_not_abort_the_whole_scan()
+    teardown_module(None)
+    print("ALL AUTOMATE_AGENT COMMAND INTEGRATION TESTS PASSED")

@@ -1,0 +1,127 @@
+{
+  "generated_at": "2026-09-13T16:09:16.030353",
+  "symbols": [
+    "SPY",
+    "TSLA",
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "AMZN",
+    "GOOGL",
+    "META",
+    "QQQ",
+    "IWM"
+  ],
+  "horizons": [
+    7,
+    14,
+    30,
+    45
+  ],
+  "total_runs": 20,
+  "valid_runs": 10,
+  "failed_runs": 9,
+  "data_unavailable_count": 1,
+  "symbols_failed": [
+    "TSLA",
+    "AMZN",
+    "AAPL",
+    "NVDA",
+    "SPY"
+  ],
+  "decision_match_pct": 30.0,
+  "direction_match_pct": 30.0,
+  "avg_return_error_pp": 7.0356,
+  "hold_rate_pct": 10.0,
+  "false_buy_count": 4,
+  "false_sell_count": 2,
+  "over_hold_count": 1,
+  "match_by_symbol": {
+    "SPY": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "TSLA": {
+      "runs": 1,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "AAPL": {
+      "runs": 2,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "MSFT": {
+      "runs": 3,
+      "matches": 3,
+      "match_pct": 100.0
+    },
+    "NVDA": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "AMZN": {
+      "runs": 2,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "GOOGL": {
+      "runs": 2,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "META": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "QQQ": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "IWM": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    }
+  },
+  "match_by_horizon": {
+    "7": {
+      "runs": 4,
+      "matches": 1,
+      "match_pct": 25.0
+    },
+    "14": {
+      "runs": 4,
+      "matches": 1,
+      "match_pct": 25.0
+    },
+    "30": {
+      "runs": 2,
+      "matches": 1,
+      "match_pct": 50.0
+    },
+    "45": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    }
+  },
+  "top_failure_reasons": [
+    {
+      "reason": "WRONG_MAGNITUDE",
+      "count": 6
+    },
+    {
+      "reason": "VOLATILITY_SHIFT_MISSED",
+      "count": 1
+    }
+  ],
+  "recommended_prompt_changes": [
+    "VOLATILITY_SHIFT_MISSED: add vol-regime change detection to feature packet.",
+    "WRONG_MAGNITUDE: recalibrate predicted_return_pct scaling vs actual by horizon."
+  ]
+}

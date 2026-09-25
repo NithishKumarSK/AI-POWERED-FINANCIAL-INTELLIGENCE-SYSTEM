@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-09-07T16:52:35.186501",
+  "symbols": [
+    "TSLA"
+  ],
+  "horizons": [
+    14
+  ],
+  "total_runs": 5,
+  "valid_runs": 0,
+  "failed_runs": 0,
+  "data_unavailable_count": 5,
+  "symbols_failed": [
+    "TSLA"
+  ],
+  "decision_match_pct": 0.0,
+  "direction_match_pct": 0.0,
+  "avg_return_error_pp": null,
+  "hold_rate_pct": 0.0,
+  "false_buy_count": 0,
+  "false_sell_count": 0,
+  "over_hold_count": 0,
+  "match_by_symbol": {
+    "TSLA": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    }
+  },
+  "match_by_horizon": {
+    "14": {
+      "runs": 0,
+      "matches": 0,
+      "match_pct": 0.0
+    }
+  },
+  "top_failure_reasons": [],
+  "recommended_prompt_changes": [
+    "Match rate below 30% — investigate feature quality and prompt clarity."
+  ]
+}
