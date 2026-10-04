@@ -1,5 +1,12 @@
 # Architecture — Flex Data / Ajay AI Finance Analyst
 
+> **STALE — DO NOT USE.** This document describes an earlier, abandoned UI design
+> (an "8 pages" model with functions like `institutional_backtesting_interface()`)
+> that does not exist anywhere in the current codebase. The live app is the
+> two-mode Stock/Options Validation flow in `stock_prediction_app.py`, entered via
+> `streamlit_app.py`. See [`README_DEMO.md`](../README_DEMO.md) for the accurate,
+> current entry point and commands. Kept here for historical reference only.
+
 > This project is called "Flex Data / Ajay AI Finance Analyst". Not Xeltrix.
 
 ## Overview

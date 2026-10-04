@@ -1,5 +1,14 @@
 # AI Financial Analyst System
 
+> **Note on accuracy:** the "File Architecture" and "Quick Start" sections below
+> describe the original **legacy** options-strategy pipeline
+> (`strategy_prediction_agent.py` / `strategy_calibration_engine.py` /
+> `strategy_accuracy_engine.py`, served by `legacy_options_app.py`), which is kept
+> on disk as an archive but is **not** what `streamlit_app.py` runs today.
+> The live app is a two-mode Stock Price / Options Strategy walk-forward
+> validator in `stock_prediction_app.py`. For accurate, current run commands see
+> [`README_DEMO.md`](README_DEMO.md).
+
 ### *The world's first self-calibrating AI that predicts options strategy outcomes — then proves itself right using real market data.*
 
 ---
