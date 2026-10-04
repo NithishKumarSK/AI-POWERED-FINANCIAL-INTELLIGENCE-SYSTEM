@@ -241,15 +241,28 @@ def _row_to_jsonl_record(row: Dict[str, Any]) -> dict:
     }
 
 
-def load_stock_prediction_records(limit: int = 200) -> List[dict]:
-    """Load recent validated records from the central DB, newest first."""
+def load_stock_prediction_records(limit: int = 200, user_id: Optional[str] = None) -> List[dict]:
+    """Load recent validated records from the central DB, newest first.
+
+    user_id=None (default) returns the whole team's records -- the original,
+    unscoped behavior every existing caller (Streamlit UI, Gemini
+    calibration) relies on. Passing a user_id scopes to just that person's
+    own records, for the API's "My Runs" view.
+    """
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                "select * from stock_predictions where status = 'validated' "
-                "order by created_at desc limit %s",
-                (limit,),
-            )
+            if user_id:
+                cur.execute(
+                    "select * from stock_predictions where status = 'validated' and user_id = %s "
+                    "order by created_at desc limit %s",
+                    (user_id, limit),
+                )
+            else:
+                cur.execute(
+                    "select * from stock_predictions where status = 'validated' "
+                    "order by created_at desc limit %s",
+                    (limit,),
+                )
             rows = cur.fetchall()
     return [_row_to_jsonl_record(r) for r in rows]
 
@@ -370,14 +383,22 @@ def _row_to_pending_record(row: Dict[str, Any]) -> dict:
     }
 
 
-def load_pending_predictions() -> List[Dict]:
-    """Load all pending/resolving records from the central DB."""
+def load_pending_predictions(user_id: Optional[str] = None) -> List[Dict]:
+    """Load all pending/resolving records from the central DB.
+    user_id=None (default, unscoped) is relied on by every existing caller."""
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                "select * from stock_predictions where status in ('pending','resolving') "
-                "order by target_date asc"
-            )
+            if user_id:
+                cur.execute(
+                    "select * from stock_predictions where status in ('pending','resolving') "
+                    "and user_id = %s order by target_date asc",
+                    (user_id,),
+                )
+            else:
+                cur.execute(
+                    "select * from stock_predictions where status in ('pending','resolving') "
+                    "order by target_date asc"
+                )
             rows = cur.fetchall()
     return [_row_to_pending_record(r) for r in rows]
 
