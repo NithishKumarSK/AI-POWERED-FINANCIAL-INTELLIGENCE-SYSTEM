@@ -288,12 +288,10 @@ from gemini_stock_prediction_agent import (
 )
 from stock_walkforward_validator import run_stock_validation
 from stock_comparison_engine import compare_ai_vs_actual, compute_actual_metrics
-from stock_accuracy_engine import (
+from db.stock_prediction_repository import (
     save_stock_prediction_record,
     load_stock_prediction_records,
     get_accuracy_summary,
-)
-from pending_predictions_engine import (
     save_pending_prediction,
     load_pending_predictions,
     count_pending_predictions,
@@ -7669,28 +7667,62 @@ def _render_known_answer_audit(val: dict, initial_capital: float):
 def _render_records():
     _section_header(
         6, "Accuracy Records",
-        "stock_prediction_evaluation_runs.jsonl — all records counted, last 20 shown",
+        "Central database (shared across your team) — all records counted, last 20 shown",
     )
 
-    # Refresh button clears session-state record cache so next read hits disk fresh
-    _r6col1, _r6col2 = st.columns([5, 1])
+    # Refresh clears the session-state cache; Resolve runs the pending->validated
+    # job inline (see db/resolver.py) so a prediction whose target_date has now
+    # arrived gets scored without waiting for the nightly scheduled run.
+    _r6col1, _r6col2, _r6col3 = st.columns([4, 1, 1.4])
     with _r6col2:
         if st.button("Refresh Accuracy", key="refresh_accuracy_btn"):
             st.session_state.pop("_accuracy_records_cache", None)
             st.rerun()
+    with _r6col3:
+        if st.button("Resolve Pending Predictions", key="resolve_pending_btn"):
+            from db.resolver import resolve_pending_predictions
+            with st.spinner("Resolving due pending predictions against actual market data..."):
+                _resolve_result = resolve_pending_predictions()
+            st.session_state["_last_resolver_result"] = _resolve_result
+            st.rerun()
 
-    # File metadata banner
-    from pathlib import Path as _P6
-    import os as _os6, datetime as _dt6
-    _eval_path = _P6(__file__).resolve().parent / "stock_prediction_evaluation_runs.jsonl"
-    if _eval_path.exists():
-        _fmtime = _dt6.datetime.utcfromtimestamp(_os6.path.getmtime(_eval_path)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        _flines = sum(1 for _ in open(_eval_path, encoding="utf-8"))
+    if st.session_state.get("_last_resolver_result"):
+        _rr = st.session_state.pop("_last_resolver_result")
+        if _rr.get("error"):
+            st.error(f"Resolver run hit an error: {_rr['error'][:300]}")
+        else:
+            st.success(
+                f"Resolver: {_rr['candidates']} candidate(s) checked — "
+                f"{_rr['resolved']} validated, {_rr['invalid']} invalid, "
+                f"{_rr['skipped']} still waiting on market data."
+            )
+
+    # DB metadata banner (replaces the old local-file mtime/line-count banner)
+    import datetime as _dt6
+    try:
+        from db.connection import get_connection as _get_conn6
+        with _get_conn6() as _conn6:
+            with _conn6.cursor() as _cur6:
+                _cur6.execute("select count(*) from stock_predictions where status='validated'")
+                _total_rows = _cur6.fetchone()[0]
+                _cur6.execute(
+                    "select started_at, resolved_count, invalid_count, skipped_count "
+                    "from resolver_runs order by started_at desc limit 1"
+                )
+                _last_run = _cur6.fetchone()
         with _r6col1:
-            st.caption(f"File: `{_eval_path.name}` | Last modified (UTC): `{_fmtime}` | Lines on disk: `{_flines}` | Loaded at: `{_dt6.datetime.utcnow().strftime('%H:%M:%SZ')}`")
-    else:
+            _last_run_txt = (
+                f"{_last_run[0]:%Y-%m-%dT%H:%M:%SZ} (+{_last_run[1]} validated, "
+                f"+{_last_run[2]} invalid, {_last_run[3]} still pending)"
+                if _last_run else "never run yet"
+            )
+            st.caption(
+                f"DB: `stock_predictions` | Validated rows: `{_total_rows}` | "
+                f"Last resolver run: `{_last_run_txt}` | Loaded at: `{_dt6.datetime.utcnow().strftime('%H:%M:%SZ')}`"
+            )
+    except Exception as _db_err6:
         with _r6col1:
-            st.caption("No accuracy file found yet.")
+            st.caption(f"Could not reach the central database: {_db_err6}")
 
     # Current run badge
     _cur_run_id = st.session_state.get("run_id")

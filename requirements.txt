@@ -14,6 +14,9 @@ requests>=2.31.0
 # Environment variables
 python-dotenv>=1.0.0
 
+# Central database (Supabase/Postgres)
+psycopg[binary]>=3.1.0
+
 # Streamlit UI
 streamlit>=1.28.0
 

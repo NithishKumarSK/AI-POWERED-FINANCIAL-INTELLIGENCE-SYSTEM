@@ -28,6 +28,20 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="ignore")
 
 
+@pytest.fixture(autouse=True)
+def _no_real_calibration_db_by_default(monkeypatch):
+    """build_calibration_summary() reads from the central DB by default (see
+    gemini_stock_prediction_agent._load_calibration_source_records). Without
+    this, every test here that touches the Gemini pipeline would make a real
+    Supabase round trip and see real, changing production data. Tests that
+    need specific calibration fixture data override this within their own
+    body via monkeypatch, which takes precedence over this autouse default.
+    """
+    import gemini_stock_prediction_agent as gsp_mod
+    monkeypatch.setattr(gsp_mod, "_load_calibration_source_records", lambda: [])
+    yield
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # IMPORT SMOKE TESTS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -665,12 +679,14 @@ def test_run_gemini_stock_prediction_chart_vision_disabled_by_default(monkeypatc
 # CALIBRATION SUMMARY TEST
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_calibration_summary_no_records():
-    """Calibration summary should not crash even with no records file."""
-    from gemini_stock_prediction_agent import build_calibration_summary
-    cal = build_calibration_summary("AAPL", 30)
+def test_calibration_summary_no_records(monkeypatch):
+    """Calibration summary should not crash even with no records available."""
+    import gemini_stock_prediction_agent as gsp_mod
+    monkeypatch.setattr(gsp_mod, "_load_calibration_source_records", lambda: [])
+    cal = gsp_mod.build_calibration_summary("AAPL", 30)
     assert isinstance(cal, dict)
     assert "total_validated_records" in cal
+    assert cal["total_validated_records"] == 0
 
 
 def _cal_rec(symbol, origin, horizon, target, timestamp, decision="BUY", actual_decision="BUY", ret_err=1.0):
@@ -694,30 +710,25 @@ def _cal_rec(symbol, origin, horizon, target, timestamp, decision="BUY", actual_
     }
 
 
-def test_calibration_summary_dedups_retries_by_origin_target(tmp_path, monkeypatch):
+def test_calibration_summary_dedups_retries_by_origin_target(monkeypatch):
     """A retried period must count once, not once per retry, in total_validated_records."""
     import gemini_stock_prediction_agent as gsp_mod
 
-    eval_file = tmp_path / "stock_eval.jsonl"
     records = [
         _cal_rec("TSLA", "2026-03-01", 30, "2026-03-31", "2026-04-01T09:00:00Z"),
         _cal_rec("TSLA", "2026-03-01", 30, "2026-03-31", "2026-04-02T10:00:00Z"),  # retry
         _cal_rec("TSLA", "2026-03-01", 30, "2026-03-31", "2026-04-03T11:00:00Z"),  # retry
     ]
-    with open(eval_file, "w", encoding="utf-8") as f:
-        for r in records:
-            f.write(json.dumps(r) + "\n")
-    monkeypatch.setattr(gsp_mod, "STOCK_EVAL_FILE", eval_file)
+    monkeypatch.setattr(gsp_mod, "_load_calibration_source_records", lambda: records)
 
     summary = gsp_mod.build_calibration_summary(symbol="", horizon_days=0)
     assert summary["total_validated_records"] == 1
 
 
-def test_calibration_summary_recent_slice_is_chronological(tmp_path, monkeypatch):
+def test_calibration_summary_recent_slice_is_chronological(monkeypatch):
     """The 'recent 30' slice must be ordered by target_date, not JSONL append order."""
     import gemini_stock_prediction_agent as gsp_mod
 
-    eval_file = tmp_path / "stock_eval.jsonl"
     # Appended out of chronological order: Feb period written after March period.
     records = [
         _cal_rec("TSLA", "2026-03-01", 30, "2026-03-31", "2026-04-01T09:00:00Z",
@@ -725,10 +736,7 @@ def test_calibration_summary_recent_slice_is_chronological(tmp_path, monkeypatch
         _cal_rec("TSLA", "2026-01-01", 30, "2026-01-31", "2026-02-01T09:00:00Z",
                  decision="BUY", actual_decision="BUY"),   # earlier period, appended second
     ]
-    with open(eval_file, "w", encoding="utf-8") as f:
-        for r in records:
-            f.write(json.dumps(r) + "\n")
-    monkeypatch.setattr(gsp_mod, "STOCK_EVAL_FILE", eval_file)
+    monkeypatch.setattr(gsp_mod, "_load_calibration_source_records", lambda: records)
 
     summary = gsp_mod.build_calibration_summary(symbol="", horizon_days=0)
     # recent_30_false_sell reads from a target-date sorted slice; the false-sell
@@ -737,37 +745,29 @@ def test_calibration_summary_recent_slice_is_chronological(tmp_path, monkeypatch
     assert summary["recent_30_false_sell"] == 1
 
 
-def test_calibration_summary_as_of_date_excludes_future_resolved_outcomes(tmp_path, monkeypatch):
+def test_calibration_summary_as_of_date_excludes_future_resolved_outcomes(monkeypatch):
     """Historical replay (as_of_date=origin) must not see outcomes resolved after it."""
     import gemini_stock_prediction_agent as gsp_mod
 
-    eval_file = tmp_path / "stock_eval.jsonl"
     records = [
         _cal_rec("TSLA", "2025-01-01", 30, "2025-01-31", "2025-02-01T09:00:00Z"),  # resolves before cutoff
         _cal_rec("TSLA", "2026-06-01", 30, "2026-07-01", "2026-07-02T09:00:00Z"),  # resolves after cutoff
     ]
-    with open(eval_file, "w", encoding="utf-8") as f:
-        for r in records:
-            f.write(json.dumps(r) + "\n")
-    monkeypatch.setattr(gsp_mod, "STOCK_EVAL_FILE", eval_file)
+    monkeypatch.setattr(gsp_mod, "_load_calibration_source_records", lambda: records)
 
     summary = gsp_mod.build_calibration_summary(symbol="", horizon_days=0, as_of_date="2025-06-01")
     assert summary["total_validated_records"] == 1
 
 
-def test_calibration_summary_as_of_date_default_is_live_unfiltered(tmp_path, monkeypatch):
+def test_calibration_summary_as_of_date_default_is_live_unfiltered(monkeypatch):
     """Omitting as_of_date (live prediction path) must keep prior unfiltered behavior."""
     import gemini_stock_prediction_agent as gsp_mod
 
-    eval_file = tmp_path / "stock_eval.jsonl"
     records = [
         _cal_rec("TSLA", "2025-01-01", 30, "2025-01-31", "2025-02-01T09:00:00Z"),
         _cal_rec("TSLA", "2026-06-01", 30, "2026-07-01", "2026-07-02T09:00:00Z"),
     ]
-    with open(eval_file, "w", encoding="utf-8") as f:
-        for r in records:
-            f.write(json.dumps(r) + "\n")
-    monkeypatch.setattr(gsp_mod, "STOCK_EVAL_FILE", eval_file)
+    monkeypatch.setattr(gsp_mod, "_load_calibration_source_records", lambda: records)
 
     summary = gsp_mod.build_calibration_summary(symbol="", horizon_days=0)
     assert summary["total_validated_records"] == 2
@@ -902,12 +902,7 @@ def test_calibration_summary_reports_error_instead_of_silently_swallowing(tmp_pa
     """build_calibration_summary() must surface a malformed calibration_profiles.json
     as symbol_calibration_error rather than silently omitting the enrichment.
     ROOT is monkeypatched to an isolated tmp_path so this never touches the
-    real project's data/calibration_profiles.json. STOCK_EVAL_FILE is a
-    separate module-level constant resolved from ROOT at import time, so it
-    must be monkeypatched too -- otherwise it keeps pointing at the real
-    stock_prediction_evaluation_runs.jsonl and any real AAPL history there
-    would satisfy the inline-record fallback, masking the malformed-file
-    behaviour this test exists to check.
+    real project's data/calibration_profiles.json.
     """
     import gemini_stock_prediction_agent as gsp_mod
 
@@ -921,12 +916,8 @@ def test_calibration_summary_reports_error_instead_of_silently_swallowing(tmp_pa
     # enough to pass that early-return without qualifying for the >=3-record
     # per-symbol inline fallback (see sym_records/_sym_inline_cal below),
     # which would otherwise mask the malformed-file behaviour being tested.
-    eval_file = tmp_path / "stock_prediction_evaluation_runs.jsonl"
-    eval_file.write_text(
-        json.dumps({"stock_prediction_input": {"symbol": "ZZZZ"}, "comparison": {}, "ai_prediction": {}}) + "\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(gsp_mod, "STOCK_EVAL_FILE", eval_file)
+    dummy_records = [{"stock_prediction_input": {"symbol": "ZZZZ"}, "comparison": {}, "ai_prediction": {}}]
+    monkeypatch.setattr(gsp_mod, "_load_calibration_source_records", lambda: dummy_records)
 
     summary = gsp_mod.build_calibration_summary(symbol="AAPL", horizon_days=30)
 

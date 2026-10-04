@@ -537,6 +537,38 @@ def build_stock_feature_packet(
 # CALIBRATION SUMMARY
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _load_calibration_source_records() -> List[dict]:
+    """Load the records build_calibration_summary() should calibrate from.
+
+    Central database (Supabase) is the source of truth -- see
+    db/stock_prediction_repository.py -- falling back to the local JSONL file
+    only if the DB is unreachable, so a transient connection hiccup degrades
+    calibration quality instead of crashing the whole prediction.
+
+    This is its own function (rather than inlined) so tests can monkeypatch
+    it directly instead of pointing STOCK_EVAL_FILE at a fixture file --
+    the real source of truth moved to the DB, so that's the correct seam now.
+    """
+    try:
+        from db.stock_prediction_repository import load_stock_prediction_records
+        return load_stock_prediction_records(limit=100000)
+    except Exception:
+        records: List[dict] = []
+        if STOCK_EVAL_FILE.exists():
+            try:
+                with open(STOCK_EVAL_FILE, "r", encoding="utf-8") as fh:
+                    for line in fh:
+                        line = line.strip()
+                        if line:
+                            try:
+                                records.append(json.loads(line))
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+        return records
+
+
 def build_calibration_summary(symbol: str = "", horizon_days: int = 0, as_of_date: str = "") -> dict:
     """Read past validated records and build a calibration summary for Gemini.
 
@@ -546,22 +578,12 @@ def build_calibration_summary(symbol: str = "", horizon_days: int = 0, as_of_dat
     origin being replayed. Empty (the default, used for live predictions where
     the cutoff is effectively "now") preserves prior unfiltered behavior.
     """
-    records: List[dict] = []
-    if STOCK_EVAL_FILE.exists():
-        try:
-            with open(STOCK_EVAL_FILE, "r", encoding="utf-8") as fh:
-                for line in fh:
-                    line = line.strip()
-                    if line:
-                        try:
-                            records.append(json.loads(line))
-                        except Exception:
-                            pass
-        except Exception:
-            pass
+    records = _load_calibration_source_records()
 
     # Retried/re-run predictions share the same (symbol, origin, horizon, target)
     # key — dedup so a single retried period doesn't outweigh normal ones.
+    # (load_stock_prediction_records already dedups DB-sourced records; this is
+    # a no-op in that case and only matters for the local-file fallback path.)
     records = dedup_records(records)
 
     if as_of_date:
