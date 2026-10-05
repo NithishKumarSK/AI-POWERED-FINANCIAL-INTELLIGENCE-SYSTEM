@@ -8,7 +8,7 @@ Run:
     streamlit run stock_prediction_app.py   (identical)
 
 Legacy options app (archive only):
-    streamlit run legacy_options_app.py
+    streamlit run legacy/legacy_options_app.py
 """
 from __future__ import annotations
 
@@ -18,7 +18,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-sys.path.insert(1, str(ROOT / "tools"))
+
+import bootstrap_paths
+bootstrap_paths.add_module_paths()
 
 from dotenv import load_dotenv
 load_dotenv(ROOT / ".env", override=True)

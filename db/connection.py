@@ -8,6 +8,7 @@ open idle across unrelated statements.
 from __future__ import annotations
 
 import os
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -16,6 +17,17 @@ from dotenv import load_dotenv
 
 _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env", override=False)
+
+# Makes core/, legacy/, agents/, tools/, src/ importable by bare name for
+# anything that imports this module -- other db/ modules (resolver.py,
+# stock_prediction_repository.py) bare-import historical_price_service,
+# stock_walkforward_validator, stock_accuracy_engine, which stay at repo
+# root, so this is defense-in-depth for whichever process imports db.* first.
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+import bootstrap_paths  # noqa: E402
+
+bootstrap_paths.add_module_paths()
 
 
 def _db_url() -> str:

@@ -38,7 +38,7 @@ PRIMARY_FILES = [
     ROOT / "stock_prediction_app.py",
 ]
 
-LEGACY_FILE = ROOT / "legacy_options_app.py"
+LEGACY_FILE = ROOT / "legacy" / "legacy_options_app.py"
 
 # ── Banned terms: old legacy identifiers that must NEVER appear as UI labels ──
 # Mode 2 legitimately has DTE, Delta, Direction, etc.

@@ -25,7 +25,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-sys.path.insert(1, str(ROOT / "tools"))
+
+import bootstrap_paths
+bootstrap_paths.add_module_paths()
 
 from dotenv import load_dotenv
 load_dotenv(ROOT / ".env", override=True)
