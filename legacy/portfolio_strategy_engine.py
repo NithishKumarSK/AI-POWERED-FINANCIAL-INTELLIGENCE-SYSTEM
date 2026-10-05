@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Callable
 import sys
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 

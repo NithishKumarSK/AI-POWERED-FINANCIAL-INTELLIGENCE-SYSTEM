@@ -21,7 +21,7 @@ import os
 from pathlib import Path
 from datetime import date, timedelta
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv

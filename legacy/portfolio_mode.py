@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 from typing import List
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(1, str(ROOT / "tools"))
 

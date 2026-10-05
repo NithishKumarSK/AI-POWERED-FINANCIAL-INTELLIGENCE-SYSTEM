@@ -879,6 +879,6 @@ add_highlight_box(doc,
     bg='EFF6FF', border_color='1E3A5F')
 
 # Save
-out_path = os.path.join(os.path.dirname(__file__), 'AI_Financial_Analyst_Report.docx')
+out_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'AI_Financial_Analyst_Report.docx')
 doc.save(out_path)
 print(f'Document saved: {out_path}')

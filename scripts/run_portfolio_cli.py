@@ -3,6 +3,13 @@ Simple command-line portfolio analysis - no web interface needed
 """
 
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import bootstrap_paths
+
+bootstrap_paths.add_module_paths()
+
 from portfolio_manager import PortfolioManager
 
 # Force output flushing

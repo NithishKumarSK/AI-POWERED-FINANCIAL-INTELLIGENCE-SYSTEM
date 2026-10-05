@@ -2,6 +2,14 @@
 Run portfolio analysis for top 5 holdings by value (test)
 """
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import bootstrap_paths
+
+bootstrap_paths.add_module_paths()
+
 from portfolio_manager import PortfolioManager
 
 # Top 5 holdings by value

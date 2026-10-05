@@ -11,7 +11,7 @@ import requests
 from pathlib import Path
 from dotenv import load_dotenv
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env", override=True)
 
 RAPIDAPI_KEY  = os.getenv("RAPIDAPI_KEY", "")

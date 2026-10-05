@@ -899,7 +899,7 @@ def generate_word(output_path: str) -> None:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    base = os.path.dirname(os.path.abspath(__file__))
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     xlsx_path = os.path.join(base, "SPY_DTE_Comparison_Report.xlsx")
     docx_path = os.path.join(base, "SPY_DTE_Comparison_Report.docx")
 

@@ -13,7 +13,7 @@ import sys
 
 from jsonl_store import append_jsonl
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 PORTFOLIO_EVAL_FILE    = ROOT / "portfolio_strategy_evaluation_runs.jsonl"

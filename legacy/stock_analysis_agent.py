@@ -22,11 +22,11 @@ try:
 except ModuleNotFoundError:
     genai = None
 
-_AGENT_ROOT = Path(__file__).resolve().parent
+_AGENT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_AGENT_ROOT / ".env", override=True)
 
 # Add tools directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'tools'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tools'))
 
 # Import tools
 from stock_historical_data import get_year_historical_data, analyze_historical_performance
@@ -886,7 +886,7 @@ def compute_intelligence_scores(
     calibration = {"available": False, "expected_accuracy": None, "note": "No evaluated history available yet."}
     calibration_penalty = 0
     try:
-        hist_path = os.path.join(os.path.dirname(__file__), "evaluation_runs.jsonl")
+        hist_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "evaluation_runs.jsonl")
         if os.path.exists(hist_path):
             evaluated = []
             with open(hist_path, "r", encoding="utf-8") as f_in:
@@ -2317,7 +2317,7 @@ ECONOMIC CONTEXT (Next 30 Days):
             "correct": correct,
         }
         try:
-            path = os.path.join(os.path.dirname(__file__), "evaluation_runs.jsonl")
+            path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "evaluation_runs.jsonl")
             _write_jsonl(path, run_obj)
         except Exception:
             pass

@@ -24,10 +24,11 @@ from jsonl_store import append_jsonl
 from recommendation_accuracy_engine import evaluate_feature_versions, evaluate_recommendation_accuracy
 
 
-DATASET_PATH = os.path.join(os.path.dirname(__file__), "data", "stock_prices_daily.csv")
-EVALUATION_RUNS_PATH = os.path.join(os.path.dirname(__file__), "evaluation_runs.jsonl")
-INSTITUTIONAL_RUNS_PATH = os.path.join(os.path.dirname(__file__), "institutional_runs.jsonl")
-DECISION_MEMORY_PATH = os.path.join(os.path.dirname(__file__), "decision_memory.jsonl")
+_REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
+DATASET_PATH = os.path.join(_REPO_ROOT, "data", "stock_prices_daily.csv")
+EVALUATION_RUNS_PATH = os.path.join(_REPO_ROOT, "evaluation_runs.jsonl")
+INSTITUTIONAL_RUNS_PATH = os.path.join(_REPO_ROOT, "institutional_runs.jsonl")
+DECISION_MEMORY_PATH = os.path.join(_REPO_ROOT, "decision_memory.jsonl")
 
 REQUIRED_COLUMNS = [
     "Date",

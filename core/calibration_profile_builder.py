@@ -27,7 +27,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-ROOT             = Path(__file__).resolve().parent
+ROOT             = Path(__file__).resolve().parent.parent
 BATCH_CSV        = ROOT / "data" / "batch_validation_results.csv"
 FAILURE_JSON     = ROOT / "data" / "failure_analysis.json"
 PROFILE_JSON     = ROOT / "data" / "calibration_profiles.json"

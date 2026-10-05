@@ -19,12 +19,13 @@ import pandas as pd
 from jsonl_store import append_jsonl
 
 
+_REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
 DEFAULT_GROUND_TRUTH_PATHS = [
-    os.path.join(os.path.dirname(__file__), "data", "recommendation_ground_truth.csv"),
-    os.path.join(os.path.dirname(__file__), "data", "recommendation_ground_truth.jsonl"),
+    os.path.join(_REPO_ROOT, "data", "recommendation_ground_truth.csv"),
+    os.path.join(_REPO_ROOT, "data", "recommendation_ground_truth.jsonl"),
 ]
 
-RECOMMENDATION_ACCURACY_PATH = os.path.join(os.path.dirname(__file__), "recommendation_accuracy_runs.jsonl")
+RECOMMENDATION_ACCURACY_PATH = os.path.join(_REPO_ROOT, "recommendation_accuracy_runs.jsonl")
 
 
 SOURCE_RESEARCH = [

@@ -13,10 +13,11 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(1, str(ROOT / "tools"))
 sys.path.insert(2, str(ROOT / "src"))
+sys.path.insert(3, str(ROOT / "legacy"))
 
 # Canonical StrategyInput used across all tests
 STRATEGY_INPUT = {
@@ -596,7 +597,7 @@ class TestV3BacktestSurrogateCalibrated:
     def test_no_yfinance_in_new_files(self):
         """strategy_calibration_engine.py must not import or use yfinance."""
         from pathlib import Path
-        root = Path(__file__).resolve().parent
+        root = Path(__file__).resolve().parent.parent / "legacy"
         new_files = ["strategy_calibration_engine.py"]
         hits = []
         for fname in new_files:
@@ -1026,7 +1027,7 @@ class TestO1ToO7ValidationRegressions:
         must no longer exist in streamlit_app.py (root cause of O6/O7).
         """
         from pathlib import Path
-        app_path = Path(__file__).resolve().parent / "streamlit_app.py"
+        app_path = Path(__file__).resolve().parent.parent / "streamlit_app.py"
         text = app_path.read_text(encoding="utf-8")
         assert "2026-06-24" not in text, (
             "Hardcoded auto-retry date '2026-06-24' found in streamlit_app.py. "
@@ -1321,7 +1322,7 @@ class TestPortfolioAIResilience:
         """portfolio_mode.py must not reference tastytrade at all."""
         from pathlib import Path
         source = (
-            Path(__file__).parent / "portfolio_mode.py"
+            Path(__file__).parent.parent / "legacy" / "portfolio_mode.py"
         ).read_text(encoding="utf-8")
         assert "tastytrade" not in source.lower(), (
             "portfolio_mode.py must not import or call tastytrade"

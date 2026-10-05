@@ -16,7 +16,7 @@ from typing import Callable, List, Optional, Tuple
 
 from jsonl_store import append_jsonl
 
-ROOT          = Path(__file__).resolve().parent
+ROOT          = Path(__file__).resolve().parent.parent
 EVAL_FILE     = ROOT / "strategy_prediction_evaluation_runs.jsonl"
 CALIB_SOURCE  = "strategy_calibration_backtest"
 EVAL_SOURCE   = "strategy_backtest_verification"

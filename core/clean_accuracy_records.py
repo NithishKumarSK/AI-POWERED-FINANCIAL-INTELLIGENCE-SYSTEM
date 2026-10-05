@@ -32,7 +32,7 @@ from pathlib import Path
 
 from record_dedup import dedup_records
 
-ROOT      = Path(__file__).resolve().parent
+ROOT      = Path(__file__).resolve().parent.parent
 # Support eval file at root level (primary) or under data/ (legacy)
 _ROOT_FILE = ROOT / "stock_prediction_evaluation_runs.jsonl"
 DATA_DIR   = ROOT / "data"

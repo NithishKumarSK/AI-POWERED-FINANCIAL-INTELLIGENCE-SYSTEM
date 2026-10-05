@@ -12,8 +12,8 @@ from typing import Any, Dict, List, Optional
 
 from jsonl_store import append_jsonl
 
-EVAL_FILE         = Path(__file__).resolve().parent / "strategy_prediction_evaluation_runs.jsonl"
-INVALID_EVAL_FILE = Path(__file__).resolve().parent / "strategy_prediction_evaluation_runs_invalid.jsonl"
+EVAL_FILE         = Path(__file__).resolve().parent.parent / "strategy_prediction_evaluation_runs.jsonl"
+INVALID_EVAL_FILE = Path(__file__).resolve().parent.parent / "strategy_prediction_evaluation_runs_invalid.jsonl"
 MODEL_VERSION = "strategy_predictor_v3_backtest_surrogate_calibrated"
 
 # Symbol regex reused for validation checks
