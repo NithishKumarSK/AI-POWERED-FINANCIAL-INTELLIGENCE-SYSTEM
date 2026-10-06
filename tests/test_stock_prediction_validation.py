@@ -363,7 +363,7 @@ def test_price_basis_default_is_close():
     Price Basis selectbox must have 'close' as the first option (default).
     Close price is the standard for walk-forward validation; 'open' must not be the default.
     """
-    app_path = _Path(__file__).resolve().parent.parent / "stock_prediction_app.py"
+    app_path = _Path(__file__).resolve().parent.parent / "core" / "stock_prediction_app.py"
     text = app_path.read_text(encoding="utf-8")
     # Both forms (stock and options) should have close before open in options list
     assert 'options=["close", "open"' in text, (
@@ -476,7 +476,7 @@ def test_validator_uses_ai_origin_price_not_nearest():
     Static proof: stock_walkforward_validator.py must read origin_price_used
     from ai_prediction instead of always calling get_price_on_date independently.
     """
-    val_path = _Path(__file__).resolve().parent.parent / "stock_walkforward_validator.py"
+    val_path = _Path(__file__).resolve().parent.parent / "core" / "stock_walkforward_validator.py"
     text = val_path.read_text(encoding="utf-8")
     assert "origin_price_used" in text, (
         "stock_walkforward_validator.py must read 'origin_price_used' from ai_prediction. "

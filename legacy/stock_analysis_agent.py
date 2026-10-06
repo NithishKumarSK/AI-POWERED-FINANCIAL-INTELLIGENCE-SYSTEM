@@ -1157,7 +1157,7 @@ class StockAnalysisAgent:
         if api_key and genai is not None:
             try:
                 genai.configure(api_key=api_key)
-                self.model = genai.GenerativeModel('gemini-2.5-flash')
+                self.model = genai.GenerativeModel('gemini-3.7-flash')
                 print("Stock Analysis Agent initialized with Gemini AI")
             except Exception as e:
                 print(f"Error initializing Gemini AI: {e}")

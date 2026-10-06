@@ -9,6 +9,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import bootstrap_paths
+bootstrap_paths.add_module_paths()
 from dotenv import load_dotenv
 load_dotenv(ROOT / '.env')
 from historical_price_service import fetch_price_history_for_range

@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Tuple
 
 from jsonl_store import append_jsonl
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 _PENDING_FILE = ROOT / "pending_future_predictions.jsonl"
 
 

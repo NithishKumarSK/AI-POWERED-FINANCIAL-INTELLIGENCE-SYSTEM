@@ -33,7 +33,7 @@ class Settings:
     gemini_api_key: str = field(
         default_factory=lambda: os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", ""))
     agent_model: str = field(
-        default_factory=lambda: os.getenv("AGENT_MODEL", "gemini-2.5-flash"))
+        default_factory=lambda: os.getenv("AGENT_MODEL", "gemini-3.7-flash"))
     agent_temperature: float = field(
         default_factory=lambda: float(os.getenv("AGENT_TEMPERATURE", "1.0")))
 

@@ -31,7 +31,7 @@ from src.models.backtest_models import (
     BacktestValidationResult,
 )
 from src.services.tastytrade_auth_service import get_access_token, get_auth_headers
-from src.utils.date_utils import default_backtest_range, to_iso_datetime
+from src.utils.date_utils import default_backtest_range, to_iso_date
 from src.utils.logging_utils import get_logger, log_api_call, log_error
 from src.utils.math_utils import win_rate as calc_win_rate
 
@@ -75,7 +75,7 @@ def build_equity_option_short_put_payload(
     return BacktestPayload(
         symbol=symbol.upper(),
         start_date=start_date,
-        end_date=to_iso_datetime(end_date),
+        end_date=to_iso_date(end_date),
         legs=legs,
     )
 
@@ -147,7 +147,7 @@ def build_custom_legs_payload(
     return BacktestPayload(
         symbol=symbol.upper(),
         start_date=start_date,
-        end_date=to_iso_datetime(end_date),
+        end_date=to_iso_date(end_date),
         legs=parsed_legs,
         entry_frequency=entry_frequency,
         exit_rule=exit_rule,

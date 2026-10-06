@@ -9,4 +9,4 @@ echo "💬 Initializing chat interface..."
 echo ""
 
 # Run Streamlit app
-streamlit run streamlit_app.py --server.port 8501 --server.headless true
+streamlit run core/streamlit_app.py --server.port 8501 --server.headless true

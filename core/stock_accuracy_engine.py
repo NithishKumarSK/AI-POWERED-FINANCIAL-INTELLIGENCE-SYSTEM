@@ -50,7 +50,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from jsonl_store import append_jsonl
 from record_dedup import dedup_records
 
-ROOT             = Path(__file__).resolve().parent
+ROOT             = Path(__file__).resolve().parent.parent
 STOCK_EVAL_FILE  = ROOT / "stock_prediction_evaluation_runs.jsonl"
 STOCK_INVALID_FILE = ROOT / "stock_prediction_evaluation_runs_invalid.jsonl"
 

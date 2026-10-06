@@ -10,7 +10,7 @@ Uses Google Gemini as the AI reasoning engine.
 
 Environment variables:
     GEMINI_API_KEY or GOOGLE_API_KEY  — required for Gemini
-    GEMINI_MODEL                      — default: gemini-2.5-flash
+    GEMINI_MODEL                      — default: gemini-3.7-flash
     AI_PROVIDER                       — "gemini" or "baseline" (default: gemini)
     ALLOW_BASELINE_FALLBACK           — "true" / "false" (default: false)
     ENABLE_CHART_VISION               — "true" / "false" (default: false) — attach
@@ -34,7 +34,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
@@ -45,7 +45,7 @@ from record_dedup import dedup_records, sort_by_target_date
 # ─── Config ───────────────────────────────────────────────────────────────────
 AI_PROVIDER             = os.getenv("AI_PROVIDER", "gemini").lower()
 ALLOW_BASELINE_FALLBACK = os.getenv("ALLOW_BASELINE_FALLBACK", "false").lower() == "true"
-GEMINI_MODEL            = os.getenv("GEMINI_MODEL", os.getenv("AGENT_MODEL", "gemini-2.5-flash"))
+GEMINI_MODEL            = os.getenv("GEMINI_MODEL", os.getenv("AGENT_MODEL", "gemini-3.7-flash"))
 _GEMINI_KEY             = os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
 
 # Chart-vision input (default OFF): attaches two chart images (wide structural +

@@ -248,7 +248,7 @@ venv\Scripts\activate
 Run the Streamlit Stock-Prediction-Agent dashboard:
 
 ```powershell
-python -m streamlit run streamlit_app.py
+python -m streamlit run core/streamlit_app.py
 ```
 
 Run the Discord agent in a separate terminal, from the project root:

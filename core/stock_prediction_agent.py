@@ -34,7 +34,7 @@ from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(1, str(ROOT / "tools"))
 
@@ -401,7 +401,7 @@ def _gemini_explanation(spi: dict, mom: dict, decision: str, predicted_return_pc
         if not api_key:
             return ""
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(os.getenv("AGENT_MODEL", "gemini-2.5-flash"))
+        model = genai.GenerativeModel(os.getenv("AGENT_MODEL", "gemini-3.7-flash"))
         prompt = (
             f"Stock: {spi['symbol']}\n"
             f"Context window: {spi['historical_context_start_date']} to {spi['prediction_origin_date']}\n"

@@ -47,7 +47,7 @@ def _no_real_calibration_db_by_default(monkeypatch):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_gemini_agent_file_exists():
-    assert (ROOT / "gemini_stock_prediction_agent.py").exists()
+    assert (ROOT / "core" / "gemini_stock_prediction_agent.py").exists()
 
 
 def test_gemini_agent_imports():
@@ -779,7 +779,7 @@ def test_calibration_summary_as_of_date_default_is_live_unfiltered(monkeypatch):
 
 def test_app_imports_dispatch():
     """stock_prediction_app.py must import and expose _dispatch_prediction."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "_dispatch_prediction" in text
     assert "run_gemini_stock_prediction" in text
     assert "_AI_PROVIDER_CFG" in text
@@ -787,7 +787,7 @@ def test_app_imports_dispatch():
 
 def test_app_shows_gemini_used_in_section3():
     """Section 3 table must include Gemini Used row."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "Gemini Used" in text
     assert "AI Provider" in text
     assert "Gemini Model" in text
@@ -796,7 +796,7 @@ def test_app_shows_gemini_used_in_section3():
 
 def test_app_shows_gemini_debug():
     """Developer Debug must expose Gemini raw JSON expander."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "Gemini Raw Response JSON" in text
     assert "Gemini Feature Packet JSON" in text
     assert "actual_provider_used" in text
@@ -821,13 +821,13 @@ FORBIDDEN_IN_GEMINI_AGENT = [
 
 @pytest.mark.parametrize("forbidden", FORBIDDEN_IN_GEMINI_AGENT)
 def test_no_forbidden_strings_in_gemini_agent(forbidden: str):
-    text = _read(ROOT / "gemini_stock_prediction_agent.py")
+    text = _read(ROOT / "core" / "gemini_stock_prediction_agent.py")
     assert forbidden not in text, f"Forbidden string '{forbidden}' found in gemini_stock_prediction_agent.py"
 
 
 def test_gemini_agent_does_not_hardcode_prices():
     """Agent must not hardcode any numeric price values."""
-    text = _read(ROOT / "gemini_stock_prediction_agent.py")
+    text = _read(ROOT / "core" / "gemini_stock_prediction_agent.py")
     assert "243.14" not in text
     assert "249.36" not in text
     assert "271.63" not in text
@@ -835,7 +835,7 @@ def test_gemini_agent_does_not_hardcode_prices():
 
 def test_gemini_agent_provider_config_present():
     """Agent must have AI_PROVIDER and ALLOW_BASELINE_FALLBACK config."""
-    text = _read(ROOT / "gemini_stock_prediction_agent.py")
+    text = _read(ROOT / "core" / "gemini_stock_prediction_agent.py")
     assert "AI_PROVIDER" in text
     assert "ALLOW_BASELINE_FALLBACK" in text
     assert "GEMINI_MODEL" in text
@@ -847,14 +847,14 @@ def test_gemini_agent_no_yfinance_price_download():
     source -- that stays RapidAPI/NASDAQ (+ the explicit yfinance fallback
     that only historical_price_service.py is allowed to use).
     """
-    text = _read(ROOT / "gemini_stock_prediction_agent.py")
+    text = _read(ROOT / "core" / "gemini_stock_prediction_agent.py")
     assert "yf.download" not in text
     assert ".history(" not in text
 
 
 def test_app_section3_side_by_side():
     """Section 3 and 4 must remain side-by-side columns."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     # Section 3 header is dynamic: GEMINI AI STOCK PREDICTION or AI STOCK PREDICTION
     assert "STOCK PREDICTION" in text and "SECTION 3" in text
     assert "GEMINI AI STOCK PREDICTION" in text  # Gemini title must exist in code
@@ -865,7 +865,7 @@ def test_app_section3_side_by_side():
 
 def test_no_person_name_in_app():
     """No personal name (Ajay, Amaan, etc.) should appear as UI-visible string."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     import re
     # Ajay should not appear as a UI string (only in comments is OK)
     ui_lines = [
@@ -887,7 +887,7 @@ def test_context_enrichment_warnings_wired_into_result():
     now records into _context_enrichment_warnings, and that dict is returned
     in the final result under context_enrichment_warnings.
     """
-    text = _read(ROOT / "gemini_stock_prediction_agent.py")
+    text = _read(ROOT / "core" / "gemini_stock_prediction_agent.py")
     assert "_context_enrichment_warnings" in text
     assert '"context_enrichment_warnings":' in text
     assert text.count('_context_enrichment_warnings["benchmark_bars"]') >= 1
@@ -934,7 +934,7 @@ def test_put_call_and_earnings_fallback_gated_by_recent_origin():
     (no date param) -- a historical replay must not fetch either. Confirm both
     call sites are gated behind _is_recent_origin(...).
     """
-    text = _read(ROOT / "gemini_stock_prediction_agent.py")
+    text = _read(ROOT / "core" / "gemini_stock_prediction_agent.py")
     assert "def _is_recent_origin(" in text
     assert "_get_put_call_ratio(symbol)" in text
     assert "_get_earnings_warning(symbol, origin_str, target_str or origin_str)" in text

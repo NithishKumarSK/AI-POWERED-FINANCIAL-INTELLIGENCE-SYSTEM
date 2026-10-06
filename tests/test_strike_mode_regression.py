@@ -26,7 +26,7 @@ sys.path.insert(0, str(ROOT / "src"))
 # STATIC SOURCE ANALYSIS — check code contracts without running Streamlit
 # ══════════════════════════════════════════════════════════════════════════════
 
-APP = ROOT / "stock_prediction_app.py"
+APP = ROOT / "core" / "stock_prediction_app.py"
 
 
 def _src() -> str:
@@ -177,7 +177,7 @@ def test_tastytrade_exact_mode_marked_unsupported():
 
 def test_tastytrade_delta_proxy_label():
     """DELTA_PROXY_APPROXIMATE must be defined in the options model (the authoritative source)."""
-    model_path = APP.parent / "src" / "models" / "options_models.py"
+    model_path = ROOT / "src" / "models" / "options_models.py"
     model_text = model_path.read_text(encoding="utf-8", errors="ignore")
     assert "DELTA_PROXY_APPROXIMATE" in model_text, (
         "DELTA_PROXY_APPROXIMATE must be defined in options_models.py as the canonical label "

@@ -34,8 +34,8 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 
 PRIMARY_FILES = [
-    ROOT / "streamlit_app.py",
-    ROOT / "stock_prediction_app.py",
+    ROOT / "core" / "streamlit_app.py",
+    ROOT / "core" / "stock_prediction_app.py",
 ]
 
 LEGACY_FILE = ROOT / "legacy" / "legacy_options_app.py"
@@ -120,13 +120,13 @@ def _find_banned_hits(text: str, pattern: str, exceptions: list) -> list:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_streamlit_app_exists():
-    assert (ROOT / "streamlit_app.py").exists(), (
+    assert (ROOT / "core" / "streamlit_app.py").exists(), (
         "streamlit_app.py must exist -- it is the primary entry point"
     )
 
 
 def test_stock_prediction_app_exists():
-    assert (ROOT / "stock_prediction_app.py").exists(), (
+    assert (ROOT / "core" / "stock_prediction_app.py").exists(), (
         "stock_prediction_app.py must exist"
     )
 
@@ -138,7 +138,7 @@ def test_legacy_options_app_exists():
 
 
 def test_prediction_validation_service_exists():
-    assert (ROOT / "prediction_validation_service.py").exists(), (
+    assert (ROOT / "core" / "prediction_validation_service.py").exists(), (
         "prediction_validation_service.py must exist -- clean backend for Discord/Amaan"
     )
 
@@ -172,7 +172,7 @@ def test_banned_term_absent(file_path: Path, banned_pattern: str):
 @pytest.mark.parametrize("required_term", REQUIRED_IN_PREDICTION_APP)
 def test_required_term_present(required_term: str):
     """Required terms must be present in stock_prediction_app.py."""
-    path = ROOT / "stock_prediction_app.py"
+    path = ROOT / "core" / "stock_prediction_app.py"
     if not path.exists():
         pytest.skip("stock_prediction_app.py does not exist")
 
@@ -188,14 +188,14 @@ def test_required_term_present(required_term: str):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_stock_mode_in_app():
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "Stock Price Validation" in text, (
         "Mode 1 label 'Stock Price Validation' must be in stock_prediction_app.py"
     )
 
 
 def test_options_mode_in_app():
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "Options Strategy Validation" in text, (
         "Mode 2 label 'Options Strategy Validation' must be in stock_prediction_app.py"
     )
@@ -206,7 +206,7 @@ def test_prediction_window_constraint_documented():
     The two-mode app must document that options backtest runs for prediction window only.
     This is the core architectural invariant.
     """
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     # The docstring or UI label must say the backtest is for the prediction window
     assert "prediction_origin_date" in text, (
         "stock_prediction_app.py must reference prediction_origin_date as backtest start"
@@ -220,7 +220,7 @@ def test_prediction_window_constraint_documented():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_streamlit_app_references_prediction_app():
-    text = _read(ROOT / "streamlit_app.py")
+    text = _read(ROOT / "core" / "streamlit_app.py")
     assert "stock_prediction_app" in text, (
         "streamlit_app.py must import or reference stock_prediction_app. "
         "It is the primary entry point -- not the legacy options backtest."
@@ -247,7 +247,7 @@ def test_legacy_app_no_warning_banner():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_correct_title_present():
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "Walk-Forward Prediction Validation" in text, (
         "Title 'Walk-Forward Prediction Validation' must appear in stock_prediction_app.py"
     )
@@ -258,7 +258,7 @@ def test_correct_title_present():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_correct_accuracy_log_referenced():
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "stock_prediction" in text.lower(), (
         "stock_prediction_app.py must reference stock prediction records"
     )
@@ -272,7 +272,7 @@ def test_correct_accuracy_log_referenced():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_prediction_service_has_required_functions():
-    path = ROOT / "prediction_validation_service.py"
+    path = ROOT / "core" / "prediction_validation_service.py"
     if not path.exists():
         pytest.skip("prediction_validation_service.py not found")
     text = _read(path)
@@ -301,7 +301,7 @@ def test_options_backtest_uses_ctx_start_for_full_study_window():
     (origin_date → target_date), so AI learning and options validation cover
     the same forward period. Static proof: check the critical assignment.
     """
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     # The backtest call must pass origin_date as start_date (prediction window)
     assert "start_date=origin_date" in text, (
         "Options backtest in stock_prediction_app.py must pass origin_date as start_date. "
@@ -322,7 +322,7 @@ def test_stock_mode_side_by_side_headers():
     Stock Mode: Section 3 header is dynamic (GEMINI AI STOCK PREDICTION when Gemini active).
     Static proof: both title strings must appear in source, Section 4 must be present.
     """
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "GEMINI AI STOCK PREDICTION" in text, (
         "'GEMINI AI STOCK PREDICTION' must be the Gemini-active Section 3 title in stock mode."
     )
@@ -339,7 +339,7 @@ def test_options_mode_side_by_side_headers():
     Options Mode: left column = AI PREDICTION, right column = OPTIONS BACKTEST ACTUAL.
     Static proof: both clean header strings must appear in source.
     """
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "AI PREDICTION" in text, (
         "'AI PREDICTION' must be the left column header in options mode."
     )
@@ -350,7 +350,7 @@ def test_options_mode_side_by_side_headers():
 
 def test_final_decision_board_present():
     """Final Decision Board section header must be present in the app."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "Final Decision Board" in text, (
         "'Final Decision Board' section must be present in stock_prediction_app.py."
     )
@@ -358,7 +358,7 @@ def test_final_decision_board_present():
 
 def test_numeric_closeness_section_present():
     """Numeric Closeness section header must be present in the app."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "Numeric Closeness" in text, (
         "'Numeric Closeness' section must be present in stock_prediction_app.py."
     )
@@ -366,7 +366,7 @@ def test_numeric_closeness_section_present():
 
 def test_walk_forward_title():
     """App title must reference Walk-Forward Prediction Validation."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "Walk-Forward Prediction Validation" in text, (
         "App title must say 'Walk-Forward Prediction Validation'."
     )
@@ -394,7 +394,7 @@ def test_no_person_name_in_primary_files():
 
 def test_provider_strategy_config():
     """historical_price_service.py must have HISTORICAL_PRICE_PROVIDER config, not ALLOW_NON_RAPIDAPI_FALLBACK."""
-    path = ROOT / "historical_price_service.py"
+    path = ROOT / "core" / "historical_price_service.py"
     if not path.exists():
         pytest.skip("historical_price_service.py not found")
     text = _read(path)
@@ -421,7 +421,7 @@ def test_provider_strategy_config():
 
 def test_no_section_5_numbered_header():
     """Final Decision Board must not use a numbered Section 5 wrapper."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "_section_header(5," not in text, (
         "_section_header(5, ...) must not appear in stock_prediction_app.py. "
         "Final Decision Board should appear without a 'Section 5' numbered header."
@@ -434,7 +434,7 @@ def test_no_section_5_numbered_header():
 
 def test_context_filter_uses_start_date():
     """AI context bars must be filtered by ctx_start (lower bound), not just origin (upper bound)."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "ctx_start <= b" in text, (
         "ctx_bars must filter: ctx_start <= b['date'] <= origin_date. "
         "Without lower-bound filter, AI sees bars from provider start date, not user-selected ctx_start. "
@@ -448,7 +448,7 @@ def test_context_filter_uses_start_date():
 
 def test_no_forbidden_provider_strings_in_price_service():
     """historical_price_service.py must contain no NASDAQ/Yahoo fallback references."""
-    text = _read(ROOT / "historical_price_service.py")
+    text = _read(ROOT / "core" / "historical_price_service.py")
     forbidden = [
         "ALLOW_NON_RAPIDAPI_FALLBACK",
         "NASDAQ fallback",
@@ -468,7 +468,7 @@ def test_no_forbidden_provider_strings_in_price_service():
 
 def test_future_target_allowed_in_validation():
     """validate_stock_prediction_input must NOT reject future target dates."""
-    text = _read(ROOT / "stock_prediction_agent.py")
+    text = _read(ROOT / "core" / "stock_prediction_agent.py")
     assert "target_date is in the future" not in text, (
         "validate_stock_prediction_input must not reject future target dates. "
         "Future target = live_future_prediction mode — AI still predicts, actual shows PENDING."
@@ -477,7 +477,7 @@ def test_future_target_allowed_in_validation():
 
 def test_live_future_prediction_mode_in_orchestrator():
     """_run_all must detect future target date and store run_type=live_future_prediction."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "live_future_prediction" in text, (
         "stock_prediction_app.py must handle live_future_prediction run type. "
         "Future target date should set run_type='live_future_prediction', not block the run."
@@ -489,7 +489,7 @@ def test_live_future_prediction_mode_in_orchestrator():
 
 def test_pending_predictions_engine_exists():
     """pending_predictions_engine.py must exist with save/load functions."""
-    path = ROOT / "pending_predictions_engine.py"
+    path = ROOT / "core" / "pending_predictions_engine.py"
     assert path.exists(), (
         "pending_predictions_engine.py must exist. "
         "It saves live future predictions for later validation."
@@ -502,7 +502,7 @@ def test_pending_predictions_engine_exists():
 
 def test_no_data_source_nasdaq_in_app():
     """stock_prediction_app.py must not show NASDAQ public text in any UI label."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "NASDAQ public historical prices" not in text, (
         "stock_prediction_app.py must not display 'NASDAQ public historical prices'. "
         "Only RapidAPI TradingView source is shown."
@@ -543,7 +543,7 @@ def test_streamlit_config_white_background():
 
 def test_app_injects_light_css():
     """stock_prediction_app.py must inject CSS that forces white background."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "_apply_light_demo_theme" in text, (
         "App must define and call _apply_light_demo_theme() for white UI"
     )
@@ -554,7 +554,7 @@ def test_app_injects_light_css():
 
 def test_app_no_dark_theme_css():
     """App must not inject CSS that forces dark/black page background."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     # Dark background forced globally is forbidden
     assert "background-color: #000000" not in text
     assert "background-color: black" not in text
@@ -562,7 +562,7 @@ def test_app_no_dark_theme_css():
 
 def test_build_active_banner_present():
     """App must render a build banner showing AI_PROVIDER and build timestamp."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     # Banner was renamed to ACTIVE BUILD: TRUTH_GATE_V4
     assert "BUILD ACTIVE" in text or "ACTIVE BUILD" in text, "Build banner must exist in app"
     assert "_BUILD_FILE" in text or "_BUILD_TS" in text, "Build timestamp/file variable must exist"
@@ -571,7 +571,7 @@ def test_build_active_banner_present():
 
 def test_execution_truth_panel_present():
     """App must render an Execution Truth Panel before Section 3."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "EXECUTION TRUTH PANEL" in text
     assert "Gemini API Called" in text
     assert "Tastytrade" in text
@@ -581,7 +581,7 @@ def test_execution_truth_panel_present():
 
 def test_stock_mode_says_tastytrade_no():
     """Execution Truth Panel in stock mode must state tastytrade is not used."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "stock mode uses" in text.lower() or "Stock mode uses" in text, (
         "App must clearly state tastytrade is not used in stock mode"
     )

@@ -411,7 +411,7 @@ GOOGLE_CLOUD_REGION=us-central1
 ### Launch
 
 ```bash
-streamlit run streamlit_app.py
+streamlit run core/streamlit_app.py
 ```
 
 The dashboard opens at `http://localhost:8501`

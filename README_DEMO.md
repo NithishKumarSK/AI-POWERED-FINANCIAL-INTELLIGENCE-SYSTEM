@@ -1,20 +1,22 @@
 # AI Financial Analyst System — Demo Guide
 
-## CORRECT command (Ajay / Sujith demo)
+## CORRECT command (demo)
 
 ```
-streamlit run stock_prediction_app.py
+streamlit run core/stock_prediction_app.py
 ```
 
-## WRONG command (legacy options backtest — DO NOT use for demo)
+`core/streamlit_app.py` is equivalent -- it just delegates to `core/stock_prediction_app.py`.
+
+## WRONG command (archived options backtest — DO NOT use for demo)
 
 ```
-streamlit run streamlit_app.py
+streamlit run legacy/legacy_options_app.py
 ```
 
-`streamlit_app.py` is the old options strategy backtest app and shows the WRONG flow
-(DTE, delta, legs, tastytrade backtest over 6+ months). It now displays a visible warning
-banner at the top. Do not use it to demo one-month stock prediction.
+`legacy/legacy_options_app.py` is the old options strategy backtest app and shows the WRONG
+flow (DTE, delta, legs, tastytrade backtest over 6+ months). Do not use it to demo
+one-month stock prediction.
 
 ---
 

@@ -8,6 +8,6 @@ echo 💬 Initializing chat interface...
 echo.
 
 REM Run Streamlit app
-streamlit run streamlit_app.py --server.port 8501
+streamlit run core/streamlit_app.py --server.port 8501
 
 pause

@@ -93,7 +93,7 @@ def test_force_disable_lowercase_true(monkeypatch):
 
 def test_missing_tokens_cannot_return_success_in_app():
     """App must have TASTYTRADE_NOT_CONFIGURED guard that blocks SUCCESS."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "TASTYTRADE_NOT_CONFIGURED" in text
     assert "BACKTEST_CREATE_FAILED" in text
     assert "backtest_allowed" in text
@@ -105,7 +105,7 @@ def test_missing_tokens_cannot_return_success_in_app():
 
 def test_missing_tokens_cannot_save_accuracy_in_app():
     """App must gate accuracy save on backtest_truly_succeeded and not skip_reason."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "_backtest_truly_succeeded = opts_result.get(\"status\") == \"SUCCESS\"" in text
     assert "NOT SAVED" in text
     assert "_accuracy_skip_reason" in text
@@ -117,7 +117,7 @@ def test_missing_tokens_cannot_save_accuracy_in_app():
 
 def test_app_calls_clear_run_on_new_submit():
     """App must call _clear_run() before any new backtest, preventing stale results."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "_clear_run()" in text
     # _clear_run must clear opts_result
     assert "opts_result" in text
@@ -227,7 +227,7 @@ def test_mask_function():
 
 def test_no_backtest_id_when_auth_failed():
     """App must not store backtest_id in opts_result when auth truth check fails."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     # When auth blocked, backtest_create is set to BLOCKED_* and no backtest_id is set
     assert "BLOCKED_NO_CREDENTIALS" in text
     assert "BLOCKED_AUTH_FAILED" in text
@@ -243,7 +243,7 @@ def test_no_backtest_id_when_auth_failed():
 def test_no_pnl_shown_when_auth_failed():
     """When backtest is blocked, opts_result must not contain P&L, trades, or win_rate
     from a real run."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     # Proof: profit_loss, win_rate, total_trades are only set inside the success block
     assert '"profit_loss"' in text or "'profit_loss'" in text
     assert "win_rate" in text
@@ -259,7 +259,7 @@ def test_no_pnl_shown_when_auth_failed():
 
 def test_verify_function_called_before_backtest_in_app():
     """App must call verify_tastytrade_auth_truth before running the backtest."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "verify_tastytrade_auth_truth" in text
     assert "_tt_auth_check" in text
     assert "backtest_allowed" in text
@@ -267,21 +267,21 @@ def test_verify_function_called_before_backtest_in_app():
 
 def test_force_disable_warning_in_main_banner():
     """App main() must show FORCE_DISABLE_TASTYTRADE warning when set."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "FORCE_DISABLE_TASTYTRADE" in text
     assert "disabled for verification" in text or "DISABLED FOR VERIFICATION" in text.upper()
 
 
 def test_truth_check_result_stored_in_run_context():
     """App must store tastytrade_auth_truth dict in run_context for debug panel."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "tastytrade_auth_truth" in text
     assert "TASTYTRADE AUTH TRUTH CHECK" in text
 
 
 def test_auth_truth_debug_panel_shows_all_fields():
     """Developer Debug section must show all required auth truth fields."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "Credential Source" in text
     assert "Access Token Present" in text
     assert "Refresh Token Present" in text

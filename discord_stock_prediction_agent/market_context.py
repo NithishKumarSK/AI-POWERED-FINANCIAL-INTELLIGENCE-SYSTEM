@@ -12,7 +12,12 @@ from .config import config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(1, str(PROJECT_ROOT / "tools"))
+try:
+    import bootstrap_paths
+    bootstrap_paths.add_module_paths()
+except Exception:  # pragma: no cover - project import safety
+    sys.path.insert(1, str(PROJECT_ROOT / "tools"))
+    sys.path.insert(2, str(PROJECT_ROOT / "core"))
 
 try:
     from historical_price_service import fetch_price_history

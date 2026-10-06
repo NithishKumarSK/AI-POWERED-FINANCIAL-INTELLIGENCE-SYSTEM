@@ -16,7 +16,7 @@ A multi-engine, deterministic-first financial intelligence system with tastytrad
 ## Entry Point
 
 ```
-streamlit run streamlit_app.py
+streamlit run core/streamlit_app.py
 ```
 
 ## Directory Structure

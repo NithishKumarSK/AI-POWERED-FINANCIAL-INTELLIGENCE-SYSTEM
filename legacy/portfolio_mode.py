@@ -410,7 +410,7 @@ def run_portfolio_gemini_analysis(
             return result
 
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(os.getenv("AGENT_MODEL", "gemini-2.5-flash"))
+        model = genai.GenerativeModel(os.getenv("AGENT_MODEL", "gemini-3.7-flash"))
 
         ctx = _get_market_context_for_portfolio()
         gainers_txt = ", ".join(ctx.get("gainers", [])) or "unavailable"

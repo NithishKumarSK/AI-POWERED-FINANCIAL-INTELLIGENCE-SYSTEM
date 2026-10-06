@@ -16,6 +16,8 @@ from typing import Dict, List
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+import bootstrap_paths
+bootstrap_paths.add_module_paths()
 
 from historical_price_service import fetch_price_history_for_range  # noqa: E402
 

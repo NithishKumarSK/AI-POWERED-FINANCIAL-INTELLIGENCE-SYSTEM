@@ -781,7 +781,7 @@ def _gemini_explanation(si: dict, factors: dict, proj: dict) -> str:
         if not api_key:
             return ""
         genai.configure(api_key=api_key)
-        model_name = os.getenv("AGENT_MODEL", "gemini-2.5-flash")
+        model_name = os.getenv("AGENT_MODEL", "gemini-3.7-flash")
         model      = genai.GenerativeModel(model_name)
         prompt = (
             f"Options strategy analysis context:\n"

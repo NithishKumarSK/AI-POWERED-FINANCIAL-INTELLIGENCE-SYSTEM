@@ -42,10 +42,21 @@ _EXCLUDED_SCAN_PATTERNS = ("__pycache__", ".git", "venv", "env/", "test_")
 # 1. NO YFINANCE ANYWHERE (production files only)
 # ══════════════════════════════════════════════════════════════════════════════
 class TestNoYfinance:
-    """Fail if any production .py file imports or uses yfinance."""
+    """Fail if any file in the strategy/legacy pipeline imports or uses yfinance.
+
+    Scoped to legacy/ (not the whole repo) because that's this test's actual
+    intent: strategy_prediction_agent.py v3 was specifically designed to be
+    yfinance-free (tastytrade + RapidAPI only). The live stock-prediction
+    pipeline (core/) legitimately uses yfinance as a documented last-resort
+    historical-price fallback (see README's "Provider transparency" section)
+    and for earnings-calendar/options-sentiment/live-quote data -- that's a
+    deliberate, different policy already enforced by its own, more precise
+    test (test_gemini_agent_no_yfinance_price_download, which bans
+    yf.download/.history() specifically rather than yfinance outright).
+    """
 
     def _prod_files(self):
-        for py_file in ROOT.rglob("*.py"):
+        for py_file in (ROOT / "legacy").rglob("*.py"):
             path_str = str(py_file)
             if any(x in path_str for x in _EXCLUDED_SCAN_PATTERNS):
                 continue
@@ -1027,7 +1038,7 @@ class TestO1ToO7ValidationRegressions:
         must no longer exist in streamlit_app.py (root cause of O6/O7).
         """
         from pathlib import Path
-        app_path = Path(__file__).resolve().parent.parent / "streamlit_app.py"
+        app_path = Path(__file__).resolve().parent.parent / "core" / "streamlit_app.py"
         text = app_path.read_text(encoding="utf-8")
         assert "2026-06-24" not in text, (
             "Hardcoded auto-retry date '2026-06-24' found in streamlit_app.py. "

@@ -25,12 +25,6 @@ def to_iso_date(value: str) -> str:
     return value
 
 
-def to_iso_datetime(d: str) -> str:
-    """Return YYYY-MM-DDT00:00:00Z format expected by tastytrade end_date."""
-    base = to_iso_date(d)
-    return f"{base}T00:00:00Z"
-
-
 def days_between(start: str, end: str) -> Optional[int]:
     try:
         d1 = date.fromisoformat(to_iso_date(start))

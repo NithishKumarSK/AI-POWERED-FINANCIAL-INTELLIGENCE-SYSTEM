@@ -48,10 +48,10 @@ print(f"BASE_URL correct     : {'YES' if base_ok else 'MISMATCH — expected htt
 print()
 print("--- Host references in project files ---")
 search_files = [
-    "historical_price_service.py",
+    "core/historical_price_service.py",
     "tools/rapidapi_client.py",
     "tools/tradingview_price.py",
-    "stock_prediction_app.py",
+    "core/stock_prediction_app.py",
 ]
 for fname in search_files:
     fp = ROOT / fname
@@ -197,7 +197,7 @@ print("TASK 6 — WHY DID IT PREVIOUSLY WORK?")
 print(SEP)
 
 # Check old code for fallback evidence
-hps = (ROOT / "historical_price_service.py").read_text(encoding="utf-8")
+hps = (ROOT / "core" / "historical_price_service.py").read_text(encoding="utf-8")
 had_nasdaq = "nasdaq_public_api" in hps or "_fetch_from_nasdaq" in hps
 had_fallback = "ALLOW_NON_RAPIDAPI_FALLBACK" in hps
 print(f"historical_price_service.py contains nasdaq_public_api : {had_nasdaq}")

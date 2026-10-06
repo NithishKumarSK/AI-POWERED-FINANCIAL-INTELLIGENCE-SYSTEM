@@ -19,7 +19,8 @@ from typing import Any, Dict, Optional
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "src"))
+import bootstrap_paths
+bootstrap_paths.add_module_paths()
 
 from models.options_models import (
     AssetType, ContractMethod, OptionsContractRequest,

@@ -11,7 +11,7 @@ TWO-WINDOW ARCHITECTURE:
 
 Options backtest ONLY runs for prediction/validation window -- NEVER for historical context window.
 
-Run: streamlit run stock_prediction_app.py
+Run (from the repo root): streamlit run core/stock_prediction_app.py
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import bootstrap_paths
@@ -364,7 +364,7 @@ def _log_invalid_run(
     """Append a failed/blocked run to the quarantine log — never the accuracy log."""
     import json as _json
     import datetime as _dt
-    log_path = Path(__file__).parent / "data" / "invalid_runs.jsonl"
+    log_path = Path(__file__).resolve().parent.parent / "data" / "invalid_runs.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     entry = {
         "run_id": run_id,
@@ -476,9 +476,27 @@ def _friendly_ai_error(raw_err: str) -> str:
         return "Gemini API key is missing or invalid. Set GEMINI_API_KEY in your .env file."
     if "timeout" in e.lower() or "timed out" in e.lower():
         return "AI model timed out. Please try again — Gemini API may be slow."
-    if "quota" in e.lower() or "rate" in e.lower() or "429" in e:
-        return "Gemini API rate limit reached. Wait 60 seconds and try again."
-    if "RATE_LIMITED" in e:
+    if "free_tier" in e.lower() or "resourceexhausted" in e.lower() or "quota exceeded" in e.lower():
+        # This is NOT a short rate limit -- it's Google's free-tier DAILY cap,
+        # which varies by model (legacy gemini-2.5-flash was verified at just
+        # 20/day). Telling the user "wait 60 seconds" here is actively wrong
+        # and just leads to an immediate repeat failure. Surface the real
+        # wait time if Google's error includes one ("Please retry in
+        # 6h59m47s"), and point at the actual fix (billing/paid tier), not a
+        # meaningless short wait.
+        import re as _re_qe
+        _m = _re_qe.search(r"retry in (\d+h)?\s*(\d+m)?\s*([\d.]+s)?", e, _re_qe.IGNORECASE)
+        _wait = " ".join(p for p in (_m.group(1), _m.group(2)) if p) if _m else ""
+        _model_name = os.getenv("GEMINI_MODEL") or os.getenv("AGENT_MODEL") or "the configured model"
+        return (
+            f"Gemini free-tier DAILY quota exhausted for {_model_name} — "
+            + (f"Google says retry in ~{_wait}. " if _wait else "this resets roughly once every 24 hours. ")
+            + "This is not a short rate limit; waiting 60 seconds will not fix it. "
+            "To actually resolve this: enable billing on the Google Cloud project behind "
+            "GEMINI_API_KEY (raises the daily/per-minute cap substantially), or use a "
+            "different key from a billed project."
+        )
+    if "quota" in e.lower() or "rate" in e.lower() or "429" in e or "RATE_LIMITED" in e:
         return "Gemini API rate limit reached. Wait 60 seconds and try again."
     # Generic fallback — hide raw technical detail
     return "AI prediction temporarily unavailable. Please try again in a moment."
@@ -630,7 +648,7 @@ def _render_decision_distribution_diagnostics():
     """Show decision distribution from past eval records. Warns if HOLD% is too high."""
     from pathlib import Path
     import json as _json
-    eval_file = Path(__file__).resolve().parent / "stock_prediction_evaluation_runs.jsonl"
+    eval_file = Path(__file__).resolve().parent.parent / "stock_prediction_evaluation_runs.jsonl"
     records: list = []
     if eval_file.exists():
         try:
@@ -3285,7 +3303,7 @@ def _render_results():
     try:
         from pathlib import Path as _Path
         import json as _json_acc
-        _acc_file = _Path(__file__).resolve().parent / "stock_prediction_evaluation_runs.jsonl"
+        _acc_file = _Path(__file__).resolve().parent.parent / "stock_prediction_evaluation_runs.jsonl"
         _acc_recs: list = []
         if _acc_file.exists():
             with open(_acc_file, "r", encoding="utf-8") as _fh_acc:
@@ -4122,7 +4140,7 @@ def _render_options_results():
     try:
         from pathlib import Path as _OPath
         import json as _ojson
-        _oacc_file = _OPath(__file__).resolve().parent / "stock_prediction_evaluation_runs.jsonl"
+        _oacc_file = _OPath(__file__).resolve().parent.parent / "stock_prediction_evaluation_runs.jsonl"
         _oacc_recs: list = []
         if _oacc_file.exists():
             with open(_oacc_file, "r", encoding="utf-8") as _ofh:
@@ -7978,7 +7996,7 @@ def _render_calibration_dashboard():
     st.markdown("---")
     _section_header(7, "Accuracy Calibration & Failure Analysis")
 
-    DATA_DIR = Path(__file__).resolve().parent / "data"
+    DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
     def _load_json(path):
         try:

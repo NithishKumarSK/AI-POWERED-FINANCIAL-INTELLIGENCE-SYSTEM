@@ -15,7 +15,8 @@ from .config import config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(1, str(PROJECT_ROOT / "tools"))
+import bootstrap_paths  # noqa: E402
+bootstrap_paths.add_module_paths()
 load_dotenv(PROJECT_ROOT / ".env", override=False)
 
 from historical_price_service import fetch_price_history, get_provider_used  # noqa: E402

@@ -41,7 +41,7 @@ def _read(path: Path) -> str:
 
 def test_run_all_blocks_on_hist_data_failure():
     """_run_all must set error_msg and NOT set ai_result when historical data fails."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "HISTORICAL_DATA_UNAVAILABLE" in text
     assert "_log_invalid_run" in text
     # Ensure the function returns early after setting error
@@ -51,7 +51,7 @@ def test_run_all_blocks_on_hist_data_failure():
 
 def test_options_run_all_blocks_on_hist_data_failure():
     """_run_options_all must also block and log invalid run on data failure."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "HISTORICAL_DATA_UNAVAILABLE" in text
     # Both _run_all and _run_options_all must call _log_invalid_run
     assert text.count("_log_invalid_run") >= 2
@@ -63,7 +63,7 @@ def test_options_run_all_blocks_on_hist_data_failure():
 
 def test_log_invalid_run_function_exists():
     """_log_invalid_run() must exist and write to data/invalid_runs.jsonl."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "def _log_invalid_run(" in text
     assert "invalid_runs.jsonl" in text
     assert "accuracy_saved" in text
@@ -96,7 +96,7 @@ def test_log_invalid_run_logic():
 
 def test_failure_panel_exists_in_app():
     """_render_failure_panel() must exist and show RUN BLOCKED message."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "def _render_failure_panel(" in text
     assert "RUN BLOCKED" in text
     assert "OLD OUTPUT CLEARED" in text
@@ -104,7 +104,7 @@ def test_failure_panel_exists_in_app():
 
 def test_error_render_uses_failure_panel():
     """Main render loop must call _render_failure_panel, not plain _err_card, for errors."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     # The render call for error must be _render_failure_panel()
     assert "_render_failure_panel()" in text
     # Plain _err_card must NOT be used for the main error display block
@@ -126,7 +126,7 @@ def test_error_render_uses_failure_panel():
 
 def test_missing_tt_token_does_not_return_success():
     """When TT credentials missing, status must be BACKTEST_CREATE_FAILED, not SUCCESS."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     # The credential check must exist
     assert "TASTYTRADE_NOT_CONFIGURED" in text or "NOT_CONFIGURED" in text
     # SUCCESS must only be set when backtest actually ran
@@ -137,7 +137,7 @@ def test_missing_tt_token_does_not_return_success():
 
 def test_tt_auth_debug_section_exists():
     """TT auth info must be present — shown in TASTYTRADE AUTH TRUTH CHECK panel."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "TASTYTRADE AUTH TRUTH CHECK" in text
     assert "Credential Source" in text
     assert "Token Refresh" in text or "token_refresh" in text
@@ -146,7 +146,7 @@ def test_tt_auth_debug_section_exists():
 
 def test_accuracy_save_gate_blocks_when_tastytrade_failed():
     """_backtest_truly_succeeded must be False if status != SUCCESS."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert '_backtest_truly_succeeded = opts_result.get("status") == "SUCCESS"' in text
     assert "NOT SAVED" in text
 
@@ -157,7 +157,7 @@ def test_accuracy_save_gate_blocks_when_tastytrade_failed():
 
 def test_alpaca_not_used_for_live_trading():
     """App must not contain live Alpaca trade submission without paper flag."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     # No live-money Alpaca calls
     assert "live.alpaca.markets" not in text
 
@@ -168,7 +168,7 @@ def test_alpaca_not_used_for_live_trading():
 
 def test_pre_run_gate_blocks_zero_strike_in_app():
     """App must implement all 4 Tastytrade strike selection modes (exact-strike mode removed)."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     # All 4 modes present in UI and leg building
     assert "Percentage OTM" in text
     assert "Price Offset From Underlying" in text
@@ -182,7 +182,7 @@ def test_pre_run_gate_blocks_zero_strike_in_app():
 
 def test_server_guard_blocks_exact_strike_missing():
     """Delta mode must validate delta_ui is present before running backtest."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     # Delta mode must check that delta_ui exists before building leg
     assert "Delta value missing" in text
     assert "REVIEW_REQUIRED" in text
@@ -194,7 +194,7 @@ def test_server_guard_blocks_exact_strike_missing():
 
 def test_strike_mode_does_not_use_user_delta_in_exact_branch():
     """Delta mode leg must use the user's actual delta_ui value, not a hardcoded ATM proxy."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     # Delta mode uses user's actual delta_ui
     assert '"delta":               int(_delta_ui),' in text
     # No hardcoded ATM proxy (delta=50) sent to Tastytrade
@@ -207,7 +207,7 @@ def test_strike_mode_does_not_use_user_delta_in_exact_branch():
 
 def test_delta_mode_max_value_is_99():
     """Delta mode UI must cap at 99 — 3046 is rejected by UI."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     # Delta field in Delta mode should have max_value=99
     assert "max_value=99" in text
     # But NOT max_value=99 on the Strike Price field (strike has 99999)
@@ -219,7 +219,7 @@ def test_delta_mode_max_value_is_99():
 
 def test_delta_mode_user_value_used():
     """Delta mode leg must use user's actual delta_ui, not a hardcoded default."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "int(_delta_ui)" in text
     # The delta-mode leg's own "delta" field must be a bare int(_delta_ui) with
     # no "or <default>" fallback -- scoped to that exact line rather than a
@@ -236,7 +236,7 @@ def test_delta_mode_user_value_used():
 
 def test_exact_strike_marked_unsupported_by_provider():
     """App supports 4 strike selection methods; entry frequency uses confirmed Tastytrade values."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     # Entry frequency is stored in options_params and passed to the payload builder
     assert "api_entry_frequency" in text
     # Confirmed working values: every day, weekly, monthly (not the unverified on_exact_dte_match)
@@ -249,7 +249,7 @@ def test_exact_strike_marked_unsupported_by_provider():
 
 def test_proxy_labeled_approximate():
     """Proxy run must be labeled DELTA_PROXY_APPROXIMATE in the options model, and fallback_used in app logic."""
-    app_text   = _read(ROOT / "stock_prediction_app.py")
+    app_text   = _read(ROOT / "core" / "stock_prediction_app.py")
     model_text = _read(ROOT / "src" / "models" / "options_models.py")
     assert "DELTA_PROXY_APPROXIMATE" in model_text, "DELTA_PROXY_APPROXIMATE must be defined in options_models.py"
     assert "fallback_used" in app_text, "fallback_used must be set in app backtest logic"
@@ -353,7 +353,7 @@ def test_calibration_profile_builder_importable():
 
 def test_user_input_snapshot_captured_in_stock_form():
     """Stock form submit must store user_input_snapshot with submitted_at_utc."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert 'st.session_state["user_input_snapshot"]' in text
     assert "submitted_at_utc" in text
     assert "historical_context_start_date" in text
@@ -361,14 +361,14 @@ def test_user_input_snapshot_captured_in_stock_form():
 
 def test_user_input_snapshot_captured_in_options_form():
     """Options form submit must also store user_input_snapshot."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     # Check that user_input_snapshot is set twice (once per form)
     assert text.count('st.session_state["user_input_snapshot"]') >= 2
 
 
 def test_input_binding_warning_shows_in_results():
     """_render_results and _render_options_results must show INPUT BINDING WARNING when date gap exists."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "INPUT BINDING WARNING" in text
     assert "input_binding_warning" in text
     assert "effective_ctx_start" in text
@@ -377,7 +377,7 @@ def test_input_binding_warning_shows_in_results():
 
 def test_run_context_stores_effective_start_when_gap_exists():
     """_run_all must store effective_ctx_start and requested_ctx_start in run_context when provider date gap found."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "_run_ctx[\"effective_ctx_start\"]" in text or '"effective_ctx_start"' in text
     assert "_run_ctx[\"requested_ctx_start\"]" in text or '"requested_ctx_start"' in text
     assert "_run_ctx[\"ctx_start_gap_days\"]" in text or '"ctx_start_gap_days"' in text
@@ -385,7 +385,7 @@ def test_run_context_stores_effective_start_when_gap_exists():
 
 def test_truth_gate_v4_banner_shows_tt_cred_and_rapidapi():
     """TRUTH_GATE_V4 banner must show TT cred status and RapidAPI key status."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "TRUTH_GATE_V4" in text
     assert "TT cred" in text
     assert "RapidAPI" in text
@@ -395,7 +395,7 @@ def test_truth_gate_v4_banner_shows_tt_cred_and_rapidapi():
 
 def test_tt_stale_token_detection_present():
     """App must attempt JWT expiry check when only access token is present."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     # JWT parsing logic for staleness detection
     assert "exp" in text  # JWT exp claim check
     assert "EXPIRED" in text or "stale" in text.lower()
@@ -403,5 +403,5 @@ def test_tt_stale_token_detection_present():
 
 def test_rapidapi_capability_panel_present():
     """App must show RapidAPI capability panel when key is present."""
-    text = _read(ROOT / "stock_prediction_app.py")
+    text = _read(ROOT / "core" / "stock_prediction_app.py")
     assert "RapidAPI Plan Capabilities" in text or "RapidAPI Key Missing" in text
