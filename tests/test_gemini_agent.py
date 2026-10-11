@@ -261,20 +261,42 @@ def test_guardrail_buy():
 
 
 def test_guardrail_sell():
-    """SELL requires signal confirmation — pass bearish scores for expected SELL."""
+    """A return clearly past the horizon-scaled sell threshold (default horizon
+    30d -> sell_threshold ~ -4.14%) produces SELL."""
     from gemini_stock_prediction_agent import _apply_guardrails
-    d, r = _apply_guardrails(-4.0, 70, 40, 80, signal_scores=_BEAR_SCORES)
+    d, r = _apply_guardrails(-5.0, 70, 40, 80, signal_scores=_BEAR_SCORES)
     assert d == "SELL"
 
 
 def test_guardrail_hold():
-    """HOLD has been deliberately eliminated from the guardrail (see its
-    docstring: "Decisive guardrail ... HOLD is eliminated") -- a modest
-    positive return now decisively BUYs instead of landing in a HOLD band.
+    """A modest return inside the horizon-scaled dead-band (default horizon 30d
+    -> threshold ~ ±4.14%) now correctly lands in HOLD -- the guardrail and the
+    ground-truth label both use decision_thresholds_for_horizon(), so a weak
+    1.0% signal is "no real move," not an automatic BUY.
     """
     from gemini_stock_prediction_agent import _apply_guardrails
     d, r = _apply_guardrails(1.0, 70, 40, 80)
-    assert d == "BUY"
+    assert d == "HOLD"
+
+
+def test_guardrail_dead_band_scales_with_horizon():
+    """A fixed 3.0% predicted return should HOLD at a short horizon (band is
+    tight) but BUY at a long horizon only once the band has widened past 3.0%
+    -- this directly exercises decision_thresholds_for_horizon's sqrt-time
+    scaling rather than relying on a specific numeric example.
+    """
+    from gemini_stock_prediction_agent import _apply_guardrails
+    from stock_comparison_engine import decision_thresholds_for_horizon
+
+    short_buy_th, _ = decision_thresholds_for_horizon(7)
+    long_buy_th, _ = decision_thresholds_for_horizon(180)
+    assert long_buy_th > short_buy_th  # band widens with horizon
+
+    pred = (short_buy_th + long_buy_th) / 2.0  # above the short band, below the long band
+    d_short, _ = _apply_guardrails(pred, 70, 40, 80, horizon_days=7)
+    d_long, _ = _apply_guardrails(pred, 70, 40, 80, horizon_days=180)
+    assert d_short == "BUY"
+    assert d_long == "HOLD"
 
 
 def test_guardrail_review_low_quality():
@@ -303,7 +325,7 @@ def test_guardrail_high_risk_does_not_override_buy():
 def test_guardrail_high_risk_does_not_override_sell():
     """Same as above for the negative-return/SELL side."""
     from gemini_stock_prediction_agent import _apply_guardrails
-    d, r = _apply_guardrails(-4.0, 70, 85, 80, signal_scores=_BEAR_SCORES)
+    d, r = _apply_guardrails(-5.0, 70, 85, 80, signal_scores=_BEAR_SCORES)
     assert d == "SELL"
 
 
@@ -545,6 +567,80 @@ def test_call_gemini_flag_off_sends_plain_string_contents(monkeypatch):
     assert isinstance(captured["contents"], str)
 
 
+def test_call_gemini_parses_component4_structured_scores(monkeypatch):
+    """Research Expansion Program Component 4 -- bull/bear conviction and
+    narrative dependency scores must be parsed, clamped to 0-100, and present
+    in the result dict (they feed ml_feature_extractor.FEATURE_SPEC)."""
+    import gemini_stock_prediction_agent as gsp_mod
+
+    class _FakeResponse:
+        text = (
+            '{"decision": "BUY", "predicted_return_pct": 1.0, "confidence_score": 60, '
+            '"risk_score": 40, "bullish_score_assessment": 72, "bearish_score_assessment": 28, '
+            '"narrative_dependency_score": 85}'
+        )
+
+    class _FakeModels:
+        def generate_content(self, model, contents, config):
+            return _FakeResponse()
+
+    class _FakeClient:
+        def __init__(self, *a, **k):
+            self.models = _FakeModels()
+
+    monkeypatch.setattr(gsp_mod, "_GEMINI_KEY", "fake-key-for-test")
+    import google.genai as real_genai
+    monkeypatch.setattr(real_genai, "Client", _FakeClient)
+
+    bars = _make_bars(150)
+    spi = {"symbol": "TEST", "benchmark": "SPY", "price_basis": "close",
+           "historical_context_start_date": "2025-01-01",
+           "prediction_origin_date": "2025-06-01",
+           "decision_horizon_days": 30, "initial_capital": 10000}
+    feature_packet = gsp_mod.build_stock_feature_packet(spi, bars)
+
+    result = gsp_mod._call_gemini(spi, feature_packet, {}, 100.0, 10000.0)
+    assert result["status"] == "SUCCESS"
+    assert result["bull_conviction_score"] == 72
+    assert result["bear_conviction_score"] == 28
+    assert result["narrative_dependency_score"] == 85
+
+
+def test_call_gemini_missing_component4_scores_default_none(monkeypatch):
+    """A Gemini response that omits the new fields entirely must not crash --
+    missing is a valid, expected state (older prompt version, model didn't
+    comply), not an error."""
+    import gemini_stock_prediction_agent as gsp_mod
+
+    class _FakeResponse:
+        text = '{"decision": "SELL", "predicted_return_pct": -1.0, "confidence_score": 55, "risk_score": 45}'
+
+    class _FakeModels:
+        def generate_content(self, model, contents, config):
+            return _FakeResponse()
+
+    class _FakeClient:
+        def __init__(self, *a, **k):
+            self.models = _FakeModels()
+
+    monkeypatch.setattr(gsp_mod, "_GEMINI_KEY", "fake-key-for-test")
+    import google.genai as real_genai
+    monkeypatch.setattr(real_genai, "Client", _FakeClient)
+
+    bars = _make_bars(150)
+    spi = {"symbol": "TEST", "benchmark": "SPY", "price_basis": "close",
+           "historical_context_start_date": "2025-01-01",
+           "prediction_origin_date": "2025-06-01",
+           "decision_horizon_days": 30, "initial_capital": 10000}
+    feature_packet = gsp_mod.build_stock_feature_packet(spi, bars)
+
+    result = gsp_mod._call_gemini(spi, feature_packet, {}, 100.0, 10000.0)
+    assert result["status"] == "SUCCESS"
+    assert result["bull_conviction_score"] is None
+    assert result["bear_conviction_score"] is None
+    assert result["narrative_dependency_score"] is None
+
+
 def test_run_gemini_stock_prediction_chart_vision_enabled(monkeypatch):
     """When ENABLE_CHART_VISION is on, run_gemini_stock_prediction must render
     chart images and pass them through to the consensus call, surfacing
@@ -725,6 +821,44 @@ def test_calibration_summary_dedups_retries_by_origin_target(monkeypatch):
     assert summary["total_validated_records"] == 1
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# PHASE 2 — HORIZON-BUCKETED SEGMENT RELIABILITY IN build_calibration_summary
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_calibration_summary_includes_segment_reliability_when_horizon_given(monkeypatch):
+    """Passing both symbol and horizon_days must attach a segment_reliability
+    block scoped to that exact (symbol, horizon_bucket), distinct from the
+    per-symbol-only calibration above it."""
+    import gemini_stock_prediction_agent as gsp_mod
+
+    # 12 TSLA records at horizon=5 (bucket "0-7d"), 2 matches -> ~16.7% direction match -> UNPROVEN
+    # Each record needs a distinct (symbol, origin, horizon, target) key -- dedup_records
+    # collapses anything that collides, same as a real retried period would.
+    records = [
+        _cal_rec("TSLA", f"2026-{i+1:02d}-01", 5, f"2026-{i+1:02d}-06", f"2026-{i+1:02d}-02T09:00:00Z",
+                 decision="BUY", actual_decision=("BUY" if i < 2 else "SELL"))
+        for i in range(12)
+    ]
+    monkeypatch.setattr(gsp_mod, "_load_calibration_source_records", lambda: records)
+
+    summary = gsp_mod.build_calibration_summary(symbol="TSLA", horizon_days=5)
+    seg = summary.get("segment_reliability")
+    assert seg is not None
+    assert seg["segment"] == "TSLA|0-7d"
+    assert seg["n"] == 12
+    assert seg["classification"] == "UNPROVEN"
+
+
+def test_calibration_summary_omits_segment_reliability_without_horizon(monkeypatch):
+    """No horizon_days -> no segment_reliability block (can't bucket what wasn't given)."""
+    import gemini_stock_prediction_agent as gsp_mod
+    records = [_cal_rec("TSLA", "2026-03-01", 5, "2026-03-06", "2026-04-01T09:00:00Z")]
+    monkeypatch.setattr(gsp_mod, "_load_calibration_source_records", lambda: records)
+
+    summary = gsp_mod.build_calibration_summary(symbol="TSLA", horizon_days=0)
+    assert "segment_reliability" not in summary
+
+
 def test_calibration_summary_recent_slice_is_chronological(monkeypatch):
     """The 'recent 30' slice must be ordered by target_date, not JSONL append order."""
     import gemini_stock_prediction_agent as gsp_mod
@@ -881,17 +1015,26 @@ def test_no_person_name_in_app():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_context_enrichment_warnings_wired_into_result():
-    """Benchmark bars, earnings calendar, and market movers were previously
-    wrapped in bare except/pass -- a transient failure looked identical to
-    'this symbol has no earnings/no benchmark data.' Confirm each failure path
-    now records into _context_enrichment_warnings, and that dict is returned
-    in the final result under context_enrichment_warnings.
+    """Benchmark bars, insider activity, Reddit attention, and market movers
+    were previously wrapped in bare except/pass -- a transient failure looked
+    identical to 'this symbol has no earnings/no benchmark data.' Confirm
+    each failure path now records into _context_enrichment_warnings, and that
+    dict is returned in the final result under context_enrichment_warnings.
+
+    The old RapidAPI tradingview_calendar earnings-calendar call (confirmed
+    dead this session, 404 on a wrong endpoint) was removed outright rather
+    than kept as a silently-failing enrichment source -- Alpha Vantage's
+    earnings_days_away (Phase 3) covers the same underlying need. SEC EDGAR
+    insider activity and ApeWisdom Reddit attention (Research Expansion
+    Program) replaced it as the enrichment sources with real failure modes
+    worth tracking here.
     """
     text = _read(ROOT / "core" / "gemini_stock_prediction_agent.py")
     assert "_context_enrichment_warnings" in text
     assert '"context_enrichment_warnings":' in text
     assert text.count('_context_enrichment_warnings["benchmark_bars"]') >= 1
-    assert text.count('_context_enrichment_warnings["earnings_calendar"]') >= 1
+    assert text.count('_context_enrichment_warnings["sec_edgar_insider"]') >= 1
+    assert text.count('_context_enrichment_warnings["apewisdom_reddit"]') >= 1
     assert text.count('_context_enrichment_warnings["market_movers"]') >= 1
     assert text.count('_context_enrichment_warnings["symbol_calibration"]') >= 1
     # No remaining bare except/pass on these three specific enrichment blocks.
@@ -955,6 +1098,201 @@ def test_put_call_and_earnings_fallback_gated_by_recent_origin():
     assert _guarded("_get_earnings_warning(symbol, origin_str, target_str or origin_str)"), (
         "yfinance earnings fallback is not gated by _is_recent_origin"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# RESEARCH EXPANSION PROGRAM, COMPONENT 5 — BULL/BEAR DEBATE CONSENSUS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_debate_consensus_makes_five_calls_in_correct_order_with_opponent_arguments(monkeypatch):
+    """5 calls (bull_round1, bear_round1, bull_round2, bear_round2,
+    pure_technical), in that order, with round 2 receiving the OTHER side's
+    round-1 argument as opponent_argument -- not its own, not empty."""
+    import gemini_stock_prediction_agent as gsp_mod
+
+    captured_modes = []
+    captured_opponent_args = []
+
+    def fake_call_gemini(normalized_input, feature_packet, calibration_summary, *a, **k):
+        mode = calibration_summary.get("consensus_mode")
+        captured_modes.append(mode)
+        captured_opponent_args.append(calibration_summary.get("opponent_argument", ""))
+        if mode == "bull_round1":
+            r = _consensus_result("BUY"); r["reasoning"] = "Bull R1: strong momentum"
+        elif mode == "bear_round1":
+            r = _consensus_result("SELL"); r["reasoning"] = "Bear R1: overbought risk"
+        elif mode == "bull_round2":
+            r = _consensus_result("BUY")
+        elif mode == "bear_round2":
+            r = _consensus_result("SELL")
+        else:  # pure_technical
+            r = _consensus_result("BUY")
+        return r
+
+    monkeypatch.setattr(gsp_mod, "_call_gemini", fake_call_gemini)
+    monkeypatch.setattr(gsp_mod, "_compute_technical_override_score",
+                         lambda feature_packet: {"override": None, "score": 0, "verdict": "no override"})
+
+    result = gsp_mod._call_gemini_debate_consensus({}, {}, {}, 100.0, 10000.0)
+
+    assert captured_modes == ["bull_round1", "bear_round1", "bull_round2", "bear_round2", "pure_technical"]
+    assert captured_opponent_args[0] == ""  # round 1 has no opponent argument yet
+    assert captured_opponent_args[1] == ""
+    assert captured_opponent_args[2] == "Bear R1: overbought risk"  # bull_round2 rebuts bear's r1
+    assert captured_opponent_args[3] == "Bull R1: strong momentum"  # bear_round2 rebuts bull's r1
+    assert captured_opponent_args[4] == ""  # pure_technical isn't part of the debate
+
+
+def test_debate_consensus_tallies_only_final_round_not_round1(monkeypatch):
+    """round1 calls are intermediate debate turns, not votes -- only
+    bull_round2/bear_round2/pure_technical may affect consensus_votes."""
+    import gemini_stock_prediction_agent as gsp_mod
+
+    def fake_call_gemini(normalized_input, feature_packet, calibration_summary, *a, **k):
+        mode = calibration_summary.get("consensus_mode")
+        # Round 1 unanimously SELL (would flip the vote if wrongly counted)
+        if mode in ("bull_round1", "bear_round1"):
+            return _consensus_result("SELL")
+        if mode == "bull_round2":
+            return _consensus_result("BUY")
+        if mode == "bear_round2":
+            return _consensus_result("BUY")
+        return _consensus_result("BUY")  # pure_technical
+
+    monkeypatch.setattr(gsp_mod, "_call_gemini", fake_call_gemini)
+    monkeypatch.setattr(gsp_mod, "_compute_technical_override_score",
+                         lambda feature_packet: {"override": None, "score": 0, "verdict": "no override"})
+
+    result = gsp_mod._call_gemini_debate_consensus({}, {}, {}, 100.0, 10000.0)
+    assert result["consensus_votes"] == {"BUY": 3, "SELL": 0, "HOLD": 0}
+    assert result["decision"] == "BUY"
+
+
+def test_debate_consensus_includes_transcript(monkeypatch):
+    """The final result must carry the actual debate text, not just the
+    tallied decision -- needed to audit/display what the Bull and Bear
+    analysts argued, same transparency bar as every other decision_reason."""
+    import gemini_stock_prediction_agent as gsp_mod
+
+    def fake_call_gemini(normalized_input, feature_packet, calibration_summary, *a, **k):
+        mode = calibration_summary.get("consensus_mode")
+        if mode == "bull_round1":
+            r = _consensus_result("BUY"); r["reasoning"] = "Bull R1 argument text"
+        elif mode == "bear_round1":
+            r = _consensus_result("SELL"); r["reasoning"] = "Bear R1 argument text"
+        elif mode == "bull_round2":
+            r = _consensus_result("BUY")
+        elif mode == "bear_round2":
+            r = _consensus_result("SELL")
+        else:
+            r = _consensus_result("BUY")
+        return r
+
+    monkeypatch.setattr(gsp_mod, "_call_gemini", fake_call_gemini)
+    monkeypatch.setattr(gsp_mod, "_compute_technical_override_score",
+                         lambda feature_packet: {"override": None, "score": 0, "verdict": "no override"})
+
+    result = gsp_mod._call_gemini_debate_consensus({}, {}, {}, 100.0, 10000.0)
+    transcript = result["debate_transcript"]
+    assert transcript["bull_round1"] == "Bull R1 argument text"
+    assert transcript["bear_round1"] == "Bear R1 argument text"
+    assert transcript["bull_round2_decision"] == "BUY"
+    assert transcript["bear_round2_decision"] == "SELL"
+
+
+def test_debate_consensus_technical_override_still_applies(monkeypatch):
+    """The deterministic technical override (shared via
+    _apply_technical_override_and_return) must still fire on top of the
+    debate's own majority pick, same as the standard consensus."""
+    import gemini_stock_prediction_agent as gsp_mod
+
+    monkeypatch.setattr(gsp_mod, "_call_gemini", lambda *a, **k: _consensus_result("BUY", return_pct=5.0))
+    monkeypatch.setattr(gsp_mod, "_compute_technical_override_score",
+                         lambda feature_packet: {"override": "SELL", "score": -7, "verdict": "FORCE SELL"})
+
+    result = gsp_mod._call_gemini_debate_consensus({}, {}, {}, 100.0, 10000.0)
+    assert result["decision"] == "SELL"
+    assert result["predicted_return_pct"] < 0
+
+
+def test_enable_debate_consensus_flag_routes_to_debate_function(monkeypatch):
+    """run_gemini_stock_prediction must call _call_gemini_debate_consensus
+    (not _call_gemini_consensus) when ENABLE_DEBATE_CONSENSUS is on."""
+    import gemini_stock_prediction_agent as gsp_mod
+
+    monkeypatch.setattr(gsp_mod, "ENABLE_DEBATE_CONSENSUS", True)
+
+    called = {"debate": False, "standard": False}
+
+    def fake_debate(*args, **kwargs):
+        called["debate"] = True
+        return {
+            "status": "SUCCESS", "decision": "BUY", "decision_reason": "...",
+            "predicted_return_pct": 1.0, "predicted_target_price": 101.0,
+            "predicted_final_capital": 10100.0, "predicted_total_pl": 100.0,
+            "confidence_score": 60, "risk_score": 50, "data_quality_score": 90,
+            "signal_scores": {}, "consensus_confidence": "HIGH",
+            "consensus_votes": {"BUY": 3, "SELL": 0, "HOLD": 0},
+            "consensus_calls": [], "gemini_latency_ms": 0,
+            "prompt_hash": "", "gemini_output_hash": "",
+        }
+
+    def fake_standard(*args, **kwargs):
+        called["standard"] = True
+        return fake_debate(*args, **kwargs)
+
+    monkeypatch.setattr(gsp_mod, "_call_gemini_debate_consensus", fake_debate)
+    monkeypatch.setattr(gsp_mod, "_call_gemini_consensus", fake_standard)
+
+    bars = _make_bars(300)
+    spi = {"symbol": "TEST", "benchmark": "SPY", "price_basis": "close",
+           "historical_context_start_date": "2025-01-01",
+           "prediction_origin_date": "2025-06-01",
+           "target_date": "2025-07-01",
+           "decision_horizon_days": 30, "initial_capital": 10000}
+
+    result = gsp_mod.run_gemini_stock_prediction(spi, bars)
+    assert result["status"] == "SUCCESS"
+    assert called["debate"] is True
+    assert called["standard"] is False
+
+
+def test_debate_consensus_disabled_by_default(monkeypatch):
+    """ENABLE_DEBATE_CONSENSUS defaults to False -- the standard 3-call
+    consensus must be used unless explicitly opted into."""
+    import gemini_stock_prediction_agent as gsp_mod
+    assert gsp_mod.ENABLE_DEBATE_CONSENSUS is False
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# BUILD PROMPT — Component 5 debate modes
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_build_gemini_prompt_bull_round2_includes_opponent_argument():
+    from gemini_stock_prediction_agent import _build_gemini_prompt, build_stock_feature_packet
+    bars = _make_bars(150)
+    spi = {"symbol": "TEST", "benchmark": "SPY", "price_basis": "close",
+           "historical_context_start_date": "2025-01-01",
+           "prediction_origin_date": "2025-06-01", "decision_horizon_days": 30}
+    fp = build_stock_feature_packet(spi, bars)
+    cal = {"consensus_mode": "bull_round2", "opponent_argument": "Bear says RSI is overbought at 82."}
+    prompt = _build_gemini_prompt(spi, fp, cal)
+    assert "BULL ANALYST, ROUND 2" in prompt
+    assert "Bear says RSI is overbought at 82." in prompt
+
+
+def test_build_gemini_prompt_bear_round1_has_no_opponent_argument_section():
+    """Round 1 prompts must not reference an opponent argument that doesn't exist yet."""
+    from gemini_stock_prediction_agent import _build_gemini_prompt, build_stock_feature_packet
+    bars = _make_bars(150)
+    spi = {"symbol": "TEST", "benchmark": "SPY", "price_basis": "close",
+           "historical_context_start_date": "2025-01-01",
+           "prediction_origin_date": "2025-06-01", "decision_horizon_days": 30}
+    fp = build_stock_feature_packet(spi, bars)
+    cal = {"consensus_mode": "bear_round1"}
+    prompt = _build_gemini_prompt(spi, fp, cal)
+    assert "BEAR ANALYST, ROUND 1" in prompt
+    assert "ROUND TO RESPOND TO" not in prompt
 
 
 # ══════════════════════════════════════════════════════════════════════════════

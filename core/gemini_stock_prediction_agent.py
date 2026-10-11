@@ -56,6 +56,13 @@ _GEMINI_KEY             = os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_A
 ENABLE_CHART_VISION               = os.getenv("ENABLE_CHART_VISION", "false").lower() == "true"
 CHART_VISION_WIDE_LOOKBACK_DAYS   = int(os.getenv("CHART_VISION_WIDE_LOOKBACK_DAYS", "240"))
 CHART_VISION_DETAIL_LOOKBACK_DAYS = int(os.getenv("CHART_VISION_DETAIL_LOOKBACK_DAYS", "90"))
+# Research Expansion Program, Component 5 -- bull/bear debate consensus
+# (_call_gemini_debate_consensus). OPT-IN, default off: this session already
+# found more LLM sophistication (the existing triple-consensus) scored WORSE
+# than an older, simpler baseline; this must prove itself via the Phase 5
+# batch harness before ever being made the default. 5 Gemini calls instead
+# of 3 -- real latency cost (~2.5-4 min/prediction at this model's speed).
+ENABLE_DEBATE_CONSENSUS = os.getenv("ENABLE_DEBATE_CONSENSUS", "false").lower() == "true"
 # Every other network call in this project (Alpaca, historical price fetch) has an
 # explicit timeout; this one didn't. A hung connection under real-world network
 # flakiness (observed directly: DNS reconnect blips, failed sends) would then block
@@ -846,6 +853,38 @@ def build_calibration_summary(symbol: str = "", horizon_days: int = 0, as_of_dat
     elif _sym_inline_cal:
         cal_summary["symbol_calibration"] = _sym_inline_cal
 
+    # Phase 1 — confidence calibration curve: informational context so the
+    # model can see its own stated confidence has historically NOT tracked
+    # correctness (80-100% stated confidence -> 40.0% actual direction match
+    # this session's own DB; 40-59% -> 62.1%, i.e. inverted). This cannot make
+    # the model magically well-calibrated via prompting alone (more LLM
+    # sophistication already made raw accuracy worse elsewhere this session),
+    # but it's honest context rather than silence.
+    try:
+        _conf_map_path = ROOT / "data" / "confidence_calibration_map.json"
+        if _conf_map_path.exists():
+            _conf_map = json.loads(_conf_map_path.read_text(encoding="utf-8"))
+            if _conf_map.get("bins"):
+                cal_summary["confidence_calibration_curve"] = _conf_map["bins"]
+    except Exception:
+        pass
+
+    # Phase 2 — horizon-aware segment reliability: per-symbol calibration above
+    # answers "how has this symbol done overall," which hides wildly different
+    # reality across horizons (e.g. SPY short-horizon vs. SPY 120-day). This
+    # answers the sharper question for THIS specific prediction's horizon.
+    if symbol and horizon_days:
+        try:
+            from segment_reliability import classify_records, segment_label
+            cal_summary["segment_reliability"] = {
+                "segment": segment_label(symbol, horizon_days),
+                **classify_records(records, symbol, horizon_days),
+            }
+        except Exception as exc:
+            # Degrade gracefully -- this is enrichment, not required for a
+            # prediction to proceed.
+            cal_summary["segment_reliability_error"] = f"{type(exc).__name__}: {exc}"
+
     return cal_summary
 
 
@@ -1295,9 +1334,18 @@ def _apply_guardrails(
     adx: Optional[float] = None,
     trend_regime: str = "",
 ) -> Tuple[str, str]:
-    """Decisive guardrail: positive return → BUY, negative return → SELL. HOLD is eliminated.
+    """Guardrail: predicted_return_pct vs. the SAME horizon-scaled dead-band used
+    to grade the actual outcome (stock_comparison_engine.decision_thresholds_for_horizon).
 
-    No signal-score gates. Gemini's predicted_return_pct sign is authoritative.
+    Previously this was "decisive" -- any nonzero predicted_return_pct became a
+    BUY/SELL with no dead-band, while the ground-truth label used a flat ±2%
+    band regardless of horizon. The two definitions of HOLD had nothing to do
+    with each other: the AI could only ever reach HOLD via the capitulation
+    guard below, while "the market was actually flat" required an actual ±2%
+    (now horizon-scaled) move. Using the identical threshold function on both
+    sides is what makes decision_match actually measure agreement, not an
+    artifact of two unrelated rules.
+
     Only truly unusable inputs (data quality < 50, confidence < 20) produce REVIEW.
 
     One exception, added after reviewing the eval log: extreme-oversold-RSI in a
@@ -1335,27 +1383,33 @@ def _apply_guardrails(
             f"{'index' if _is_index else 'stock'}, {horizon_days}d horizon]"
         )
 
-    # DECISIVE: sign of predicted return is the decision. No gates, no HOLD band.
-    if predicted_return_pct > 0:
+    # Horizon-scaled dead-band: same formula used to grade the actual outcome.
+    from stock_comparison_engine import decision_thresholds_for_horizon
+    buy_th, sell_th = decision_thresholds_for_horizon(horizon_days)
+
+    if predicted_return_pct > buy_th:
         decision = "BUY"
         reason   = (
-            f"DECISIVE BUY: predicted return {predicted_return_pct:+.2f}% > 0. "
+            f"BUY: predicted return {predicted_return_pct:+.2f}% > horizon-scaled threshold "
+            f"+{buy_th:.2f}%. "
             f"[conf={confidence_score}, risk={risk_score}, rev_risk={reversal_risk}, "
             f"{'index' if _is_index else 'stock'}, {horizon_days}d horizon]"
         )
-    elif predicted_return_pct < 0:
+    elif predicted_return_pct < sell_th:
         decision = "SELL"
         reason   = (
-            f"DECISIVE SELL: predicted return {predicted_return_pct:+.2f}% < 0. "
+            f"SELL: predicted return {predicted_return_pct:+.2f}% < horizon-scaled threshold "
+            f"{sell_th:.2f}%. "
             f"[conf={confidence_score}, risk={risk_score}, rev_risk={reversal_risk}, "
             f"{'index' if _is_index else 'stock'}, {horizon_days}d horizon]"
         )
     else:
-        # Exactly 0.00% — default BUY (indexes have upward bias; stocks: no negative signal = lean bullish)
-        decision = "BUY"
+        decision = "HOLD"
         reason   = (
-            f"Predicted return exactly 0.00% — defaulting to BUY "
-            f"({'index upward bias ≥75%' if _is_index else 'no negative signal detected'})."
+            f"HOLD: predicted return {predicted_return_pct:+.2f}% is within the horizon-scaled "
+            f"dead-band (±{buy_th:.2f}% at {horizon_days}d) — too small a move to call a direction. "
+            f"[conf={confidence_score}, risk={risk_score}, rev_risk={reversal_risk}, "
+            f"{'index' if _is_index else 'stock'}, {horizon_days}d horizon]"
         )
 
     return decision, reason
@@ -1429,6 +1483,34 @@ def _build_symbol_calibration_section(calibration_summary: dict) -> str:
     lines.append("=" * 70)
     lines.append("")
     return "\n".join(lines) + "\n"
+
+
+def _build_segment_reliability_section(calibration_summary: dict) -> str:
+    """Phase 2 — surface this exact (symbol, horizon_bucket) segment's proven/
+    unproven status, distinct from the overall per-symbol profile above (which
+    blends every horizon together and can hide that e.g. this symbol is fine
+    short-horizon but unproven at this specific long horizon, or vice versa).
+
+    Deliberately informational, not a HARD RULE like the sections above --
+    this is a trust/calibration signal, not a decision override."""
+    seg = calibration_summary.get("segment_reliability")
+    if not seg or seg.get("classification") == "INSUFFICIENT_DATA":
+        return ""
+
+    cls = seg.get("classification")
+    n   = seg.get("n", 0)
+    drm = seg.get("direction_match_pct")
+
+    if cls == "PROVEN":
+        note = f"This segment has a real track record: {drm}% direction match over {n} runs. Reasonable confidence is warranted."
+    else:
+        note = (
+            f"UNPROVEN SEGMENT: only {drm}% direction match over {n} runs for this exact "
+            f"symbol/horizon combination -- historically close to or below a coin flip. "
+            "Do not let a confident-sounding rationale overstate how reliable this specific "
+            "call is; widen uncertainty and prefer a lower confidence_score."
+        )
+    return f"SEGMENT RELIABILITY ({seg.get('segment', '')}): {note}\n\n"
 
 
 def _build_options_context_section(opts: dict, horizon_days: int) -> str:
@@ -1905,6 +1987,46 @@ def _build_gemini_prompt(
             "Ignore all narrative context and qualitative factors. Base your decision ONLY on the numerical technical indicators: "
             "RSI, MACD, Bollinger Bands, SMA alignment, ATR, volume, and return percentages. No story, just numbers.\n\n"
         )
+    elif _consensus_mode == "bull_round1":
+        _consensus_prepend = (
+            "DEBATE MODE — BULL ANALYST, ROUND 1:\n"
+            "You are the Bull analyst in a structured debate (Research Expansion Program Component 5, "
+            "inspired by TradingAgents' multi-round researcher debate). Argue ONLY the case for BUY/upside, "
+            "as strongly as the real evidence supports. Do not hedge toward SELL or HOLD. A separate Bear "
+            "analyst is independently building the opposing case; you will get to respond to their specific "
+            "argument in round 2. Still return the required JSON with your honest predicted_return_pct, "
+            "confidence_score, etc. -- argue the bull case, but do not fabricate a BUY decision if the "
+            "numbers genuinely don't support any upside at all.\n\n"
+        )
+    elif _consensus_mode == "bear_round1":
+        _consensus_prepend = (
+            "DEBATE MODE — BEAR ANALYST, ROUND 1:\n"
+            "You are the Bear analyst in a structured debate (Research Expansion Program Component 5, "
+            "inspired by TradingAgents' multi-round researcher debate). Argue ONLY the case for SELL/downside, "
+            "as strongly as the real evidence supports. Do not hedge toward BUY or HOLD. A separate Bull "
+            "analyst is independently building the opposing case; you will get to respond to their specific "
+            "argument in round 2. Still return the required JSON with your honest predicted_return_pct, "
+            "confidence_score, etc. -- argue the bear case, but do not fabricate a SELL decision if the "
+            "numbers genuinely don't support any downside at all.\n\n"
+        )
+    elif _consensus_mode == "bull_round2":
+        _consensus_prepend = (
+            "DEBATE MODE — BULL ANALYST, ROUND 2 (REBUTTAL):\n"
+            "You argued the bull case in round 1. Below is the Bear analyst's round-1 argument. You MUST "
+            "respond to their SPECIFIC points, not generic counterarguments -- name which of their claims "
+            "you're rebutting and why, using the actual data. If their argument genuinely changes your view, "
+            "say so and adjust; conviction without engaging their real points is not a valid rebuttal.\n\n"
+            f"BEAR'S ROUND-1 ARGUMENT TO RESPOND TO:\n{calibration_summary.get('opponent_argument', '(not provided)')}\n\n"
+        )
+    elif _consensus_mode == "bear_round2":
+        _consensus_prepend = (
+            "DEBATE MODE — BEAR ANALYST, ROUND 2 (REBUTTAL):\n"
+            "You argued the bear case in round 1. Below is the Bull analyst's round-1 argument. You MUST "
+            "respond to their SPECIFIC points, not generic counterarguments -- name which of their claims "
+            "you're rebutting and why, using the actual data. If their argument genuinely changes your view, "
+            "say so and adjust; conviction without engaging their real points is not a valid rebuttal.\n\n"
+            f"BULL'S ROUND-1 ARGUMENT TO RESPOND TO:\n{calibration_summary.get('opponent_argument', '(not provided)')}\n\n"
+        )
     else:
         _consensus_prepend = ""
 
@@ -2101,7 +2223,7 @@ CALIBRATION FAILURE CONTEXT (learn from these to avoid repeating the same mistak
 {f'- {failure_guidance}' if failure_guidance else ''}
 
 {_idx_section}{_opts_section}{_tt_ctx_section}{_regime_section}{_pc_section}
-NORMALIZED INPUT:
+{_build_segment_reliability_section(calibration_summary)}NORMALIZED INPUT:
 {inp_json}
 
 FEATURE PACKET (computed from real historical bars — no future data):
@@ -2134,6 +2256,7 @@ REQUIRED JSON RESPONSE (return ONLY this JSON, no other text):
   "decision_threshold_used": {{"buy_threshold": {buy_thr}, "sell_threshold": {sell_thr}}},
   "bullish_score_assessment": <integer 0-100, your assessment of bullish evidence>,
   "bearish_score_assessment": <integer 0-100, your assessment of bearish evidence>,
+  "narrative_dependency_score": <integer 0-100: how much does THIS call depend on narrative/sentiment/news-driven factors rather than pure price-technicals? 0 = purely technical (e.g. a broad index following its trend), 100 = the call hinges on story/sentiment/catalyst factors that technicals alone can't capture (e.g. a single volatile stock driven by news flow)>,
   "primary_signal": "<single most important indicator driving your prediction>",
   "trend_assessment": "<3-4 sentences: What is the current trend regime (bullish/bearish/sideways)? Where is price relative to SMA20, SMA50, SMA200? How long has this trend been in place? Is the trend strengthening or weakening based on the last 20-60 days of price action?>",
   "momentum_assessment": "<3-4 sentences: What is the exact RSI value and what does it signal (overbought/oversold/neutral)? What direction is MACD histogram pointing and is it accelerating or decelerating? How does the Rate of Change (ROC) confirm or conflict with RSI? Is momentum building or exhausting?>",
@@ -2440,9 +2563,14 @@ def _call_gemini(
         )
 
         # Phase 7 — Deep thinking enabled (budget=8000 lets Gemini reason internally
-        # before answering, dramatically improving prediction quality)
+        # before answering, dramatically improving prediction quality). The
+        # devils_advocate/pure_technical calls use a smaller budget for speed, but
+        # it must stay > 0: some models (e.g. gemini-3.1-pro-preview) hard-reject
+        # thinking_budget=0 with "Budget 0 is invalid. This model only works in
+        # thinking mode." -- a 400 ClientError, not a disagreement, that was
+        # silently killing 2 of the 3 consensus calls on every single request.
         _consensus_mode = (calibration_summary or {}).get("consensus_mode", "")
-        _thinking_budget = 0 if _consensus_mode in ("devils_advocate", "pure_technical") else 8000
+        _thinking_budget = 1024 if _consensus_mode in ("devils_advocate", "pure_technical") else 8000
         response = _generate_content_with_retry(
             client,
             model=GEMINI_MODEL,
@@ -2484,7 +2612,7 @@ def _call_gemini(
                         temperature=0.15,
                         max_output_tokens=8192,
                         response_mime_type="application/json",
-                        thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
+                        thinking_config=genai_types.ThinkingConfig(thinking_budget=1024),
                     ),
                 )
                 _retry_raw  = (_retry_resp.text or "").strip()
@@ -2515,6 +2643,25 @@ def _call_gemini(
         conf  = max(0, min(100, int(gemini_json.get("confidence_score") or 50)))
         risk  = max(0, min(100, int(gemini_json.get("risk_score") or 50)))
         dq    = min(100, int(feature_packet.get("data_quality_score", 70) or 70))
+
+        # Research Expansion Program, Component 4 -- structured numeric scores
+        # (not just the final decision) feeding the ML model as additional
+        # features, per the hybrid LLM+quant research finding (LLM-generated
+        # "formulaic alpha" signals as model inputs, not only a narrative
+        # verdict). bullish/bearish_score_assessment were already in the
+        # schema but never parsed before this -- wiring up existing unused
+        # output instead of adding prompt complexity for two of the three.
+        def _clamped_score(key: str) -> Optional[int]:
+            val = gemini_json.get(key)
+            if val is None:
+                return None
+            try:
+                return max(0, min(100, int(val)))
+            except (TypeError, ValueError):
+                return None
+        bull_conviction   = _clamped_score("bullish_score_assessment")
+        bear_conviction   = _clamped_score("bearish_score_assessment")
+        narrative_dep     = _clamped_score("narrative_dependency_score")
         h_days = int(normalized_input.get("decision_horizon_days") or 30)
 
         _rev_risk      = feature_packet.get("reversal_signals", {}).get("reversal_risk", "low")
@@ -2552,6 +2699,9 @@ def _call_gemini(
             "risk_score":               risk,
             "data_quality_score":       dq,
             "signal_scores":            sig_scores,
+            "bull_conviction_score":    bull_conviction,
+            "bear_conviction_score":    bear_conviction,
+            "narrative_dependency_score": narrative_dep,
             "reasoning":                gemini_json.get("main_reason", ""),
             "trend_assessment":         gemini_json.get("trend_assessment", ""),
             "momentum_assessment":      gemini_json.get("momentum_assessment", ""),
@@ -2583,55 +2733,19 @@ def _call_gemini(
 # PHASE 1 — TRIPLE GEMINI CONSENSUS ENGINE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _call_gemini_consensus(
-    normalized_input: dict,
-    feature_packet: dict,
-    calibration_summary: dict,
-    origin_price: float,
-    initial_capital: float,
-    earnings_warning: str = "",
-    market_movers_context: str = "",
-    chart_images: Optional[Dict[str, bytes]] = None,
-) -> dict:
+def _tally_consensus_votes(results: List[dict], call_labels: List[str], fallback_fn) -> dict:
+    """Shared majority-vote tallying, used by both _call_gemini_consensus
+    (3 independent framings) and _call_gemini_debate_consensus (Component 5 --
+    the final 3-way tally among bull-round2/bear-round2/pure-technical, after
+    the debate rounds have run). Extracted so both consensus mechanisms share
+    identical, already-tested voting/confidence semantics rather than two
+    subtly-different copies drifting apart.
+
+    fallback_fn() is called (and its result annotated/returned) only if EVERY
+    result failed outright -- one direct retry rather than giving up with
+    zero information. Takes no arguments; callers close over whatever a
+    direct single-call fallback needs.
     """
-    Call Gemini three times with different reasoning modes and take a majority vote.
-    Returns result dict enhanced with consensus metadata.
-    Falls back to single call if all three fail.
-
-    chart_images (when provided) is the SAME {"wide": ..., "detail": ...} pair
-    attached to all 3 calls -- the underlying visual evidence is identical
-    across reasoning modes, only the text prompt's framing differs.
-    """
-    # Call 1 — standard
-    cal_standard = dict(calibration_summary)
-    cal_standard.pop("consensus_mode", None)
-    result1 = _call_gemini(
-        normalized_input, feature_packet, cal_standard, origin_price, initial_capital,
-        earnings_warning=earnings_warning, market_movers_context=market_movers_context,
-        chart_images=chart_images,
-    )
-
-    # Call 2 — devil's advocate
-    cal_devils = dict(calibration_summary)
-    cal_devils["consensus_mode"] = "devils_advocate"
-    result2 = _call_gemini(
-        normalized_input, feature_packet, cal_devils, origin_price, initial_capital,
-        earnings_warning=earnings_warning, market_movers_context=market_movers_context,
-        chart_images=chart_images,
-    )
-
-    # Call 3 — pure technical
-    cal_tech = dict(calibration_summary)
-    cal_tech["consensus_mode"] = "pure_technical"
-    result3 = _call_gemini(
-        normalized_input, feature_packet, cal_tech, origin_price, initial_capital,
-        earnings_warning=earnings_warning, market_movers_context=market_movers_context,
-        chart_images=chart_images,
-    )
-
-    results = [result1, result2, result3]
-    call_labels = ["standard", "devils_advocate", "pure_technical"]
-
     # All successful calls, regardless of decision — the true "how many calls
     # actually completed" count. A HOLD/REVIEW result is a real, successful call;
     # it must not vanish from this count just because it can't win the BUY/SELL vote.
@@ -2645,11 +2759,7 @@ def _call_gemini_consensus(
     if total_attempted == 0:
         # True failure — every call errored/failed to parse. Fall back to a single
         # direct call (no consensus possible).
-        fallback = _call_gemini(
-            normalized_input, feature_packet, calibration_summary, origin_price, initial_capital,
-            earnings_warning=earnings_warning, market_movers_context=market_movers_context,
-            chart_images=chart_images,
-        )
+        fallback = fallback_fn()
         fallback["consensus_votes"]      = {"BUY": 0, "SELL": 0, "HOLD": 0}
         fallback["consensus_confidence"] = "LOW"
         fallback["consensus_calls"]      = []
@@ -2657,8 +2767,8 @@ def _call_gemini_consensus(
 
     if not successful:
         # Every successful call landed on HOLD/REVIEW — a real, low-confidence
-        # outcome in its own right. Don't burn a 4th Gemini call chasing a
-        # BUY/SELL decision none of the 3 attempts actually reached.
+        # outcome in its own right. Don't burn another Gemini call chasing a
+        # BUY/SELL decision none of the attempts actually reached.
         chosen_result = dict(attempted[0][1])
         chosen_result["consensus_votes"]      = {"BUY": 0, "SELL": 0, "HOLD": hold_count}
         chosen_result["consensus_confidence"] = "LOW"
@@ -2672,11 +2782,12 @@ def _call_gemini_consensus(
     buy_count  = sum(1 for _, r in successful if r.get("decision") == "BUY")
     sell_count = sum(1 for _, r in successful if r.get("decision") == "SELL")
 
-    # Confidence reflects how many of the 3 attempted calls actually agreed on a
-    # direction — a HOLD/REVIEW among the 3 is weaker evidence than 3/3 clean
+    n = len(results)
+    # Confidence reflects how many of the attempted calls actually agreed on a
+    # direction — a HOLD/REVIEW among them is weaker evidence than clean
     # directional agreement, even though it can't change which side wins.
-    if total_attempted == 3 and hold_count == 0:
-        consensus_confidence = "HIGH" if (buy_count == 3 or sell_count == 3) else "MEDIUM"
+    if total_attempted == n and hold_count == 0:
+        consensus_confidence = "HIGH" if (buy_count == n or sell_count == n) else "MEDIUM"
     elif total_attempted - hold_count >= 2:
         consensus_confidence = "MEDIUM"
     else:
@@ -2684,10 +2795,9 @@ def _call_gemini_consensus(
 
     majority_decision = "BUY" if buy_count >= sell_count else "SELL"
 
-    # Prefer Call 1 if it matches majority, else Call 2, else Call 3
+    # Prefer the earliest call (by index) that matches the majority
     chosen_result = None
-    preferred_order = [0, 1, 2]
-    for pref_idx in preferred_order:
+    for pref_idx in range(n):
         for suc_idx, suc_r in successful:
             if suc_idx == pref_idx and suc_r.get("decision") == majority_decision:
                 chosen_result = suc_r
@@ -2707,7 +2817,15 @@ def _call_gemini_consensus(
         {"call": call_labels[i], "decision": r.get("decision", "FAILED"), "status": r.get("status", "FAILED")}
         for i, r in enumerate(results)
     ]
+    return chosen_result
 
+
+def _apply_technical_override_and_return(chosen_result: dict, feature_packet: dict,
+                                          origin_price: float, initial_capital: float) -> dict:
+    """Shared post-processing step (deterministic technical override), used
+    by both _call_gemini_consensus and _call_gemini_debate_consensus so the
+    two mechanisms apply identical downstream logic after their respective
+    (different) voting processes pick a chosen_result."""
     # Phase 3 — apply technical override
     tech_override = _compute_technical_override_score(feature_packet)
     chosen_result["technical_override_score"] = tech_override
@@ -2740,7 +2858,136 @@ def _call_gemini_consensus(
                 f"Original AI consensus: {original_decision} ({original_return}% return -> {new_return}% return)"
             )
 
+    # Phase 4's ML signal cross-check used to run here, but feature_packet at
+    # this point predates the Component 4 LLM-alpha scores (bull/bear
+    # conviction, narrative dependency) -- those are computed from THIS
+    # call's own output, so checking the ML model here could never actually
+    # see them. Moved to run_gemini_stock_prediction, after those scores are
+    # folded into feature_packet, so the shadow model gets the full feature
+    # set instead of a permanently-incomplete one. See that function for the
+    # real block (search "ML signal cross-check, SHADOW MODE ONLY").
     return chosen_result
+
+
+def _call_gemini_consensus(
+    normalized_input: dict,
+    feature_packet: dict,
+    calibration_summary: dict,
+    origin_price: float,
+    initial_capital: float,
+    earnings_warning: str = "",
+    market_movers_context: str = "",
+    chart_images: Optional[Dict[str, bytes]] = None,
+) -> dict:
+    """
+    Call Gemini three times with different reasoning modes and take a majority vote.
+    Returns result dict enhanced with consensus metadata.
+    Falls back to single call if all three fail.
+
+    chart_images (when provided) is the SAME {"wide": ..., "detail": ...} pair
+    attached to all 3 calls -- the underlying visual evidence is identical
+    across reasoning modes, only the text prompt's framing differs.
+    """
+    def _make_call(mode: Optional[str]):
+        cal = dict(calibration_summary)
+        if mode:
+            cal["consensus_mode"] = mode
+        else:
+            cal.pop("consensus_mode", None)
+        return _call_gemini(
+            normalized_input, feature_packet, cal, origin_price, initial_capital,
+            earnings_warning=earnings_warning, market_movers_context=market_movers_context,
+            chart_images=chart_images,
+        )
+
+    result1 = _make_call(None)               # standard
+    result2 = _make_call("devils_advocate")
+    result3 = _make_call("pure_technical")
+
+    results = [result1, result2, result3]
+    call_labels = ["standard", "devils_advocate", "pure_technical"]
+
+    def _fallback():
+        return _call_gemini(
+            normalized_input, feature_packet, calibration_summary, origin_price, initial_capital,
+            earnings_warning=earnings_warning, market_movers_context=market_movers_context,
+            chart_images=chart_images,
+        )
+
+    chosen_result = _tally_consensus_votes(results, call_labels, _fallback)
+    return _apply_technical_override_and_return(chosen_result, feature_packet, origin_price, initial_capital)
+
+
+def _call_gemini_debate_consensus(
+    normalized_input: dict,
+    feature_packet: dict,
+    calibration_summary: dict,
+    origin_price: float,
+    initial_capital: float,
+    earnings_warning: str = "",
+    market_movers_context: str = "",
+    chart_images: Optional[Dict[str, bytes]] = None,
+) -> dict:
+    """
+    Research Expansion Program, Component 5 -- Bull/Bear debate consensus,
+    inspired by TradingAgents' multi-round researcher debate (see this
+    session's own research: a respected, 110k-star open framework uses
+    actual multi-round debate rather than independent parallel framings).
+
+    OPT-IN ONLY (ENABLE_DEBATE_CONSENSUS env var) and NOT a default
+    replacement for _call_gemini_consensus -- this session already found,
+    concretely, that MORE LLM sophistication (the existing triple-consensus)
+    scored WORSE than an older, simpler baseline. "Credible idea from a
+    respected project" is exactly the standard that already failed once this
+    session when applied uncritically; this must earn its way into the live
+    path through the Phase 5 batch harness before ever being made default.
+
+    5 Gemini calls (vs. 3 for the standard consensus): Bull round 1, Bear
+    round 1, Bull round 2 (rebuts Bear's round-1 argument), Bear round 2
+    (rebuts Bull's round-1 argument), Pure Technical (reused as a 3rd
+    independent voice). Only the 3 FINAL positions (bull round 2, bear round
+    2, pure technical) are tallied for the majority vote -- round 1 calls are
+    intermediate debate turns, not votes in their own right. Real latency
+    cost: at ~30-46s/call for this model, this is 2.5-4 minutes per
+    prediction end to end.
+    """
+    def _call(mode: str, opponent_argument: str = ""):
+        cal = dict(calibration_summary)
+        cal["consensus_mode"] = mode
+        if opponent_argument:
+            cal["opponent_argument"] = opponent_argument
+        return _call_gemini(
+            normalized_input, feature_packet, cal, origin_price, initial_capital,
+            earnings_warning=earnings_warning, market_movers_context=market_movers_context,
+            chart_images=chart_images,
+        )
+
+    bull_r1 = _call("bull_round1")
+    bear_r1 = _call("bear_round1")
+
+    bull_r1_argument = bull_r1.get("reasoning") or bull_r1.get("decision_reason") or ""
+    bear_r1_argument = bear_r1.get("reasoning") or bear_r1.get("decision_reason") or ""
+
+    bull_r2 = _call("bull_round2", opponent_argument=bear_r1_argument)
+    bear_r2 = _call("bear_round2", opponent_argument=bull_r1_argument)
+    pure_technical = _call("pure_technical")
+
+    results = [bull_r2, bear_r2, pure_technical]
+    call_labels = ["bull_round2", "bear_round2", "pure_technical"]
+
+    def _fallback():
+        return _call_gemini(
+            normalized_input, feature_packet, calibration_summary, origin_price, initial_capital,
+            earnings_warning=earnings_warning, market_movers_context=market_movers_context,
+            chart_images=chart_images,
+        )
+
+    chosen_result = _tally_consensus_votes(results, call_labels, _fallback)
+    chosen_result["debate_transcript"] = {
+        "bull_round1": bull_r1_argument, "bear_round1": bear_r1_argument,
+        "bull_round2_decision": bull_r2.get("decision"), "bear_round2_decision": bear_r2.get("decision"),
+    }
+    return _apply_technical_override_and_return(chosen_result, feature_packet, origin_price, initial_capital)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2841,6 +3088,36 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
     if feature_packet.get("status") != "OK":
         return _error_result(spi, input_hash, f"Feature packet failed: {feature_packet.get('error')}")
 
+    # Phase 3 — earnings proximity + news sentiment (Alpha Vantage), scoped to
+    # single-name symbols only -- this session's own data showed broad-index
+    # symbols (SPY/QQQ/etc.) already perform acceptably on technical
+    # indicators alone at short horizons; this targets the specific weak spot
+    # (narrative-driven single names) instead of adding cost/complexity
+    # everywhere. Unlike the RapidAPI market-movers snapshot (which has no
+    # historical capability and is gated to live-only predictions), these
+    # fetchers filter by as_of_date themselves, so they're safe for historical
+    # replay too -- no _is_recent_origin gate needed here. Degrades to
+    # unavailable, never blocks a prediction, if ALPHA_VANTAGE_API_KEY isn't
+    # set or the free tier is rate-limited.
+    _is_index_symbol = symbol.upper() in ("SPY", "SPX", "QQQ", "IWM", "DIA")
+    if not _is_index_symbol:
+        try:
+            from news_sentiment_service import fetch_earnings_calendar, earnings_days_away, fetch_news_sentiment_score
+            _earn_data, _earn_err = fetch_earnings_calendar(symbol)
+            if _earn_data:
+                feature_packet["earnings_days_away"] = earnings_days_away(_earn_data, origin_str, target_str or origin_str)
+            elif _earn_err:
+                _context_enrichment_warnings["alpha_vantage_earnings"] = _earn_err
+
+            _sent_data, _sent_err = fetch_news_sentiment_score(symbol, origin_str)
+            if _sent_data:
+                feature_packet["news_sentiment_score"] = _sent_data.get("avg_sentiment_score")
+                feature_packet["news_sentiment_article_count"] = _sent_data.get("article_count")
+            elif _sent_err:
+                _context_enrichment_warnings["alpha_vantage_news_sentiment"] = _sent_err
+        except Exception as exc:
+            _context_enrichment_warnings["alpha_vantage"] = f"{type(exc).__name__}: {exc}"
+
     # Calibration summary — as_of_date=origin_str keeps a historical replay from
     # seeing outcomes that hadn't resolved yet as of the origin being replayed;
     # for live predictions (origin_str ~= today) this is effectively unfiltered.
@@ -2850,25 +3127,53 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
 
     _origin_is_recent = _is_recent_origin(origin_str)
 
-    # Fetch earnings calendar for prediction window
+    # Research Expansion Program, Component 1 — SEC EDGAR insider transactions
+    # (free, official, no key). Same scoping/degrade-gracefully discipline as
+    # the Alpha Vantage block above: non-index symbols only, as-of-date
+    # filtered so it's safe for historical replay too.
+    if not _is_index_symbol:
+        try:
+            from insider_activity_service import fetch_insider_activity
+            _insider_data, _insider_err = fetch_insider_activity(symbol, origin_str)
+            if _insider_data:
+                feature_packet["insider_buy_count"] = _insider_data.get("buy_count")
+                feature_packet["insider_sell_count"] = _insider_data.get("sell_count")
+                feature_packet["insider_net_signal"] = _insider_data.get("net_signal")
+            elif _insider_err:
+                _context_enrichment_warnings["sec_edgar_insider"] = _insider_err
+        except Exception as exc:
+            _context_enrichment_warnings["sec_edgar_insider"] = f"{type(exc).__name__}: {exc}"
+
+    # Research Expansion Program, Component 2 — ApeWisdom Reddit attention
+    # (free, keyless). LIVE-ONLY (current snapshot, no point-in-time
+    # capability) -- gated to _origin_is_recent, same as market movers.
+    if not _is_index_symbol and _origin_is_recent:
+        try:
+            from social_attention_service import fetch_reddit_attention
+            _reddit_data, _reddit_err = fetch_reddit_attention(symbol)
+            if _reddit_data:
+                feature_packet["reddit_mentions"] = _reddit_data.get("mentions")
+                feature_packet["reddit_mentions_24h_change"] = _reddit_data.get("mentions_24h_change")
+            elif _reddit_err:
+                _context_enrichment_warnings["apewisdom_reddit"] = _reddit_err
+        except Exception as exc:
+            _context_enrichment_warnings["apewisdom_reddit"] = f"{type(exc).__name__}: {exc}"
+
+    # Earnings-window warning for the prompt. Previously called the RapidAPI
+    # tradingview_calendar endpoint here, confirmed dead this session (404,
+    # not a valid path on the subscribed product) -- removed rather than left
+    # as silent-failing dead weight. Phase 3's Alpha Vantage earnings_days_away
+    # (feature_packet, set above) already covers this same underlying need
+    # for non-index symbols via a working, verified source.
     _earnings_warning = ""
-    try:
-        from tools.tradingview_calendar import get_earnings_calendar
-        from datetime import datetime as _dt
-        _origin_ts = int(_dt.strptime(origin_str[:10], "%Y-%m-%d").timestamp())
-        _target_ts = int(_dt.strptime(target_str[:10], "%Y-%m-%d").timestamp()) if target_str else _origin_ts + 90*86400
-        _earn_data = get_earnings_calendar(_origin_ts, _target_ts)
-        if _earn_data.get("status") == "SUCCESS":
-            _earn_events = _earn_data.get("data", []) or []
-            if isinstance(_earn_events, list):
-                _sym_earnings = [e for e in _earn_events if str(e.get("ticker","") or "").upper() == symbol]
-                if _sym_earnings:
-                    _earn_dates = [str(e.get("date","") or e.get("time",""))[:10] for e in _sym_earnings]
-                    _earnings_warning = f"EARNINGS WARNING: {symbol} has earnings in prediction window on {', '.join(_earn_dates)}. Earnings events cause high volatility and often invalidate technical predictions. Raise risk_score by 15-20 and lower confidence_score accordingly."
-        else:
-            _context_enrichment_warnings["earnings_calendar"] = str(_earn_data.get("message") or _earn_data.get("status") or "unavailable")
-    except Exception as exc:
-        _context_enrichment_warnings["earnings_calendar"] = f"{type(exc).__name__}: {exc}"
+    _earn_days = feature_packet.get("earnings_days_away")
+    if _earn_days is not None and 0 <= _earn_days <= horizon_days:
+        _earnings_warning = (
+            f"EARNINGS WARNING: {symbol} has earnings {_earn_days} day(s) into the prediction window "
+            "(source: Alpha Vantage EARNINGS, verified historical reported dates). Earnings events cause "
+            "high volatility and often invalidate technical predictions. Raise risk_score by 15-20 and "
+            "lower confidence_score accordingly."
+        )
 
     # Phase 4 — yfinance earnings gate (supplement tradingview calendar). yfinance's
     # `.calendar` always reports the real-world upcoming earnings date relative to
@@ -2921,8 +3226,12 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
         except Exception as exc:
             _context_enrichment_warnings["chart_vision"] = f"{type(exc).__name__}: {exc}"
 
-    # Call Gemini consensus engine (Phase 1 — triple call with majority vote)
-    gemini_result = _call_gemini_consensus(
+    # Call Gemini consensus engine -- Phase 1 (triple call, majority vote) by
+    # default, or Component 5's bull/bear debate consensus if explicitly
+    # opted into via ENABLE_DEBATE_CONSENSUS (see that function's docstring
+    # for why this isn't the default).
+    _consensus_fn = _call_gemini_debate_consensus if ENABLE_DEBATE_CONSENSUS else _call_gemini_consensus
+    gemini_result = _consensus_fn(
         spi, feature_packet, calibration_summary, origin_price, initial_cap,
         earnings_warning=_earnings_warning,
         market_movers_context=_market_movers_context,
@@ -2939,6 +3248,44 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
                 "gemini_latency_ms": gemini_result.get("gemini_latency_ms", 0),
             },
         )
+
+    # Research Expansion Program, Component 4 -- fold the LLM-generated
+    # structured scores into feature_packet (the one place ML feature
+    # extraction already reads from, feature_packet_to_vector/FEATURE_SPEC in
+    # ml_feature_extractor.py) rather than inventing a second feature source.
+    # These are only available post-prediction (they're Gemini's OUTPUT, not
+    # a pre-prediction input), which is fine -- the stored _feature_packet
+    # snapshot happens after this point, at the end of this function.
+    feature_packet["bull_conviction_score"] = gemini_result.get("bull_conviction_score")
+    feature_packet["bear_conviction_score"] = gemini_result.get("bear_conviction_score")
+    feature_packet["narrative_dependency_score"] = gemini_result.get("narrative_dependency_score")
+
+    # Phase 4 — ML signal cross-check, SHADOW MODE ONLY. Logged alongside every
+    # prediction for comparison, never allowed to change decision/return/price
+    # fields -- motivated by this session's own finding that a simpler, older
+    # baseline model already beats the newer triple-consensus architecture
+    # (58.8% vs 47.6% direction match), i.e. more LLM sophistication alone made
+    # things worse. This must accumulate real head-to-head evidence (via the
+    # Phase 5 batch harness) before it's ever trusted to affect a live decision.
+    # Absent model (not yet trained -- see ml_training_runner.py) is the normal,
+    # expected state, not an error. Runs here (not inside _call_gemini_consensus)
+    # so feature_packet already includes Component 4's LLM-alpha scores above.
+    try:
+        from ml_signal_model import load_model, predict_proba
+        from ml_feature_extractor import feature_packet_to_vector
+        from segment_reliability import segment_label as _segment_label_fn
+        _ml_model = load_model()
+        if _ml_model is not None:
+            _ml_vec = feature_packet_to_vector(feature_packet)
+            if _ml_vec is not None:
+                _seg = _segment_label_fn(symbol, horizon_days)
+                _ml_pred = predict_proba(_ml_model, _ml_vec, segment_label=_seg)
+                if _ml_pred is not None:
+                    _ml_pred["agrees_with_final_decision"] = (_ml_pred["decision"] == gemini_result.get("decision"))
+                    _ml_pred["segment"] = _seg
+                    gemini_result["ml_signal_shadow"] = _ml_pred
+    except Exception as _ml_exc:
+        gemini_result["ml_signal_shadow_error"] = f"{type(_ml_exc).__name__}: {_ml_exc}"
 
     # Phase 11 — Low Confidence Skip Gate
     # If all 3 consensus calls disagree, the signal is noise — do not generate a trade.
@@ -2978,6 +3325,23 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
     from stock_comparison_engine import validate_no_leakage as _ck
     leakage_check = _ck(history, origin_str).get("status", "UNKNOWN")
 
+    # Phase 1 — calibrated confidence: self-reported confidence_score is
+    # inversely correlated with correctness (confirmed this session: 80-100%
+    # stated confidence -> 40.0% actual direction match, n=25; 40-59% stated
+    # confidence -> 62.1% actual). Map the raw score to what predictions at
+    # that confidence level have ACTUALLY been right, from the static
+    # snapshot built by confidence_calibration_builder.py -- same
+    # staleness caveat as data/calibration_profiles.json, re-run periodically.
+    _calibrated_confidence = None
+    try:
+        _cal_map_path = ROOT / "data" / "confidence_calibration_map.json"
+        if _cal_map_path.exists():
+            from confidence_calibrator import calibrate as _calibrate_confidence
+            _cal_map = json.loads(_cal_map_path.read_text(encoding="utf-8"))
+            _calibrated_confidence = _calibrate_confidence(gemini_result["confidence_score"], _cal_map)
+    except Exception:
+        _calibrated_confidence = None
+
     # Gemini reasoning (combine assessments)
     reasoning_parts = [
         gemini_result.get("reasoning") or "",
@@ -3015,9 +3379,13 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
         "decision":                     gemini_result["decision"],
         "decision_reason":              gemini_result["decision_reason"],
         "confidence_score":             gemini_result["confidence_score"],
+        "calibrated_confidence_score":  _calibrated_confidence,
         "risk_score":                   gemini_result["risk_score"],
         "data_quality_score":           gemini_result["data_quality_score"],
         "signal_scores":                gemini_result.get("signal_scores", {}),
+        "bull_conviction_score":        gemini_result.get("bull_conviction_score"),
+        "bear_conviction_score":        gemini_result.get("bear_conviction_score"),
+        "narrative_dependency_score":   gemini_result.get("narrative_dependency_score"),
         "latest_date_seen_by_ai":       history[-1]["date"] if history else origin_str,
         "target_price_hidden_from_ai":  True,
         "leakage_check":                leakage_check,
@@ -3039,6 +3407,8 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
         "consensus_confidence":             gemini_result.get("consensus_confidence", ""),
         "consensus_calls":                  gemini_result.get("consensus_calls", []),
         "technical_override_score":         gemini_result.get("technical_override_score", {}),
+        "ml_signal_shadow":                 gemini_result.get("ml_signal_shadow"),
+        "debate_transcript":                gemini_result.get("debate_transcript"),
         "market_movers_used":           bool(_market_movers_context),
         "chart_vision_used":            bool(_chart_images),
         "context_enrichment_warnings":  _context_enrichment_warnings,

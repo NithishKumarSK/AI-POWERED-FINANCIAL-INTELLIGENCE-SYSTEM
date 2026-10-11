@@ -1,0 +1,92 @@
+{
+  "generated_at": "2026-10-11T07:38:50.698115",
+  "symbols": [
+    "SPY",
+    "TSLA"
+  ],
+  "horizons": [
+    7,
+    30
+  ],
+  "total_runs": 6,
+  "valid_runs": 6,
+  "failed_runs": 0,
+  "data_unavailable_count": 0,
+  "symbols_failed": [],
+  "decision_match_pct": 66.7,
+  "direction_match_pct": 66.7,
+  "avg_return_error_pp": 2.1248,
+  "hold_rate_pct": 66.7,
+  "false_buy_count": 1,
+  "false_sell_count": 0,
+  "over_hold_count": 1,
+  "match_by_symbol": {
+    "SPY": {
+      "runs": 4,
+      "matches": 3,
+      "match_pct": 75.0
+    },
+    "TSLA": {
+      "runs": 2,
+      "matches": 1,
+      "match_pct": 50.0
+    }
+  },
+  "match_by_horizon": {
+    "7": {
+      "runs": 3,
+      "matches": 2,
+      "match_pct": 66.7
+    },
+    "30": {
+      "runs": 3,
+      "matches": 2,
+      "match_pct": 66.7
+    }
+  },
+  "match_by_segment": {
+    "SPY|0-7d": {
+      "symbol": "SPY",
+      "horizon_bucket": "0-7d",
+      "runs": 2,
+      "decision_match_pct": 50.0,
+      "direction_match_pct": 50.0
+    },
+    "SPY|15-30d": {
+      "symbol": "SPY",
+      "horizon_bucket": "15-30d",
+      "runs": 2,
+      "decision_match_pct": 100.0,
+      "direction_match_pct": 100.0
+    },
+    "TSLA|0-7d": {
+      "symbol": "TSLA",
+      "horizon_bucket": "0-7d",
+      "runs": 1,
+      "decision_match_pct": 100.0,
+      "direction_match_pct": 100.0
+    },
+    "TSLA|15-30d": {
+      "symbol": "TSLA",
+      "horizon_bucket": "15-30d",
+      "runs": 1,
+      "decision_match_pct": 0.0,
+      "direction_match_pct": 0.0
+    }
+  },
+  "top_failure_reasons": [
+    {
+      "reason": "WRONG_MAGNITUDE",
+      "count": 1
+    },
+    {
+      "reason": "OVER_HOLD",
+      "count": 1
+    }
+  ],
+  "recommended_prompt_changes": [
+    "OVER_HOLD detected: widen BUY/SELL thresholds or add stronger signal requirement before HOLD.",
+    "WRONG_MAGNITUDE: recalibrate predicted_return_pct scaling vs actual by horizon.",
+    "HOLD rate is 67% (CRITICAL) — prompt over-selects HOLD. Add confidence requirement for HOLD."
+  ]
+}

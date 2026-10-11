@@ -134,3 +134,105 @@ def test_recommendations_for_high_hold_rate():
     from batch_validation_runner import _build_recommendations
     recs = _build_recommendations([], hold_rate=75.0, decision_match_pct=30.0)
     assert any("hold" in r.lower() or "HOLD" in r for r in recs)
+
+
+# ── Test 6: horizon_bucket (Phase 5/2 shared bucketing) ───────────────────────
+
+def test_horizon_bucket_boundaries():
+    from batch_validation_runner import horizon_bucket
+    assert horizon_bucket(0) == "0-7d"
+    assert horizon_bucket(7) == "0-7d"
+    assert horizon_bucket(8) == "8-14d"
+    assert horizon_bucket(30) == "15-30d"
+    assert horizon_bucket(31) == "31-60d"
+    assert horizon_bucket(120) == "61-120d"
+    assert horizon_bucket(121) == "120d+"
+    assert horizon_bucket(10_000) == "120d+"
+
+
+def test_horizon_bucket_handles_none():
+    from batch_validation_runner import horizon_bucket
+    assert horizon_bucket(None) == "0-7d"
+
+
+# ── Test 7: _build_origin_dates reproducibility + weekly mode ────────────────
+
+def test_build_origin_dates_deterministic():
+    from batch_validation_runner import _build_origin_dates
+    from datetime import date
+    today = date(2026, 10, 10)
+    a = _build_origin_dates(6, today)
+    b = _build_origin_dates(6, today)
+    assert a == b  # identical inputs -> identical grid, required for honest before/after comparisons
+
+
+def test_build_origin_dates_weekly_denser_than_monthly():
+    from batch_validation_runner import _build_origin_dates
+    from datetime import date
+    today = date(2026, 10, 10)
+    monthly = _build_origin_dates(6, today, freq="monthly")
+    weekly = _build_origin_dates(6, today, freq="weekly")
+    assert len(weekly) > len(monthly)
+
+
+def test_build_origin_dates_weekly_all_before_today():
+    from batch_validation_runner import _build_origin_dates
+    from datetime import date
+    today = date(2026, 10, 10)
+    weekly = _build_origin_dates(3, today, freq="weekly")
+    assert all(d < today for d in weekly)
+
+
+# ── Test 8: match_by_segment breakdown ────────────────────────────────────────
+
+def test_build_summary_includes_match_by_segment():
+    from batch_validation_runner import _build_summary
+    rows = [
+        {
+            "symbol": "SPY", "horizon_days": 5,
+            "ai_decision": "BUY", "actual_decision": "BUY",
+            "agreement": "MATCH", "validation_status": "SUCCESS",
+            "return_error_pp": 0.1, "failure_reason": "NONE",
+        },
+        {
+            "symbol": "TSLA", "horizon_days": 90,
+            "ai_decision": "BUY", "actual_decision": "SELL",
+            "agreement": "MISMATCH", "validation_status": "SUCCESS",
+            "return_error_pp": 5.0, "failure_reason": "FALSE_BUY",
+        },
+    ]
+    summary = _build_summary(rows, ["SPY", "TSLA"], [5, 90])
+    seg = summary["match_by_segment"]
+    assert "SPY|0-7d" in seg
+    assert seg["SPY|0-7d"]["decision_match_pct"] == 100.0
+    assert "TSLA|61-120d" in seg
+    assert seg["TSLA|61-120d"]["decision_match_pct"] == 0.0
+    # No rows exist for this symbol/bucket combo -- must not appear at all,
+    # rather than show up as a misleading 0-run/0% entry.
+    assert "SPY|61-120d" not in seg
+
+
+# ── Test 9: deterministic (use_llm=False) prediction path ────────────────────
+
+def test_deterministic_technical_prediction_no_gemini_call(monkeypatch):
+    """The deterministic path must never import/call the Gemini agent's network
+    call -- only the pure-math feature packet + technical override score."""
+    from batch_validation_runner import _deterministic_technical_prediction
+
+    bars = [
+        {"date": f"2026-01-{d:02d}", "close": 100.0 + d, "open": 100.0 + d,
+         "high": 101.0 + d, "low": 99.0 + d, "volume": 1_000_000}
+        for d in range(1, 29)
+    ]
+    spi = {
+        "symbol": "SPY",
+        "historical_context_start_date": "2026-01-01",
+        "prediction_origin_date": "2026-01-28",
+        "decision_horizon_days": 7,
+        "price_basis": "close",
+    }
+    result = _deterministic_technical_prediction(spi, bars)
+    assert result["status"] == "SUCCESS"
+    assert result["decision"] in ("BUY", "SELL", "HOLD")
+    assert result["predicted_return_pct"] is None  # no magnitude from a pure directional score
+    assert result["source"] == "deterministic_technical_override"

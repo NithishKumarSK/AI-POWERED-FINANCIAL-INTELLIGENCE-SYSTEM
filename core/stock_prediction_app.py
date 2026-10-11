@@ -44,30 +44,21 @@ st.set_page_config(
 
 @st.cache_data(ttl=300)
 def _get_symbol_accuracy_stats(symbol: str) -> dict:
-    """Load per-symbol accuracy stats from evaluation runs (cached 5 min)."""
-    import json as _json_sas
-    _LOW_ACC = {"META": 0, "GOOGL": 0, "NFLX": 0, "UNH": 0, "TSLA": 17}
+    """Load per-symbol accuracy stats from the live, shared DB (cached 5 min).
+
+    Previously read a local `stock_prediction_evaluation_runs.jsonl` snapshot
+    that went stale the moment it stopped being updated (it still showed a
+    frozen July batch's 18%/17-run TSLA figure after hundreds of newer,
+    DB-persisted runs had already moved the real number). Now queries the
+    same live `stock_predictions` table _get_segment_reliability_stats below
+    already uses, so both badges track the same source of truth."""
     sym_upper = symbol.strip().upper()
     result = {"symbol": sym_upper, "runs": 0, "match_pct": None, "warning": None, "is_blacklisted": False}
     try:
-        eval_path = ROOT / "stock_prediction_evaluation_runs.jsonl"
-        if not eval_path.exists():
-            if sym_upper in _LOW_ACC:
-                result["match_pct"] = _LOW_ACC[sym_upper]
-                result["warning"] = "critical" if _LOW_ACC[sym_upper] == 0 else "high"
-                result["is_blacklisted"] = _LOW_ACC[sym_upper] == 0
-            return result
-        records = []
-        with open(eval_path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    try:
-                        records.append(_json_sas.loads(line))
-                    except Exception:
-                        pass
+        from db.stock_prediction_repository import load_stock_prediction_records
+        records = load_stock_prediction_records(limit=2000)
         sym_recs = [r for r in records if
-                    str((r.get("stock_prediction_input") or r.get("spi") or {}).get("symbol", "")).upper() == sym_upper]
+                    str((r.get("stock_prediction_input") or {}).get("symbol", "")).upper() == sym_upper]
         if len(sym_recs) >= 3:
             match = sum(1 for r in sym_recs if r.get("comparison", {}).get("decision_match"))
             match_pct = round(match / len(sym_recs) * 100, 0)
@@ -84,11 +75,37 @@ def _get_symbol_accuracy_stats(symbol: str) -> dict:
                 result["warning"] = "high"
             elif match_pct < 40:
                 result["warning"] = "medium"
-        elif sym_upper in _LOW_ACC:
-            result["match_pct"] = _LOW_ACC[sym_upper]
-            result["warning"] = "critical" if _LOW_ACC[sym_upper] == 0 else "high"
-            result["is_blacklisted"] = _LOW_ACC[sym_upper] == 0
-            result["blacklisted"] = _LOW_ACC[sym_upper] == 0
+    except Exception:
+        pass
+    return result
+
+
+@st.cache_data(ttl=300)
+def _get_live_accuracy_headline_stats(symbol: str) -> dict:
+    """Overall + per-symbol accuracy headline for the top-of-results banner,
+    computed from the live DB (same `stock_predictions` table every other
+    accuracy badge on this page reads from). Replaces a stale local-file read
+    that froze at whatever the file last held and never reflected new runs."""
+    sym_upper = str(symbol or "").strip().upper()
+    result = {
+        "total": 0, "dec_ok": 0, "dir_ok": 0, "dec_pct": None, "dir_pct": None,
+        "sym_total": 0, "sym_ok": 0, "sym_pct": None,
+    }
+    try:
+        from db.stock_prediction_repository import load_stock_prediction_records
+        records = load_stock_prediction_records(limit=2000)
+        total = len(records)
+        if total:
+            dec_ok = sum(1 for r in records if (r.get("comparison") or {}).get("decision_match") is True)
+            dir_ok = sum(1 for r in records if (r.get("comparison") or {}).get("directional_match") is True)
+            result.update(total=total, dec_ok=dec_ok, dir_ok=dir_ok,
+                           dec_pct=round(dec_ok / total * 100, 1), dir_pct=round(dir_ok / total * 100, 1))
+            sym_recs = [r for r in records if
+                        str((r.get("stock_prediction_input") or {}).get("symbol", "")).upper() == sym_upper]
+            sym_total = len(sym_recs)
+            if sym_total:
+                sym_ok = sum(1 for r in sym_recs if (r.get("comparison") or {}).get("decision_match") is True)
+                result.update(sym_total=sym_total, sym_ok=sym_ok, sym_pct=round(sym_ok / sym_total * 100, 1))
     except Exception:
         pass
     return result
@@ -152,6 +169,58 @@ def _render_symbol_accuracy_warning(symbol: str):
             f'<div style="background:#001A0A;border:1px solid #10B981;border-radius:8px;padding:.4rem 1rem;margin:.4rem 0">'
             f'<span style="color:#6EE7B7;font-size:.78rem">'
             f'OK: <b>{sym_upper}</b>: {int(stats["match_pct"])}% decision match ({stats["runs"]} runs). Reasonable accuracy history.'
+            f'</span></div>',
+            unsafe_allow_html=True,
+        )
+
+
+@st.cache_data(ttl=300)
+def _get_segment_reliability_stats(symbol: str, horizon_days: int) -> dict:
+    """Phase 2 — this exact (symbol, horizon_bucket) segment's real track record
+    from the live, shared DB (not the symbol-only, local-JSONL-backed stats
+    above, which blend every horizon together and can hide that a symbol is
+    fine at one horizon and unproven at another)."""
+    try:
+        from db.stock_prediction_repository import load_stock_prediction_records
+        from segment_reliability import classify_records, segment_label
+        records = load_stock_prediction_records(limit=2000)
+        result = classify_records(records, symbol, horizon_days)
+        result["segment"] = segment_label(symbol, horizon_days)
+        return result
+    except Exception as exc:
+        return {"n": 0, "direction_match_pct": None, "classification": "INSUFFICIENT_DATA",
+                "segment": "", "error": f"{type(exc).__name__}: {exc}"}
+
+
+def _render_segment_reliability_warning(symbol: str, horizon_days: int):
+    """Render the horizon-aware segment badge -- distinct from (and more
+    specific than) the symbol-only warning above."""
+    if not symbol or not horizon_days:
+        return
+    stats = _get_segment_reliability_stats(symbol.strip().upper(), int(horizon_days))
+    cls = stats.get("classification")
+    if cls == "INSUFFICIENT_DATA":
+        return  # not enough history for this exact segment to say anything either way
+
+    seg   = stats.get("segment", "")
+    n     = stats.get("n", 0)
+    drm   = stats.get("direction_match_pct")
+    if cls == "PROVEN":
+        st.markdown(
+            f'<div style="background:#001A0A;border:1px solid #10B981;border-radius:8px;padding:.4rem 1rem;margin:.4rem 0">'
+            f'<span style="color:#6EE7B7;font-size:.78rem">'
+            f'PROVEN SEGMENT ({seg}): {drm}% direction match over {n} runs at this exact horizon.'
+            f'</span></div>',
+            unsafe_allow_html=True,
+        )
+    else:  # UNPROVEN
+        st.markdown(
+            f'<div style="background:#1C1000;border:1.5px solid #F59E0B;border-radius:8px;padding:.5rem 1rem;margin:.4rem 0">'
+            f'<span style="color:#F59E0B;font-weight:800;font-size:.82rem">UNPROVEN SEGMENT -- {seg}</span><br>'
+            f'<span style="color:#FCD34D;font-size:.78rem">'
+            f'Only {drm}% direction match over {n} runs for this exact symbol/horizon combination -- '
+            f'at or below a coin flip. This is a narrower, more specific warning than the overall '
+            f'symbol accuracy above: it isolates this exact horizon.'
             f'</span></div>',
             unsafe_allow_html=True,
         )
@@ -446,6 +515,17 @@ def _decision_badge(d: str) -> str:
     return f'<span style="color:{c};font-weight:800;font-size:1.1rem">{d}{_suffix}</span>'
 
 
+def _calibrated_confidence_label(calibrated: Optional[float]) -> str:
+    """Phase 1 -- the raw confidence_score shown above it is self-reported by
+    Gemini and this session confirmed it's actively misleading (inversely
+    correlated with correctness). This shows what predictions at that stated
+    confidence level have ACTUALLY been right, from real historical outcomes --
+    not a model opinion."""
+    if calibrated is None:
+        return "no calibration data yet"
+    return f"{calibrated:.0f}% (historically, predictions at this stated confidence were right {calibrated:.0f}% of the time)"
+
+
 def _card(msg, color="#1E40AF", bg="#EFF6FF", border="#3B82F6"):
     st.markdown(
         f'<div style="background:{bg};border-left:4px solid {border};'
@@ -466,6 +546,20 @@ def _friendly_ai_error(raw_err: str) -> str:
     if not raw_err:
         return "AI prediction could not be completed. Please try again."
     e = str(raw_err)
+    if "INSUFFICIENT SIGNAL QUALITY" in e or e.strip().startswith("SKIP"):
+        # The 3-call consensus engine deliberately refused to output a
+        # prediction because the calls disagreed on direction -- this is a
+        # by-design quality gate, not a transient failure. "Try again in a
+        # moment" is actively wrong advice here: retrying the exact same
+        # inputs is likely to hit the same disagreement again, since nothing
+        # about the underlying ambiguous market data changed.
+        return (
+            "The AI's 3-call consensus engine disagreed with itself on direction for "
+            "this symbol/date range and deliberately skipped making a prediction, rather "
+            "than guess. This is not an API error or a broken key -- it's a quality gate. "
+            "Retrying the exact same inputs will likely hit the same disagreement again. "
+            "Try a different symbol or a different date range instead."
+        )
     if "JSON parse" in e or "json" in e.lower() or "delimiter" in e or "Expecting" in e:
         return (
             "AI model returned a response that could not be parsed. "
@@ -645,23 +739,16 @@ def _err_color(v, suffix=""):
 
 
 def _render_decision_distribution_diagnostics():
-    """Show decision distribution from past eval records. Warns if HOLD% is too high."""
-    from pathlib import Path
-    import json as _json
-    eval_file = Path(__file__).resolve().parent.parent / "stock_prediction_evaluation_runs.jsonl"
+    """Show decision distribution from the live DB's validated records. Warns
+    if HOLD% is too high. Previously read a local JSONL snapshot that froze
+    whenever that file stopped being updated, same bug as the AI Accuracy
+    Score banner above — now reads live, like everything else on this page."""
     records: list = []
-    if eval_file.exists():
-        try:
-            with open(eval_file, "r", encoding="utf-8") as _fh:
-                for _ln in _fh:
-                    _ln = _ln.strip()
-                    if _ln:
-                        try:
-                            records.append(_json.loads(_ln))
-                        except Exception:
-                            pass
-        except Exception:
-            pass
+    try:
+        from db.stock_prediction_repository import load_stock_prediction_records
+        records = load_stock_prediction_records(limit=2000)
+    except Exception:
+        pass
 
     total = len(records)
     if total == 0:
@@ -822,18 +909,18 @@ def main():
                 '<tr style="color:#93C5FD"><th style="text-align:left;padding:.15rem .4rem">Endpoint</th>'
                 '<th style="text-align:left;padding:.15rem .4rem">Used for</th>'
                 '<th style="text-align:left;padding:.15rem .4rem">Status</th></tr>'
-                '<tr><td style="padding:.12rem .4rem">TradingView quote (OHLCV)</td>'
+                '<tr><td style="padding:.12rem .4rem">TradingView quote (/api/price/batch)</td>'
                 '<td style="padding:.12rem .4rem">Historical OHLCV bars</td>'
-                '<td style="color:#F59E0B;padding:.12rem .4rem">PLAN-DEPENDENT — may not be on current plan; external_historical_provider used as fallback</td></tr>'
+                '<td style="color:#EF4444;padding:.12rem .4rem">BROKEN — RapidAPI returns 404 "endpoint does not exist" (confirmed live, not a plan/billing issue; this path is not valid on this API). Free NASDAQ public endpoint used as fallback for every run instead, cross-verified against yfinance.</td></tr>'
                 '<tr><td style="padding:.12rem .4rem">Market movers / screener (/market/get-movers)</td>'
                 '<td style="padding:.12rem .4rem">Live market movers — sent to Gemini for LIVE predictions (origin within 7 days); excluded for historical runs (leakage prevention)</td>'
-                '<td style="color:#10B981;padding:.12rem .4rem">ACTIVE — wired into Gemini prompt</td></tr>'
+                '<td style="color:#10B981;padding:.12rem .4rem">ACTIVE — confirmed 200 OK, wired into Gemini prompt</td></tr>'
                 '<tr><td style="padding:.12rem .4rem">Options chain data</td>'
                 '<td style="padding:.12rem .4rem">Live strike/IV for exact-strike selection</td>'
                 '<td style="color:#EF4444;padding:.12rem .4rem">NOT WIRED — exact-strike unsupported by TT backtest</td></tr>'
                 '<tr><td style="padding:.12rem .4rem">Earnings calendar (/api/calendar/earnings)</td>'
                 '<td style="padding:.12rem .4rem">Earnings warning in AI prompt for prediction window</td>'
-                '<td style="color:#10B981;padding:.12rem .4rem">ACTIVE — checked on every run; warning injected if earnings found</td></tr>'
+                '<td style="color:#F59E0B;padding:.12rem .4rem">RapidAPI path BROKEN (404, confirmed live) — but falls back to free yfinance earnings calendar for LIVE predictions (confirmed working). Historical replays get no earnings warning by design (leakage-safety: yfinance only reports the real upcoming date, not the date as of a past origin).</td></tr>'
                 '</table>'
                 '<br><span style="color:#9CA3AF">To use additional endpoints: wire them into the Gemini feature packet '
                 '(see calibration_profile_builder.py and failure_analyzer.py for roadmap).</span>'
@@ -972,6 +1059,8 @@ def _render_stock_form():
                 "Decision Horizon (days)", value=30, min_value=1, max_value=365,
                 help="Days forward from origin date to target date.",
             )
+
+        _render_segment_reliability_warning(symbol, horizon)
 
         val_mode    = "horizon_days"
         price_basis = st.selectbox(
@@ -3301,39 +3390,30 @@ def _render_results():
 
     # ── AI Accuracy Headline ── prominent banner at top of results ────────────
     try:
-        from pathlib import Path as _Path
-        import json as _json_acc
-        _acc_file = _Path(__file__).resolve().parent.parent / "stock_prediction_evaluation_runs.jsonl"
-        _acc_recs: list = []
-        if _acc_file.exists():
-            with open(_acc_file, "r", encoding="utf-8") as _fh_acc:
-                for _ln_acc in _fh_acc:
-                    _ln_acc = _ln_acc.strip()
-                    if _ln_acc:
-                        try:
-                            _acc_recs.append(_json_acc.loads(_ln_acc))
-                        except Exception:
-                            pass
-        _acc_total = len(_acc_recs)
-        _acc_sym   = str(symbol).upper()
+        _acc_stats   = _get_live_accuracy_headline_stats(symbol)
+        _acc_total   = _acc_stats["total"]
+        _acc_sym     = str(symbol).upper()
         if _acc_total > 0:
-            _acc_dec_ok  = sum(1 for r in _acc_recs if (r.get("comparison") or {}).get("decision_match") is True)
-            _acc_dir_ok  = sum(1 for r in _acc_recs if (r.get("comparison") or {}).get("directional_match") is True)
-            _acc_dec_pct = round(_acc_dec_ok / _acc_total * 100, 1)
-            _acc_dir_pct = round(_acc_dir_ok / _acc_total * 100, 1)
+            _acc_dec_ok  = _acc_stats["dec_ok"]
+            _acc_dir_ok  = _acc_stats["dir_ok"]
+            _acc_dec_pct = _acc_stats["dec_pct"]
+            _acc_dir_pct = _acc_stats["dir_pct"]
             # Symbol-specific
-            _sym_recs    = [r for r in _acc_recs if str((r.get("spi") or r.get("inputs") or {}).get("symbol", "")).upper() == _acc_sym]
-            _sym_total   = len(_sym_recs)
-            _sym_ok      = sum(1 for r in _sym_recs if (r.get("comparison") or {}).get("decision_match") is True)
-            _sym_pct     = round(_sym_ok / _sym_total * 100, 1) if _sym_total else None
-            # Colors
-            _acc_col  = "#10B981" if _acc_dec_pct >= 70 else ("#F59E0B" if _acc_dec_pct >= 60 else "#EF4444")
-            _acc_bar  = "#10B981" if _acc_dec_pct >= 70 else ("#F59E0B" if _acc_dec_pct >= 60 else "#EF4444")
-            _dir_col  = "#10B981" if _acc_dir_pct >= 65 else ("#F59E0B" if _acc_dir_pct >= 50 else "#EF4444")
+            _sym_total   = _acc_stats["sym_total"]
+            _sym_ok      = _acc_stats["sym_ok"]
+            _sym_pct     = _acc_stats["sym_pct"]
+            # Colors + target framing grounded in the literature (Research
+            # Expansion Program): 50-60% directional accuracy is the
+            # legitimate range for short-horizon stock prediction per
+            # multiple independent academic sources; a result above ~80% is
+            # a leakage red flag, not something to label "great" and chase.
+            _acc_col  = "#F59E0B" if _acc_dec_pct >= 80 else ("#10B981" if _acc_dec_pct >= 55 else "#EF4444")
+            _acc_bar  = _acc_col
+            _dir_col  = "#F59E0B" if _acc_dir_pct >= 80 else ("#10B981" if _acc_dir_pct >= 55 else "#EF4444")
             _target_txt = (
-                "GREAT — above 70% target" if _acc_dec_pct >= 70
-                else "GOOD — above 60% minimum target" if _acc_dec_pct >= 60
-                else "BELOW TARGET — aim for 60-70%+"
+                "ABOVE 80% — check for leakage, not a target to chase" if _acc_dec_pct >= 80
+                else "REAL EDGE — above the 55% literature-grounded bar" if _acc_dec_pct >= 55
+                else "BELOW TARGET — aim for the 55-60% range academic literature treats as legitimate"
             )
             _sym_html = ""
             if _sym_total:
@@ -3363,7 +3443,7 @@ def _render_results():
                 f'</div>'
                 f'<div style="color:{_acc_col};font-size:.75rem;font-weight:700">{_target_txt}</div>'
                 f'<div style="color:#475569;font-size:.65rem;margin-top:.2rem">'
-                f'Target: 60-70% good · 70-80%+ great · Direction match: '
+                f'Target: 55-60% = real edge (academic literature) · above ~80% = check for leakage · Direction match: '
                 f'<span style="color:{_dir_col}">{_acc_dir_pct}%</span></div>'
                 f'</div>'
                 f'{_sym_html}'
@@ -3444,7 +3524,11 @@ def _render_results():
         "yfinance":                     "yfinance (open-source, full history)",
     }.get(_etp_hist_src, _etp_hist_src)
     _etp_tt_used       = False  # Stock mode never uses tastytrade
-    _etp_rapidapi_hist = "Unavailable (subscription plan)"
+    # NOT a plan/billing limitation -- confirmed live: RapidAPI's own proxy returns
+    # 404 "Endpoint '/api/price/batch' does not exist" for this path. It was never
+    # a valid endpoint on this subscription, at any tier. NASDAQ free fallback is
+    # what actually supplies every historical bar used in this run.
+    _etp_rapidapi_hist = "BROKEN — endpoint does not exist (confirmed, not a plan issue)"
     _etp_rapi_hc_etp   = st.session_state.get("rapidapi_health") or {}
     _etp_tt_hc_etp     = st.session_state.get("tastytrade_health") or {}
     _etp_rapi_called   = _etp_rapi_hc_etp.get("called", False)
@@ -3490,7 +3574,7 @@ def _render_results():
         f'<div style="color:#F1F5F9">RapidAPI Called: <b style="color:{"#10B981" if _etp_rapi_called else "#F59E0B"}">'
         f'{"YES — HTTP " + str(_etp_rapi_hc_etp.get("http_status","?")) if _etp_rapi_called else "Not yet (run prediction first)"}</b><br>'
         f'RapidAPI Status: <b>{"200 OK" if _etp_rapi_ok else ("Error" if _etp_rapi_called else "---")}</b><br>'
-        f'RapidAPI OHLCV: <b style="color:#F59E0B">{_etp_rapidapi_hist}</b><br>'
+        f'RapidAPI OHLCV: <b style="color:#EF4444">{_etp_rapidapi_hist}</b><br>'
         f'Historical Provider: <b style="color:#10B981">{_etp_hist_label}</b><br>'
         f'Historical Source Key: <b style="color:#10B981">{_etp_hist_src}</b></div>'
         # Validation values
@@ -3625,6 +3709,7 @@ def _render_results():
                 ("Initial Capital",       _fmt(cap, "$")),
                 ("Decision Horizon",      f"{horizon} days"),
                 ("Confidence Score",      f"{ai.get('confidence_score', '---')}/100"),
+                ("Calibrated Confidence", _calibrated_confidence_label(ai.get("calibrated_confidence_score"))),
                 ("Risk Score",            f"{ai.get('risk_score', '---')}/100"),
                 ("Data Quality Score",    f"{min(100, int(_dq))}/100" if _dq is not None else "---"),
                 ("Effective Origin Date", ai.get("effective_origin_date", "---")),
@@ -4138,36 +4223,27 @@ def _render_options_results():
 
     # ── AI Accuracy Headline ── prominent banner at top of options results ──────
     try:
-        from pathlib import Path as _OPath
-        import json as _ojson
-        _oacc_file = _OPath(__file__).resolve().parent.parent / "stock_prediction_evaluation_runs.jsonl"
-        _oacc_recs: list = []
-        if _oacc_file.exists():
-            with open(_oacc_file, "r", encoding="utf-8") as _ofh:
-                for _oln in _ofh:
-                    _oln = _oln.strip()
-                    if _oln:
-                        try:
-                            _oacc_recs.append(_ojson.loads(_oln))
-                        except Exception:
-                            pass
-        _oacc_total = len(_oacc_recs)
-        _oacc_sym   = str(symbol).upper()
+        _oacc_stats  = _get_live_accuracy_headline_stats(symbol)
+        _oacc_total  = _oacc_stats["total"]
+        _oacc_sym    = str(symbol).upper()
         if _oacc_total > 0:
-            _oacc_dec_ok  = sum(1 for r in _oacc_recs if (r.get("comparison") or {}).get("decision_match") is True)
-            _oacc_dir_ok  = sum(1 for r in _oacc_recs if (r.get("comparison") or {}).get("directional_match") is True)
-            _oacc_dec_pct = round(_oacc_dec_ok / _oacc_total * 100, 1)
-            _oacc_dir_pct = round(_oacc_dir_ok / _oacc_total * 100, 1)
-            _osym_recs    = [r for r in _oacc_recs if str((r.get("spi") or r.get("inputs") or {}).get("symbol", "")).upper() == _oacc_sym]
-            _osym_total   = len(_osym_recs)
-            _osym_ok      = sum(1 for r in _osym_recs if (r.get("comparison") or {}).get("decision_match") is True)
-            _osym_pct     = round(_osym_ok / _osym_total * 100, 1) if _osym_total else None
-            _oacc_col     = "#10B981" if _oacc_dec_pct >= 70 else ("#F59E0B" if _oacc_dec_pct >= 60 else "#EF4444")
-            _odir_col     = "#10B981" if _oacc_dir_pct >= 65 else ("#F59E0B" if _oacc_dir_pct >= 50 else "#EF4444")
+            _oacc_dec_ok  = _oacc_stats["dec_ok"]
+            _oacc_dir_ok  = _oacc_stats["dir_ok"]
+            _oacc_dec_pct = _oacc_stats["dec_pct"]
+            _oacc_dir_pct = _oacc_stats["dir_pct"]
+            _osym_total   = _oacc_stats["sym_total"]
+            _osym_ok      = _oacc_stats["sym_ok"]
+            _osym_pct     = _oacc_stats["sym_pct"]
+            # Grounded in the literature (Research Expansion Program): 50-60%
+            # directional accuracy is the legitimate range for short-horizon
+            # stock prediction per multiple independent academic sources; a
+            # result above ~80% is a leakage red flag, not "great."
+            _oacc_col     = "#F59E0B" if _oacc_dec_pct >= 80 else ("#10B981" if _oacc_dec_pct >= 55 else "#EF4444")
+            _odir_col     = "#F59E0B" if _oacc_dir_pct >= 80 else ("#10B981" if _oacc_dir_pct >= 55 else "#EF4444")
             _otarget_txt  = (
-                "GREAT — above 70% target" if _oacc_dec_pct >= 70
-                else "GOOD — above 60% minimum" if _oacc_dec_pct >= 60
-                else "BELOW TARGET — aim for 60-70%+"
+                "ABOVE 80% — check for leakage, not a target to chase" if _oacc_dec_pct >= 80
+                else "REAL EDGE — above the 55% literature-grounded bar" if _oacc_dec_pct >= 55
+                else "BELOW TARGET — aim for the 55-60% range academic literature treats as legitimate"
             )
             _osym_html = ""
             if _osym_total:
@@ -4197,7 +4273,7 @@ def _render_options_results():
                 f'</div>'
                 f'<div style="color:{_oacc_col};font-size:.75rem;font-weight:700">{_otarget_txt}</div>'
                 f'<div style="color:#475569;font-size:.65rem;margin-top:.2rem">'
-                f'Target: 60-70% good · 70-80%+ great · Direction match: '
+                f'Target: 55-60% = real edge (academic literature) · above ~80% = check for leakage · Direction match: '
                 f'<span style="color:{_odir_col}">{_oacc_dir_pct}%</span></div>'
                 f'</div>'
                 f'{_osym_html}'

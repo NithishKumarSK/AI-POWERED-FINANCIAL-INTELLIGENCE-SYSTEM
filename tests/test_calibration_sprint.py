@@ -115,30 +115,33 @@ def test_dynamic_thresholds_45d():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_buy_requires_bullish_score_45():
-    """HOLD is banned — pred_return=3.0 > 0 always produces BUY."""
+    """signal_scores are accepted but not consulted by the guardrail -- the
+    decision is driven purely by predicted_return_pct vs. the horizon-scaled
+    dead-band (5.0% clears the ~4.14% threshold at horizon_days=30)."""
     _, _apply_guardrails, *_ = _import_agent()
     decision, _ = _apply_guardrails(
-        3.0, 70, 30, 80, horizon_days=30,
+        5.0, 70, 30, 80, horizon_days=30,
         signal_scores=_sig(bull=44, bear=20, uncert=36, dominant="bullish", dom_score=44)
     )
     assert decision == "BUY"
 
 
 def test_buy_requires_bull_bear_spread_5():
-    """HOLD is banned — pred_return=3.0 > 0 always produces BUY."""
+    """Same dead-band check with a different signal_scores shape -- still
+    irrelevant to the decision, included for parity with the BUY/SELL pairing."""
     _, _apply_guardrails, *_ = _import_agent()
     decision, _ = _apply_guardrails(
-        3.0, 55, 30, 80, horizon_days=30,
+        5.0, 55, 30, 80, horizon_days=30,
         signal_scores=_sig(bull=60, bear=56, uncert=40, dominant="bullish", dom_score=60)
     )
     assert decision == "BUY"
 
 
 def test_buy_with_valid_signals():
-    """pred=3.0%, bull=65, bear=40, spread=25 >= 12, uncert=40 <= 65 => BUY."""
+    """pred=5.0% clears the ~4.14% horizon-scaled BUY threshold at horizon=30d => BUY."""
     _, _apply_guardrails, *_ = _import_agent()
     decision, reason = _apply_guardrails(
-        3.0, 70, 30, 80, horizon_days=30,
+        5.0, 70, 30, 80, horizon_days=30,
         signal_scores=_sig(bull=65, bear=40, uncert=40, dominant="bullish", dom_score=65)
     )
     assert decision == "BUY"
@@ -146,30 +149,30 @@ def test_buy_with_valid_signals():
 
 
 def test_sell_requires_bearish_score_45():
-    """HOLD is banned — pred_return=-3.0 < 0 always produces SELL."""
+    """pred=-5.0% clears the ~-4.14% horizon-scaled SELL threshold at horizon=30d => SELL."""
     _, _apply_guardrails, *_ = _import_agent()
     decision, _ = _apply_guardrails(
-        -3.0, 70, 30, 80, horizon_days=30,
+        -5.0, 70, 30, 80, horizon_days=30,
         signal_scores=_sig(bull=20, bear=44, uncert=36, dominant="bearish", dom_score=44)
     )
     assert decision == "SELL"
 
 
 def test_sell_requires_bear_bull_spread_5():
-    """HOLD is banned — pred_return=-3.0 < 0 always produces SELL."""
+    """Same dead-band check with a different signal_scores shape."""
     _, _apply_guardrails, *_ = _import_agent()
     decision, _ = _apply_guardrails(
-        -3.0, 55, 30, 80, horizon_days=30,
+        -5.0, 55, 30, 80, horizon_days=30,
         signal_scores=_sig(bull=56, bear=60, uncert=40, dominant="bearish", dom_score=60)
     )
     assert decision == "SELL"
 
 
 def test_sell_with_valid_signals():
-    """pred=-3.0%, bear=70, bull=45, spread=25 >= 12, uncert=40 <= 65 => SELL."""
+    """pred=-5.0% clears the ~-4.14% horizon-scaled SELL threshold at horizon=30d => SELL."""
     _, _apply_guardrails, *_ = _import_agent()
     decision, reason = _apply_guardrails(
-        -3.0, 70, 30, 80, horizon_days=30,
+        -5.0, 70, 30, 80, horizon_days=30,
         signal_scores=_sig(bull=45, bear=70, uncert=40, dominant="bearish", dom_score=70)
     )
     assert decision == "SELL"
@@ -177,14 +180,15 @@ def test_sell_with_valid_signals():
 
 
 def test_hold_override_fires_at_45():
-    """HOLD is banned — any positive return produces BUY directly."""
+    """pred=0.8% is well inside the ~±4.14% horizon-scaled dead-band at
+    horizon_days=30 -- too small a move to call a direction, so HOLD."""
     _, _apply_guardrails, *_ = _import_agent()
     decision, reason = _apply_guardrails(
         0.8, 65, 30, 80, horizon_days=30,
         signal_scores=_sig(bull=46, bear=20, uncert=34, dominant="bullish", dom_score=46)
     )
-    assert decision == "BUY"
-    assert "BUY" in reason
+    assert decision == "HOLD"
+    assert "HOLD" in reason
 
 
 def test_risk_alone_never_forces_sell():
@@ -569,14 +573,14 @@ def test_direction_match_function():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_over_hold_reduction_mechanism_exists():
-    """Guardrails include HOLD->BUY/SELL override path when signals strongly agree."""
+    """A return inside the horizon-scaled dead-band (1.0% vs. ~±4.14% at
+    horizon_days=30) is HOLD regardless of signal_scores -- the guardrail
+    doesn't consult signal_scores for the decision, only predicted_return_pct
+    vs. decision_thresholds_for_horizon()."""
     _, _apply_guardrails, *_ = _import_agent()
-    # Neutral return in HOLD band (30d buy_thr=1.5), but strongly bullish signals and high confidence
-    # Use return=1.0 which is in HOLD band. near_thr = abs(1.0) >= abs(-1.5)*0.50 = 0.75 => True
     decision, reason = _apply_guardrails(
         1.0, 65, 20, 80, horizon_days=30,
         signal_scores=_sig(bull=70, bear=25, uncert=35, dominant="bullish", dom_score=70)
     )
-    # HOLD is banned — positive return always produces BUY
-    assert decision == "BUY"
-    assert "BUY" in reason
+    assert decision == "HOLD"
+    assert "HOLD" in reason

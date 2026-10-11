@@ -902,7 +902,7 @@ def fetch_price_history(symbol: str, min_days: int = 500) -> Tuple[List[Dict], s
         # Both RapidAPI and external failed
         return [], (
             f"Historical price data unavailable for {symbol}. "
-            f"RapidAPI TradingView: historical endpoints not available on current plan. "
+            f"RapidAPI TradingView: endpoint does not exist on this API (404, not a plan/billing issue). "
             f"External historical provider: {ext_err}. "
             "Check Developer Debug for details."
         )
@@ -911,8 +911,9 @@ def fetch_price_history(symbol: str, min_days: int = 500) -> Tuple[List[Dict], s
     if all_404:
         return [], (
             f"Historical price data unavailable for {symbol}. "
-            "RapidAPI TradingView historical endpoints are not available on your "
-            "current subscription plan. Check Developer Debug for details."
+            "RapidAPI TradingView's historical endpoint path does not exist on this API "
+            "(confirmed 404 from RapidAPI's own proxy, not a plan/billing restriction). "
+            "Check Developer Debug for details."
         )
     return [], (
         f"Historical price data unavailable for {symbol}. "

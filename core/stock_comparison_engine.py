@@ -14,15 +14,38 @@ Key entry points:
 """
 from __future__ import annotations
 
-from typing import List, Optional
+import math
+from typing import List, Optional, Tuple
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # FORMULA CONSTANTS
 # ══════════════════════════════════════════════════════════════════════════════
 
-_BUY_THRESHOLD  =  2.0   # return_pct > +2% → BUY
-_SELL_THRESHOLD = -2.0   # return_pct < -2% → SELL
+_BUY_THRESHOLD  =  2.0   # return_pct > +2% → BUY  (the horizon_days=7 baseline)
+_SELL_THRESHOLD = -2.0   # return_pct < -2% → SELL (the horizon_days=7 baseline)
+
+
+def decision_thresholds_for_horizon(horizon_days: Optional[int]) -> Tuple[float, float]:
+    """
+    Horizon-scaled BUY/SELL/HOLD band, replacing what used to be a flat ±2%
+    band regardless of horizon. A flat band treats a 1-day move the same as a
+    120-day move, even though normal market drift alone exceeds ±2% over 120
+    days for most symbols just from beta -- every long-horizon prediction was
+    being graded (and the AI's own guardrails were deciding) against a band
+    that was only realistic at short horizons.
+
+    Scaled by sqrt(horizon_days / 7) -- the standard random-walk time-scaling
+    for volatility -- anchored so horizon_days=7 reproduces the original flat
+    ±2.0% exactly, preserving already-proven short-horizon behavior. Floored
+    and capped so degenerate horizon values can't collapse or blow up the band.
+
+    Returns (buy_threshold, sell_threshold) e.g. (2.0, -2.0) at horizon_days=7.
+    """
+    h = max(int(horizon_days or 7), 1)
+    scaled = _BUY_THRESHOLD * math.sqrt(h / 7.0)
+    scaled = max(0.5, min(scaled, 20.0))
+    return scaled, -scaled
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -33,6 +56,7 @@ def compute_actual_metrics(
     origin_price: float,
     target_price: float,
     initial_capital: float,
+    horizon_days: Optional[int] = 7,
 ) -> dict:
     """
     Compute actual return, final capital, P&L, and decision from raw prices.
@@ -42,10 +66,9 @@ def compute_actual_metrics(
         actual_final_capital = initial_capital * (target_price / origin_price)
         actual_total_pl      = actual_final_capital - initial_capital
 
-    Decision thresholds:
-        actual_return_pct >  +2%  → BUY
-        actual_return_pct <  -2%  → SELL
-        -2% <= actual_return_pct <= +2% → HOLD
+    Decision thresholds: horizon-scaled, see decision_thresholds_for_horizon().
+    Defaults to horizon_days=7 (the original flat ±2% band) when not supplied,
+    so existing callers that don't pass horizon_days are unaffected.
 
     Returns dict with all computed values. Does NOT round — caller rounds if needed.
     """
@@ -69,9 +92,10 @@ def compute_actual_metrics(
     actual_final_capital = initial_capital * (target_price / origin_price)
     actual_total_pl      = actual_final_capital - initial_capital
 
-    if actual_return_pct > _BUY_THRESHOLD:
+    buy_th, sell_th = decision_thresholds_for_horizon(horizon_days)
+    if actual_return_pct > buy_th:
         decision = "BUY"
-    elif actual_return_pct < _SELL_THRESHOLD:
+    elif actual_return_pct < sell_th:
         decision = "SELL"
     else:
         decision = "HOLD"
@@ -88,10 +112,11 @@ def compute_actual_metrics(
     }
 
 
-def decision_from_return(return_pct: float) -> str:
-    """Deterministic BUY / SELL / HOLD from return_pct. Canonical single source of truth."""
-    if return_pct > _BUY_THRESHOLD:  return "BUY"
-    if return_pct < _SELL_THRESHOLD: return "SELL"
+def decision_from_return(return_pct: float, horizon_days: Optional[int] = 7) -> str:
+    """Deterministic BUY / SELL / HOLD from return_pct, horizon-scaled. Canonical single source of truth."""
+    buy_th, sell_th = decision_thresholds_for_horizon(horizon_days)
+    if return_pct > buy_th:  return "BUY"
+    if return_pct < sell_th: return "SELL"
     return "HOLD"
 
 
@@ -223,11 +248,18 @@ def compare_ai_vs_actual(
     capital_error_pct = (capital_error / actual_cap * 100.0) if actual_cap else None
 
     # ── Decision and direction match ──────────────────────────────────────────
+    _horizon_days = (
+        actual_validation.get("horizon_days")
+        or actual_validation.get("decision_horizon_days")
+        or ai_prediction.get("decision_horizon_days")
+        or 7
+    )
+    _flat_th, _ = decision_thresholds_for_horizon(_horizon_days)
     decision_match    = (ai_decision == actual_dec)
     directional_match = (
         (ai_pred_ret > 0 and actual_ret > 0) or
         (ai_pred_ret < 0 and actual_ret < 0) or
-        (abs(ai_pred_ret) <= _BUY_THRESHOLD and abs(actual_ret) <= _BUY_THRESHOLD)
+        (abs(ai_pred_ret) <= _flat_th and abs(actual_ret) <= _flat_th)
     )
 
     # ── Quality classification ────────────────────────────────────────────────

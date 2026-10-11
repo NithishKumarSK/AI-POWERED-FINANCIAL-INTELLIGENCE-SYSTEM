@@ -110,7 +110,7 @@ def run_stock_validation(
         return base
 
     # Compute actual metrics via canonical formula
-    metrics = compute_actual_metrics(orig_price, tgt_price, initial_cap)
+    metrics = compute_actual_metrics(orig_price, tgt_price, initial_cap, horizon_days=horizon_days)
     if metrics["status"] != "SUCCESS":
         base["error"] = metrics.get("error", "compute_actual_metrics failed")
         return base
@@ -211,7 +211,7 @@ def run_actual_validation(spi: dict) -> dict:
         )
         return base
 
-    metrics = compute_actual_metrics(orig_price, tgt_price, initial_cap)
+    metrics = compute_actual_metrics(orig_price, tgt_price, initial_cap, horizon_days=horizon_days)
     if metrics["status"] != "SUCCESS":
         base["error"] = metrics.get("error", "compute_actual_metrics failed")
         return base

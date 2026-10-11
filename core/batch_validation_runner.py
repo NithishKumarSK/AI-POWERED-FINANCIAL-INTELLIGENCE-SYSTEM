@@ -19,6 +19,7 @@ import json
 import sys
 import traceback
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -50,6 +51,29 @@ DEFAULT_HORIZONS      = [7, 14, 30, 45]
 DEFAULT_CTX_DAYS      = 365   # days of context before origin
 DEFAULT_MAX_RUNS      = 50
 DEFAULT_MONTHS_BACK   = 24    # how many months back to sample origins
+DEFAULT_MAX_WORKERS   = 4     # bounded concurrency for the (slow, I/O-bound) per-sample work
+
+# Shared horizon-bucket boundaries -- kept here (not duplicated) so the Phase 2
+# segment-reliability module can import this same bucketing and the batch
+# summary's per-segment breakdown stays consistent with the product's own
+# PROVEN/UNPROVEN labeling.
+HORIZON_BUCKETS = [
+    ("0-7d",    0,   7),
+    ("8-14d",   8,   14),
+    ("15-30d",  15,  30),
+    ("31-60d",  31,  60),
+    ("61-120d", 61,  120),
+    ("120d+",   121, 10**9),
+]
+
+
+def horizon_bucket(horizon_days: Optional[int]) -> str:
+    """Map a raw horizon_days value to one of HORIZON_BUCKETS' labels."""
+    h = int(horizon_days or 0)
+    for label, lo, hi in HORIZON_BUCKETS:
+        if lo <= h <= hi:
+            return label
+    return "120d+"
 
 CSV_FIELDNAMES = [
     "run_id", "input_hash", "symbol", "mode", "origin_date", "target_date",
@@ -87,44 +111,52 @@ def run_batch(
     tag:          str       = "",
     out_csv:      Path      = None,
     out_json:     Path      = None,
+    use_llm:      bool      = True,
+    sample_freq:  str       = "monthly",
+    max_workers:  int       = DEFAULT_MAX_WORKERS,
 ) -> dict:
     """Run batch validation and return summary dict.
 
     Writes CSV to data/batch_validation_results[_<tag>].csv and
     JSON summary to data/batch_validation_summary[_<tag>].json.
+
+    use_llm=False skips the (slow, rate-limited, costs real API quota) Gemini
+    consensus call entirely and scores only the deterministic technical-override
+    heuristic (_compute_technical_override_score) against ground truth -- free
+    and near-instant, for iterating on the ground-truth/threshold/ML-signal
+    pieces without burning Gemini quota on every sweep.
+
+    sample_freq="monthly" (default, one origin per month) or "weekly" (denser
+    sampling, more statistical power for the same months_back window). Origin
+    sampling is deterministic given (months_back, sample_freq, today) so two
+    runs produce the identical grid -- required for honest before/after
+    comparisons.
     """
     import os as _os
     from historical_price_service import fetch_price_history, filter_history_up_to
     from stock_walkforward_validator import run_stock_validation
 
-    _gemini_key = _os.getenv("GEMINI_API_KEY", "") or _os.getenv("GOOGLE_API_KEY", "")
-    _ai_provider = _os.getenv("AI_PROVIDER", "gemini").lower()
-    _use_gemini  = bool(_gemini_key and _ai_provider == "gemini")
-
-    if _use_gemini:
-        from gemini_stock_prediction_agent import run_gemini_stock_prediction as _run_ai
+    if use_llm:
+        _gemini_key = _os.getenv("GEMINI_API_KEY", "") or _os.getenv("GOOGLE_API_KEY", "")
+        _ai_provider = _os.getenv("AI_PROVIDER", "gemini").lower()
+        _use_gemini  = bool(_gemini_key and _ai_provider == "gemini")
+        if _use_gemini:
+            from gemini_stock_prediction_agent import run_gemini_stock_prediction as _run_ai
+        else:
+            from stock_prediction_agent import run_stock_prediction as _run_ai
     else:
-        from stock_prediction_agent import run_stock_prediction as _run_ai
+        _run_ai = None  # deterministic path below never calls an LLM
 
     # Determine output paths
     if out_csv is None:
-        if tag:
-            out_csv = DATA_DIR / f"batch_validation_results_{tag}.csv"
-        else:
-            out_csv = RESULTS_CSV
+        out_csv = DATA_DIR / f"batch_validation_results_{tag}.csv" if tag else RESULTS_CSV
     if out_json is None:
-        if tag:
-            out_json = DATA_DIR / f"batch_validation_summary_{tag}.json"
-        else:
-            out_json = SUMMARY_JSON
+        out_json = DATA_DIR / f"batch_validation_summary_{tag}.json" if tag else SUMMARY_JSON
 
-    runs_requested  = 0
-    runs_completed  = 0
-    rows: List[dict] = []
+    today   = date.today()
+    origins = _build_origin_dates(months_back, today, freq=sample_freq)
 
-    today       = date.today()
-    origins     = _build_origin_dates(months_back, today)
-
+    # ── Build the task list first (cheap -- pure date math, no API calls) ──────
     # Origin is the OUTER loop (most recent first, as _build_origin_dates already
     # orders them) so a limited --max-runs budget samples broadly across symbols
     # and horizons before repeating an older origin, instead of exhausting every
@@ -132,90 +164,112 @@ def run_batch(
     # symbol -- the latter silently turned "20 diverse predictions" into "20
     # SPY-only, single-horizon predictions" for any max_runs smaller than
     # len(origins) for one pair.
+    tasks: List[dict] = []
     for origin in origins:
         for symbol in symbols:
             for horizon in horizons:
-                if runs_requested >= max_runs:
+                if len(tasks) >= max_runs:
                     break
-
                 target = origin + timedelta(days=horizon)
                 if target >= today:
                     continue  # Can't validate future
+                tasks.append({
+                    "idx":        len(tasks),
+                    "run_id":     str(uuid.uuid4())[:8].upper(),
+                    "symbol":     symbol,
+                    "horizon":    horizon,
+                    "origin":     origin,
+                    "target":     target,
+                    "ctx_start":  (origin - timedelta(days=DEFAULT_CTX_DAYS)).strftime("%Y-%m-%d"),
+                    "origin_s":   origin.strftime("%Y-%m-%d"),
+                    "target_s":   target.strftime("%Y-%m-%d"),
+                })
+            if len(tasks) >= max_runs:
+                break
+        if len(tasks) >= max_runs:
+            break
 
-                ctx_start = (origin - timedelta(days=DEFAULT_CTX_DAYS)).strftime("%Y-%m-%d")
-                origin_s  = origin.strftime("%Y-%m-%d")
-                target_s  = target.strftime("%Y-%m-%d")
-                run_id    = str(uuid.uuid4())[:8].upper()
+    runs_requested = len(tasks)
+    rows_by_idx: Dict[int, dict] = {}
 
-                runs_requested += 1
-                if verbose:
-                    print(f"[{runs_requested:3d}] {symbol} origin={origin_s} horizon={horizon}d ... ", end="", flush=True)
+    def _execute_one(task: dict) -> Tuple[int, dict]:
+        symbol, horizon = task["symbol"], task["horizon"]
+        ctx_start, origin_s, target_s = task["ctx_start"], task["origin_s"], task["target_s"]
+        run_id = task["run_id"]
+        try:
+            spi = {
+                "symbol":                        symbol,
+                "historical_context_start_date": ctx_start,
+                "prediction_origin_date":        origin_s,
+                "target_date":                   target_s,
+                "decision_horizon_days":         horizon,
+                "initial_capital":               capital,
+                "benchmark":                     benchmark,
+                "validation_mode":               "horizon_days",
+                "price_basis":                   price_basis,
+            }
 
-                try:
-                    spi = {
-                        "symbol":                        symbol,
-                        "historical_context_start_date": ctx_start,
-                        "prediction_origin_date":        origin_s,
-                        "target_date":                   target_s,
-                        "decision_horizon_days":         horizon,
-                        "initial_capital":               capital,
-                        "benchmark":                     benchmark,
-                        "validation_mode":               "horizon_days",
-                        "price_basis":                   price_basis,
-                    }
+            _days_req = max(400, DEFAULT_CTX_DAYS + 90)
+            hist, hist_err = fetch_price_history(symbol, min_days=_days_req)
+            if not hist:
+                raise ValueError(f"Price data unavailable: {hist_err}")
 
-                    # Fetch price history
-                    _days_req = max(400, DEFAULT_CTX_DAYS + 90)
-                    hist, hist_err = fetch_price_history(symbol, min_days=_days_req)
-                    if not hist:
-                        raise ValueError(f"Price data unavailable: {hist_err}")
+            ctx_bars = [b for b in filter_history_up_to(hist, origin_s)
+                        if b.get("date", "") >= ctx_start]
+            if not ctx_bars:
+                raise ValueError(f"No price bars in [{ctx_start}, {origin_s}]")
 
-                    # Filter to [ctx_start, origin] — same window the app uses
-                    ctx_bars = [b for b in filter_history_up_to(hist, origin_s)
-                                if b.get("date", "") >= ctx_start]
-                    if not ctx_bars:
-                        raise ValueError(f"No price bars in [{ctx_start}, {origin_s}]")
+            if use_llm:
+                ai_result = _run_ai(spi, ctx_bars)
+            else:
+                ai_result = _deterministic_technical_prediction(spi, ctx_bars)
+            if ai_result.get("status") != "SUCCESS":
+                raise ValueError(f"Prediction failed: {ai_result.get('error')}")
 
-                    # AI prediction (Gemini when available, else old agent)
-                    ai_result = _run_ai(spi, ctx_bars)
-                    if ai_result.get("status") != "SUCCESS":
-                        raise ValueError(f"AI prediction failed: {ai_result.get('error')}")
+            val_result = run_stock_validation(spi, ai_result, hist)
 
-                    # Actual validation
-                    val_result = run_stock_validation(spi, ai_result, hist)
+            result = {
+                "status":                      val_result.get("status", "FAILED"),
+                "stock_prediction_input_hash": ai_result.get("stock_prediction_input_hash"),
+                "ai_prediction":               ai_result,
+                "actual_validation":           val_result,
+                "comparison":                  val_result.get("comparison", {}),
+            }
+            row = _result_to_row(result, run_id, symbol, mode, origin_s, target_s, horizon, price_basis)
+            return task["idx"], row
 
-                    result = {
-                        "status":                      val_result.get("status", "FAILED"),
-                        "stock_prediction_input_hash": ai_result.get("stock_prediction_input_hash"),
-                        "ai_prediction":               ai_result,
-                        "actual_validation":           val_result,
-                        "comparison":                  val_result.get("comparison", {}),
-                    }
+        except Exception as exc:
+            exc_str = str(exc)
+            _is_data_err = any(k in exc_str.lower() for k in (
+                "historical", "data unavailable", "dns", "connection", "timeout",
+                "resolv", "historicalprice", "not available on current plan",
+            ))
+            _fail_reason = "DATA_UNAVAILABLE" if _is_data_err else f"EXCEPTION: {exc_str[:200]}"
+            return task["idx"], _error_row(run_id, symbol, mode, origin_s, target_s, horizon,
+                                            exc_str, failure_reason=_fail_reason)
 
-                    row = _result_to_row(
-                        result, run_id, symbol, mode, origin_s, target_s,
-                        horizon, price_basis,
-                    )
-                    rows.append(row)
-                    runs_completed += 1
+    # ── Execute, bounded concurrency ────────────────────────────────────────────
+    # Deterministic (use_llm=False) sweeps are CPU/local-only and already fast
+    # sequentially; concurrency matters most for the network/Gemini-bound path,
+    # but applying it uniformly keeps one code path for both modes.
+    completed = 0
+    with ThreadPoolExecutor(max_workers=max(1, max_workers)) as pool:
+        futures = {pool.submit(_execute_one, t): t for t in tasks}
+        for fut in as_completed(futures):
+            idx, row = fut.result()
+            rows_by_idx[idx] = row
+            completed += 1
+            if verbose:
+                match_str = "MATCH" if row.get("agreement") == "MATCH" else (
+                    "miss" if row.get("agreement") == "MISMATCH" else row.get("validation_status", "?")
+                )
+                t = futures[fut]
+                print(f"[{completed:3d}/{runs_requested}] {t['symbol']} origin={t['origin_s']} "
+                      f"horizon={t['horizon']}d AI={row.get('ai_decision','?')} "
+                      f"actual={row.get('actual_decision','?')} [{match_str}]")
 
-                    if verbose:
-                        match_str = "MATCH" if row.get("agreement") == "MATCH" else "miss"
-                        print(f"AI={row.get('ai_decision','?')} actual={row.get('actual_decision','?')} [{match_str}]")
-
-                except Exception as exc:
-                    exc_str = str(exc)
-                    # Classify data-unavailable errors separately from other errors
-                    _is_data_err = any(k in exc_str.lower() for k in (
-                        "historical", "data unavailable", "dns", "connection", "timeout",
-                        "resolv", "historicalprice", "not available on current plan",
-                    ))
-                    _fail_reason = "DATA_UNAVAILABLE" if _is_data_err else f"EXCEPTION: {exc_str[:200]}"
-                    if verbose:
-                        label = "DATA_UNAVAILABLE" if _is_data_err else "ERROR"
-                        print(f"{label}: {exc_str[:120]}")
-                    rows.append(_error_row(run_id, symbol, mode, origin_s, target_s, horizon,
-                                           exc_str, failure_reason=_fail_reason))
+    rows = [rows_by_idx[i] for i in sorted(rows_by_idx)]
+    runs_completed = sum(1 for r in rows if r.get("validation_status") not in ("ERROR", "DATA_UNAVAILABLE"))
 
     # Write CSV
     _write_csv(rows, out_csv)
@@ -225,7 +279,7 @@ def run_batch(
     out_json.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
 
     if verbose:
-        print(f"\nBatch complete: {runs_completed}/{runs_requested} runs.")
+        print(f"\nBatch complete: {runs_completed}/{runs_requested} runs. (use_llm={use_llm}, sample_freq={sample_freq})")
         print(f"CSV:  {out_csv}")
         print(f"JSON: {out_json}")
         _print_summary(summary)
@@ -233,12 +287,69 @@ def run_batch(
     return summary
 
 
+def _deterministic_technical_prediction(spi: dict, ctx_bars: List[dict]) -> dict:
+    """Free, instant, no-LLM prediction path for use_llm=False sweeps: scores
+    the same deterministic technical-override heuristic the live consensus
+    engine uses as a cross-check (_compute_technical_override_score), without
+    ever calling Gemini. No magnitude estimate is available from a pure
+    directional score, so predicted_return_pct is left None -- return-error
+    metrics are skipped for these rows (same as any other row missing that
+    field), but decision/direction match are fully computable.
+    """
+    from gemini_stock_prediction_agent import build_stock_feature_packet, _compute_technical_override_score
+
+    feature_packet = build_stock_feature_packet(spi, ctx_bars)
+    if feature_packet.get("status") != "OK":
+        return {"status": "FAILED", "error": feature_packet.get("error", "feature packet failed")}
+
+    tech = _compute_technical_override_score(feature_packet)
+    decision = tech.get("override") or "HOLD"
+
+    return {
+        "status":                      "SUCCESS",
+        "source":                      "deterministic_technical_override",
+        "model_version":               "technical_override_v1",
+        "decision":                    decision,
+        "decision_reason":             tech.get("verdict", ""),
+        "predicted_return_pct":        None,
+        "predicted_target_price":      None,
+        "predicted_final_capital":     None,
+        "predicted_total_pl":          None,
+        "confidence_score":            None,
+        "risk_score":                  None,
+        "data_quality_score":          feature_packet.get("data_quality_score", 70),
+        "stock_prediction_input_hash": "",
+        # origin_price_used / effective_origin_date intentionally omitted --
+        # run_stock_validation() falls back to resolving the origin price
+        # directly from full_price_history when either is absent, which is
+        # exactly as correct here and avoids guessing at feature_packet's
+        # internal field names.
+        "technical_override_score":    tech,
+    }
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _build_origin_dates(months_back: int, today: date) -> List[date]:
-    """Monthly origin dates going back N months."""
+def _build_origin_dates(months_back: int, today: date, freq: str = "monthly") -> List[date]:
+    """Deterministic origin dates going back N months (same inputs -> same
+    list, every time -- required so before/after sweeps compare apples to
+    apples).
+
+    freq="monthly" (default): one origin per month, 1st-of-month, going back.
+    freq="weekly": one origin per week (same weekday as today), denser
+    sampling for more statistical power over the same months_back window.
+    """
+    if freq == "weekly":
+        origins = []
+        weeks = int(round(months_back * 4.345))  # ~weeks per month
+        current = today - timedelta(days=7)
+        for _ in range(weeks):
+            origins.append(current)
+            current = current - timedelta(days=7)
+        return origins
+
     origins = []
     current = (today.replace(day=1) - timedelta(days=1)).replace(day=1)  # start of last month
     for _ in range(months_back):
@@ -465,6 +576,28 @@ def _build_summary(rows: List[dict], symbols: List[str], horizons: List[int]) ->
             "match_pct": round(len(h_match) / len(h_rows) * 100, 1) if h_rows else 0.0,
         }
 
+    # Per-(symbol, horizon_bucket) segment breakdown -- every future "did this
+    # help" comparison should be read here, not off the single blended numbers
+    # above, since blended numbers hide wildly different per-segment reality
+    # (e.g. SPY short-horizon vs. TSLA long-horizon are not the same product).
+    match_by_segment = {}
+    for sym in symbols:
+        for bucket_label, _, _ in HORIZON_BUCKETS:
+            seg_rows = [r for r in valid if r.get("symbol") == sym
+                        and horizon_bucket(r.get("horizon_days")) == bucket_label]
+            if not seg_rows:
+                continue
+            seg_match = [r for r in seg_rows if r.get("agreement") == "MATCH"]
+            seg_dir   = [r for r in seg_rows
+                         if _direction_match(r.get("ai_decision"), r.get("actual_decision"))]
+            match_by_segment[f"{sym}|{bucket_label}"] = {
+                "symbol":              sym,
+                "horizon_bucket":      bucket_label,
+                "runs":                len(seg_rows),
+                "decision_match_pct":  round(len(seg_match) / len(seg_rows) * 100, 1),
+                "direction_match_pct": round(len(seg_dir) / len(seg_rows) * 100, 1),
+            }
+
     # Top failure reasons
     failure_counts: Dict[str, int] = {}
     for r in mismatches:
@@ -493,6 +626,7 @@ def _build_summary(rows: List[dict], symbols: List[str], horizons: List[int]) ->
         "over_hold_count":       len(over_hold),
         "match_by_symbol":       match_by_symbol,
         "match_by_horizon":      match_by_horizon,
+        "match_by_segment":      match_by_segment,
         "top_failure_reasons":   [{"reason": r, "count": c} for r, c in top_failures],
         "recommended_prompt_changes": recommended,
     }
@@ -591,6 +725,13 @@ def _parse_args():
     p.add_argument("--quiet",     action="store_true")
     p.add_argument("--tag",       default="",
                    help="Tag for output file naming (e.g. 'baseline' produces batch_validation_results_baseline.csv)")
+    p.add_argument("--no-llm",    action="store_true",
+                   help="Skip Gemini entirely; score only the deterministic technical-override heuristic. "
+                        "Free and near-instant -- use for iterating on ground-truth/threshold changes.")
+    p.add_argument("--sample-freq", default="monthly", choices=["monthly", "weekly"],
+                   help="Origin sampling density (default: monthly)")
+    p.add_argument("--max-workers", type=int, default=DEFAULT_MAX_WORKERS,
+                   help=f"Bounded concurrency for per-sample work (default: {DEFAULT_MAX_WORKERS})")
     return p.parse_args()
 
 
@@ -615,4 +756,7 @@ if __name__ == "__main__":
         benchmark   = args.benchmark,
         verbose     = not args.quiet,
         tag         = args.tag,
+        use_llm     = not args.no_llm,
+        sample_freq = args.sample_freq,
+        max_workers = args.max_workers,
     )

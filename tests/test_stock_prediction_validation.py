@@ -31,6 +31,7 @@ from stock_comparison_engine import (
     compare_ai_vs_actual,
     validate_no_leakage,
     decision_from_return,
+    decision_thresholds_for_horizon,
 )
 from stock_accuracy_engine import is_valid_stock_record
 import json as _json
@@ -561,3 +562,62 @@ def test_get_accuracy_summary_counts_distinct_periods_not_raw_rows():
     summary = _sae.get_accuracy_summary(records)
     assert summary["total"] == 1
     assert summary["decision_match_rate"] == 100.0  # the canonical (earliest) record matched
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# HORIZON-SCALED DECISION THRESHOLD (replaces the old flat ±2% band)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_horizon_threshold_7d_matches_old_flat_band():
+    """horizon_days=7 must reproduce the original flat ±2.0% exactly -- this is
+    the anchor point that keeps already-proven short-horizon behavior unchanged."""
+    buy, sell = decision_thresholds_for_horizon(7)
+    assert abs(buy - 2.0) < 1e-9
+    assert abs(sell - (-2.0)) < 1e-9
+
+
+def test_horizon_threshold_widens_with_horizon():
+    """A longer horizon must have a wider (not narrower, not equal) band --
+    this is the core fix: a flat band made every long-horizon HOLD unrealistically
+    hard to hit, since normal drift alone exceeds ±2% over months."""
+    buy_7, _ = decision_thresholds_for_horizon(7)
+    buy_30, _ = decision_thresholds_for_horizon(30)
+    buy_90, _ = decision_thresholds_for_horizon(90)
+    buy_180, _ = decision_thresholds_for_horizon(180)
+    assert buy_7 < buy_30 < buy_90 < buy_180
+
+
+def test_horizon_threshold_floor_and_cap():
+    """Degenerate horizon values must not collapse the band to zero or blow it
+    up unboundedly."""
+    buy_tiny, sell_tiny = decision_thresholds_for_horizon(0)
+    assert buy_tiny >= 0.5
+    assert sell_tiny <= -0.5
+    buy_huge, _ = decision_thresholds_for_horizon(100_000)
+    assert buy_huge <= 20.0
+
+
+def test_horizon_threshold_none_defaults_to_7d():
+    """None (e.g. a caller that never set horizon_days) must behave exactly
+    like horizon_days=7, not crash or silently use 0."""
+    buy_none, sell_none = decision_thresholds_for_horizon(None)
+    buy_7, sell_7 = decision_thresholds_for_horizon(7)
+    assert buy_none == buy_7
+    assert sell_none == sell_7
+
+
+def test_decision_from_return_horizon_scaling():
+    """The same 3.0% return is HOLD at a short horizon (inside the tight band)
+    but BUY at a long horizon (once the band widens past 3.0%)."""
+    assert decision_from_return(3.0, horizon_days=7) == "BUY"   # 3.0 > 2.0 (7d band)
+    assert decision_from_return(3.0, horizon_days=90) == "HOLD"  # 3.0 < ~7.17 (90d band)
+
+
+def test_compute_actual_metrics_horizon_scaling():
+    """A modest long-horizon move that would have been BUY under the old flat
+    ±2% band now correctly lands in HOLD once the band is horizon-scaled."""
+    result_7d = compute_actual_metrics(100.0, 103.0, 50_000.0, horizon_days=7)
+    assert result_7d["actual_decision"] == "BUY"  # +3.0% clears the 7d band (2.0%)
+
+    result_90d = compute_actual_metrics(100.0, 103.0, 50_000.0, horizon_days=90)
+    assert result_90d["actual_decision"] == "HOLD"  # +3.0% is inside the wider 90d band
