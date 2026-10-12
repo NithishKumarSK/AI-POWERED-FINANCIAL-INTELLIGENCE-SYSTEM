@@ -1,361 +1,199 @@
-# AI Financial Analyst System
+# AlphaVerity
 
-> **Note on accuracy:** the "File Architecture" and "Quick Start" sections below
-> describe the original **legacy** options-strategy pipeline
-> (`strategy_prediction_agent.py` / `strategy_calibration_engine.py` /
-> `strategy_accuracy_engine.py`, served by `legacy_options_app.py`), which is kept
-> on disk as an archive but is **not** what `streamlit_app.py` runs today.
-> The live app is a two-mode Stock Price / Options Strategy walk-forward
-> validator in `stock_prediction_app.py`. For accurate, current run commands see
-> [`README_DEMO.md`](README_DEMO.md).
-
-### *The world's first self-calibrating AI that predicts options strategy outcomes — then proves itself right using real market data.*
+### *An AI market-intelligence platform that predicts, then proves itself against real history — and tells you the truth about how often it's right.*
 
 ---
 
-> **"The AI predicts. The market proves. The system learns. No leakage. No lies. No shortcuts."**
+> **"The AI predicts. History verifies. The system shows you exactly how good it really is — no inflated numbers, no cherry-picked runs, no hiding behind a vague 'accuracy' badge."**
 
 ---
 
-## The Problem No One Has Solved
+## The Problem
 
-Every retail and institutional options trader faces the same brutal question before placing a trade:
+Every "AI stock predictor" makes the same two mistakes:
 
-> *"If I run this exact strategy — symbol, direction, strike, DTE, legs, frequency — over this exact time window with this capital, what will happen?"*
+1. **It never tells you how it's actually done historically** — predictions appear, nobody checks them against what really happened.
+2. **When it does report accuracy, the number is usually fake** — trained and measured on the same data, or quietly inflated by a threshold mismatch that makes the model look better than it is.
 
-Bloomberg charges $25,000/year for terminal access. Institutional quant desks employ 50-person teams. Retail traders guess.
-
-**This system changes that.**
+AlphaVerity does neither. Every prediction runs through a **walk-forward validator**: the AI only ever sees data up to the moment of prediction, the real outcome is fetched *after* the fact, and every run — win or lose — is written to a shared database and shown in the UI. If the model is only right 35% of the time this week, the dashboard says 35%, not "exceptional accuracy."
 
 ---
 
 ## What This Is
 
-**AI Financial Analyst System** is a production-grade quantitative finance platform that does something unprecedented:
+AlphaVerity's live product is a **Stock Price Walk-Forward Validation Engine**: given a symbol, a historical context window, and a prediction horizon, it produces a BUY/SELL/HOLD call and a target price — using a multi-call Gemini consensus engine fed by technical indicators, insider trading activity, retail social-media attention, earnings proximity, and a trained ML signal model — then checks that call against what the market actually did.
 
-1. **AI makes a prediction** — A calibrated surrogate model (v3) predicts exact financial metrics for any options strategy before the trade is placed: total return, P&L, CAGR, Sharpe ratio, win rate, max drawdown, final capital.
-
-2. **The market verifies it** — The exact same strategy is backtested live on **tastytrade's production backtester** (the same engine used by professional options traders) over the same symbol, dates, and parameters.
-
-3. **Accuracy is measured rigorously** — The system computes numeric error metrics (return error %, P&L error, capital error) and an Overall Strategy Accuracy score combining directional signals with numeric closeness.
-
-4. **The AI improves itself** — A Calibration Engine (v3) runs mini-backtests on similar historical windows and uses them to pull the AI prediction toward empirical ground truth — without ever seeing the current backtest result (no data leakage).
-
-**No fake market values, hardcoded predictions, or random decision outputs. Market data is provider-attributed; the historical service can use TradingView, NASDAQ, or yfinance according to availability.**
-
----
-
-## Live System Architecture
+It is not one model. It is a **pipeline of independently-verified components**, each one added only after being proven to work against live data, each gated by the same rule: *if it doesn't clear a real, pre-defined accuracy bar, it doesn't ship into the live decision path.*
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      AI FINANCIAL ANALYST SYSTEM                            │
-│                         Streamlit Wide Dashboard                            │
-└────────────────────────────┬────────────────────────────────────────────────┘
-                             │  User inputs: Symbol · Dates · Capital
-                             │  Direction · Side · DTE · Delta · Legs · Freq
-                             ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                   CENTRAL VALIDATION GATE (strategy_validation.py)          │
-│   Symbol format · Blocklist · Date range (≥2000, ≤today) · Capital · Params │
-│   FAIL → st.error + st.stop   ✦   PASS → run pipeline                      │
-└──────────────────────┬─────────────────────────┬───────────────────────────┘
-                       │                         │
-          ┌────────────▼────────────┐  ┌─────────▼──────────────────────────┐
-          │  CALIBRATION ENGINE v3  │  │      TASTYTRADE PRODUCTION         │
-          │  (strategy_calibration  │  │          BACKTESTER                │
-          │       _engine.py)       │  │   (live API, real market data)     │
-          │                         │  │                                    │
-          │  • Loads similar-strategy│  │  • Same symbol, dates, params      │
-          │    records from JSONL   │  │  • Real trial-by-trial P&L         │
-          │  • 9-factor similarity  │  │  • OAuth2 + long-poll              │
-          │  • Runs mini backtests  │  │  • Phase 8 decision mapping        │
-          │    if < 6 records found │  │    (P&L overrides win rate)        │
-          │  • Blending: ≥8 → 75%  │  │  • Max profit/loss from trials     │
-          └────────────┬────────────┘  └─────────────────┬──────────────────┘
-                       │                                  │
-          ┌────────────▼──────────────────────────────────┤
-          │         AI PREDICTION AGENT v3                │
-          │  (strategy_predictor_v3_backtest_surrogate_   │
-          │            _calibrated)                       │
-          │                                               │
-          │  Stage 1: Raw Prior Model                     │
-          │    ├─ RapidAPI market context (TradingView)   │
-          │    ├─ 10-factor score computation             │
-          │    └─ Deterministic projection                │
-          │                                               │
-          │  Stage 2: Calibration Dataset                 │
-          │    ├─ Load similar records (sim ≥ 0.50)      │
-          │    ├─ Weighted bias computation               │
-          │    └─ Blending by record count:               │
-          │       ≥8 records → 75% empirical              │
-          │       5-7 records → 60% empirical             │
-          │       3-4 records → 45% empirical             │
-          │       2 records  → 20% empirical              │
-          │                                               │
-          │  Stage 3: Calibrated Output                   │
-          │    ├─ Blended: return, win_rate, drawdown     │
-          │    ├─ Gemini 2.5 Flash explanation            │
-          │    └─ SHA-256 input hash (integrity)          │
-          └────────────────────────┬──────────────────────┘
-                                   │
-                    ┌──────────────▼──────────────────────────┐
-                    │     STRATEGY BACKTEST COMPARATOR         │
-                    │   (strategy_backtest_comparator.py)      │
-                    │                                          │
-                    │   Decision agreement · Numeric errors    │
-                    │   MATCH / PARTIAL / CONFLICT / MISSING   │
-                    │   Final verified decision                │
-                    └──────────────────────┬───────────────────┘
-                                           │
-                    ┌──────────────────────▼───────────────────┐
-                    │         ACCURACY ENGINE                   │
-                    │    (strategy_accuracy_engine.py)          │
-                    │                                           │
-                    │   Rolling verification · JSONL storage    │
-                    │   Overall Strategy Accuracy score         │
-                    │   Quarantine gate for invalid records     │
-                    └───────────────────────────────────────────┘
+                              ┌───────────────────────────────────────┐
+                              │              USER INPUT                │
+                              │  Symbol · Context Window · Horizon ·   │
+                              │  Capital · Benchmark · Price Basis     │
+                              └───────────────────┬─────────────────────┘
+                                                  │
+                      ┌───────────────────────────▼────────────────────────────┐
+                      │              TWO-WINDOW LEAKAGE GUARD                    │
+                      │  Historical Context  →  Prediction Origin  →  Target     │
+                      │  AI sees ONLY the left side. The right side is fetched   │
+                      │  and compared AFTER the AI has already committed.        │
+                      └───────────────────────────┬────────────────────────────┘
+                                                  │
+        ┌─────────────────────────────────────────▼─────────────────────────────────────────┐
+        │                              SIGNAL ENRICHMENT LAYER                                 │
+        │                                                                                      │
+        │   Technical indicators (RSI/MACD/SMA/Bollinger/ATR)  ·  Benchmark relative strength  │
+        │   SEC EDGAR insider Form-4 activity (free, official)  ·  Put/call ratio               │
+        │   ApeWisdom Reddit mention velocity (free, live-only)                                 │
+        │   Alpha Vantage earnings-proximity warning + news sentiment                            │
+        │   Symbol-specific calibration history  ·  Segment reliability label (PROVEN/UNPROVEN)  │
+        └─────────────────────────────────────────┬─────────────────────────────────────────┘
+                                                  │
+                      ┌───────────────────────────▼────────────────────────────┐
+                      │               GEMINI CONSENSUS ENGINE                    │
+                      │                                                          │
+                      │  Standard mode (default): 3 independent framings         │
+                      │    standard · devil's-advocate · pure-technical          │
+                      │                                                          │
+                      │  Debate mode (opt-in, ENABLE_DEBATE_CONSENSUS):          │
+                      │    bull round 1 → bear round 1 → each rebuts the other's │
+                      │    specific argument → round 2 → final synthesis         │
+                      │                                                          │
+                      │  + structured numeric alpha scores (bull/bear conviction, │
+                      │    narrative-dependency) fed forward as ML features       │
+                      │  + horizon-scaled decision threshold (sqrt-time dead-band)│
+                      └───────────────────────────┬────────────────────────────┘
+                                                  │
+                      ┌───────────────────────────▼────────────────────────────┐
+                      │          ML SIGNAL MODEL — SHADOW-MODE CROSS-CHECK       │
+                      │  Segmented gradient-boosting ensemble (per symbol ×      │
+                      │  horizon bucket). Only saved if it beats its own         │
+                      │  walk-forward holdout baseline by ≥3pp AND clears a 52%  │
+                      │  floor — un-proven segments ship with no model at all,   │
+                      │  not a fake one.                                        │
+                      └───────────────────────────┬────────────────────────────┘
+                                                  │
+                      ┌───────────────────────────▼────────────────────────────┐
+                      │              CONFIDENCE CALIBRATION                      │
+                      │  Maps the AI's self-reported confidence to its REAL      │
+                      │  historical hit rate in that confidence bin — corrects   │
+                      │  for the common case where raw confidence is inverted    │
+                      │  relative to real accuracy.                              │
+                      └───────────────────────────┬────────────────────────────┘
+                                                  │
+                      ┌───────────────────────────▼────────────────────────────┐
+                      │        ACTUAL OUTCOME FETCHED (strictly AFTER the AI    │
+                      │        has already produced its prediction)             │
+                      └───────────────────────────┬────────────────────────────┘
+                                                  │
+                      ┌───────────────────────────▼────────────────────────────┐
+                      │   COMPARISON ENGINE — decision_match · directional_match │
+                      │   abs_return_error_pct, scored against a horizon-scaled  │
+                      │   threshold identical to the one the AI itself used      │
+                      └───────────────────────────┬────────────────────────────┘
+                                                  │
+                      ┌───────────────────────────▼────────────────────────────┐
+                      │        CENTRAL SUPABASE POSTGRES — every run persists    │
+                      │        here, win or lose, and feeds every badge above    │
+                      │        back in real time.                               │
+                      └───────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Feature Highlights
+## Why the Accuracy Numbers Are Believable
 
-### Prediction Engine — 15 Financial Metrics Per Run
+This is the part most "AI trading" projects get wrong, so it gets stated plainly:
 
-| Metric | Description |
-|--------|-------------|
-| **Total Return %** | Strategy P&L as a percentage of initial capital |
-| **Total P&L ($)** | Net profit or loss in absolute dollars |
-| **Final Capital ($)** | Portfolio value at end of the strategy window |
-| **CAGR (%)** | Compound Annual Growth Rate |
-| **Sharpe Ratio** | Risk-adjusted return vs 4.5% risk-free rate |
-| **Sortino Ratio** | Downside deviation-adjusted return |
-| **Max Drawdown (%)** | Peak-to-trough equity curve decline |
-| **Win Rate (%)** | Percentage of trades that were profitable |
-| **Trade Count** | Number of entries in the strategy window |
-| **Volatility (%)** | Annualized standard deviation of trade returns |
-| **Beta** | Market directional exposure coefficient |
-| **Alpha (%)** | Excess return vs SPY benchmark |
-| **Risk Score (0-100)** | Composite: drawdown + volatility + loss rate |
-| **Confidence Score (0-100)** | Calibration confidence from historical record depth |
-| **Max Profit / Max Loss ($)** | Best and worst individual trade outcomes |
+- **No training-on-test leakage.** The historical context window and the prediction window are hard-separated; the AI call that produces a prediction never receives the target-window data.
+- **No threshold gaming.** The decision boundary (BUY/SELL/HOLD) is scaled by `√(horizon_days)` and applied **identically** on the AI's own guardrails and on the ground-truth labeling — so the AI can't look better just because its deciding band and the scoring band disagree.
+- **No silent re-tries or stale caches.** Every in-app accuracy badge reads live from the shared database on every render (5-minute cache, not a static number baked into a file) — a bug that let one badge go stale for weeks was found and fixed in this project's own history, which is exactly the kind of thing this discipline exists to prevent.
+- **Literature-grounded targets, not vanity numbers.** Academic research on short-horizon stock direction prediction consistently finds **50-60% directional accuracy is the legitimate, defensible range** — and that anything a system reports above ~70-80% is a leakage red flag, not a breakthrough. AlphaVerity's own in-app messaging cites this range explicitly instead of chasing or claiming an unrealistic number.
+- **Honest failure is a feature.** When the AI's own 3-way consensus genuinely disagrees, it **refuses to force a decision** rather than guess — that shows up in the data as a "SKIP — INSUFFICIENT SIGNAL QUALITY" result, not a coin-flip dressed up as confidence.
+- **Segment-aware, not blended.** A single blended "accuracy %" hides that a broad index ETF and a narrative-driven single stock behave completely differently. AlphaVerity labels each `(symbol, horizon-bucket)` segment as `PROVEN` / `UNPROVEN` / `INSUFFICIENT_DATA` from its own real track record (minimum 10 resolved runs before it's trusted either way), so the UI never presents a coin-flip segment with the same visual confidence as a working one.
+
+The live numbers move every time a new prediction is saved — that's the point. Open the app for the current, real figures rather than trusting a number printed in this file.
 
 ---
 
-### The Three-Stage AI Pipeline
+## The Thirteen Components
 
-```
-Stage 1: Raw Prior Model
-─────────────────────────
-Input: StrategyInput + RapidAPI Market Context
-         │
-         ├─ Underlying regime score    (trending / mean-reverting / volatile)
-         ├─ Strategy suitability score (short premium / long vol alignment)
-         ├─ News sentiment score       (positive / negative / neutral)
-         ├─ Market breadth score       (gainers vs losers ratio)
-         ├─ Liquidity / activity score (volume movers in context)
-         ├─ Historical regime score    (date range seasonal patterns)
-         ├─ Strike selection score     (delta / DTE alignment)
-         ├─ Leg structure score        (single vs spread efficiency)
-         ├─ Capital efficiency score   (capital vs expected premium)
-         └─ Entry frequency score      (monthly / weekly / daily)
-         │
-         └→ Deterministic Projection (no randomness)
+Built incrementally, each one validated against live data before being trusted, each one allowed to simply *not help* without being forced into the product:
 
-Stage 2: Calibration Dataset
-──────────────────────────────
-Input: Similar historical strategy backtest records
-         │
-         ├─ 9-factor similarity scoring (threshold ≥ 0.50)
-         │    symbol · direction · side · delta_bucket · DTE_bucket ·
-         │    legs · entry_frequency · date_regime · benchmark
-         │
-         ├─ Record count → blending weight schedule
-         │
-         └→ Empirical bias (weighted mean of similar actual returns)
-
-Stage 3: Calibrated Output
-───────────────────────────
-Blended = (empirical_weight × empirical) + (raw_weight × raw_prior)
-         │
-         ├─ 15 predicted financial metrics
-         ├─ SHA-256[:16] input integrity hash
-         ├─ Calibration summary (similar_count, calibration_weight)
-         └─ Gemini 2.5 Flash narrative explanation (temperature=0)
-```
-
----
-
-### Ground-Truth Verification — tastytrade Production Backtester
-
-The AI prediction is immediately verified against the **same strategy** on tastytrade's production backtesting infrastructure:
-
-- **Real options data** — actual historical premiums, fills, and P&L
-- **Trial-by-trial breakdown** — every individual trade entry/exit logged
-- **Phase 8 decision logic** — P&L magnitude always overrides win rate:
-  - `final_capital ≤ 0` → **SELL** (catastrophic, always)
-  - `total_return ≤ -50%` → **SELL** (severe loss, always)
-  - `total_return > 5% AND P&L > 0` → **BUY** (profitable)
-  - `total_return < -5%` → **SELL** (losing, regardless of win rate)
-  - `-5% ≤ total_return ≤ 5%` → **HOLD** (neutral band)
-
----
-
-### Self-Improving Calibration
-
-```
-First run for a new symbol/strategy combination:
-  → Mini-backtests fired on 12, 18, 24-month sub-windows
-  → Stored in JSONL evaluation corpus
-  → Similarity scored against current input (9 factors)
-
-Subsequent runs:
-  → Calibration records load instantly (no new API calls)
-  → AI blends raw prediction with empirical evidence
-  → Accuracy improves measurably with each verified run
-  → Rolling verification adds ground-truth records automatically
-```
-
-**The system learns from every backtest it verifies against.**
-
----
-
-### Input Integrity and Validation
-
-Every run passes through a **strict, unbypassable validation gate** before any API is called:
-
-| Check | Rule |
-|-------|------|
-| Symbol format | 1–5 uppercase letters (`^[A-Z]{1,5}([.\-][A-Z])?$`) |
-| Symbol reality | Blocklist of 20+ known fake/placeholder symbols (XYZ, ABCXYZ, TEST…) |
-| Start date | Must be ≥ 2000-01-01 (options data availability) |
-| End date | Must be ≤ today (no future dates) |
-| Date span | Minimum 180 days for meaningful backtesting |
-| Capital | Minimum $1,000 |
-| Parameters | Direction / side / DTE / delta / legs validated with strict ranges |
-| Hash integrity | SHA-256[:16] of sorted-key JSON — AI and backtest share the same hash |
-
-**If any check fails: `st.error()` + `st.stop()`. No AI. No backtest. No charts. No accuracy record.**
-
----
-
-### Accuracy Measurement — Overall Strategy Accuracy Score
-
-```
-Overall Strategy Accuracy = weighted combination of:
-
-  Direction Accuracy     (20%) — did the AI predict BUY/SELL/HOLD correctly?
-  Directional Accuracy   (15%) — did the AI get the sign right (positive/negative)?
-  Return Accuracy        (25%) — how close was predicted_return to actual_return?
-  P&L Accuracy           (20%) — how close was predicted_P&L to actual_P&L?
-  Capital Accuracy       (10%) — how close was predicted_final_capital to actual?
-  Win Rate Accuracy      (10%) — how close was predicted_win_rate to actual?
-
-  Return error ≤ ±10%  → 1.00 score  (perfect numeric prediction)
-  Return error ≤ ±20%  → 0.75 score  (excellent)
-  Return error ≤ ±50%  → 0.40 score  (directionally useful)
-  Return error > ±100% → 0.10 score  (direction only)
-```
-
-The only metric that honestly reports **both directional accuracy AND numeric precision** together.
-
----
-
-### Record Quarantine System
-
-Invalid evaluation records are **never mixed into accuracy statistics**:
-
-```
-is_valid_evaluation_record(record) → bool
-
-Rejects:
-  • Blank or fake symbols (XYZ, ABCXYZ, TEST, PLACEHOLDER...)
-  • Future end dates
-  • Pre-2000 start dates (year 1000, 1800, etc.)
-  • Records with REVIEW/MISSING decision (backtest failed)
-  • Records missing actual_total_return_pct
-
-Invalid records → strategy_prediction_evaluation_runs_invalid.jsonl
-Valid records   → strategy_prediction_evaluation_runs.jsonl
-```
+| # | Component | What it does |
+|---|-----------|---------------|
+| 1 | **Horizon-scaled decision threshold** | Replaces a flat ±2% BUY/SELL/HOLD band with `2.0 × √(horizon_days/7)` — a 1-day call and a 30-day call are no longer judged by the same yardstick. |
+| 2 | **Walk-forward batch validation harness** | Runs seeded symbol/horizon/origin-date grids through the real prediction pipeline and breaks results down by segment — the same harness used to evaluate every change below before it ships. |
+| 3 | **Segment reliability labeling** | Classifies every `(symbol, horizon-bucket)` as PROVEN / UNPROVEN / INSUFFICIENT_DATA from real resolved history, shown directly in the prediction form before you run anything. |
+| 4 | **Confidence calibration** | Builds a mapping from the AI's stated confidence to its actual historical hit rate in that bin, correcting for over- or under-confidence. |
+| 5 | **ML signal model (shadow-mode)** | A segmented gradient-boosting ensemble trained on technical + alternative-data features, gated by a non-negotiable "beat baseline by ≥3pp" rule before it's ever saved. |
+| 6 | **SEC EDGAR insider activity** | Free, official Form-4 insider buy/sell signal, fetched and parsed directly from `data.sec.gov` with strict as-of-date leakage filtering. |
+| 7 | **ApeWisdom Reddit attention** | Free, keyless retail-attention signal (mention volume, rank, 24h change) — live-only, explicitly excluded from historical backtests since it has no point-in-time history. |
+| 8 | **Alpha Vantage earnings & sentiment** | Earnings-proximity warnings and news-sentiment scoring layered into the prompt context. |
+| 9 | **LLM-generated structured alpha scores** | Gemini outputs numeric bull/bear conviction and narrative-dependency scores alongside its decision — these feed the ML model as features, not just prose nobody can act on. |
+| 10 | **Bull/Bear debate consensus (opt-in)** | A TradingAgents-inspired 5-call architecture — bull and bear each argue, then each rebuts the *other's specific* round-1 argument — gated behind `ENABLE_DEBATE_CONSENSUS` and never defaulted on without first winning head-to-head against the standard 3-call consensus on the batch harness. |
+| 11 | **Central Supabase Postgres DB** | Every validated run persists centrally (not to a local file), so every accuracy badge, every segment label, and every historical record is shared and live. |
+| 12 | **Chart-vision input (opt-in)** | Candlestick chart rendering fed directly to Gemini as an image, behind `ENABLE_CHART_VISION`. |
+| 13 | **Literature-grounded UI messaging** | Every accuracy claim in the product cites the real academic realistic range (50-60%) instead of an arbitrary internal target. |
 
 ---
 
 ## Technology Stack
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **AI Core** | Google Gemini 2.5 Flash | Natural language strategy explanation (temperature=0) |
-| **Options Backtester** | tastytrade Production API | Ground-truth strategy verification |
-| **Market Data** | TradingView RapidAPI | Gainers, losers, movers, financial news |
-| **UI Framework** | Streamlit 1.28+ | Wide-screen 8-section interactive dashboard |
-| **Charting** | Plotly | Equity curve, return distribution, comparison charts |
-| **Data Storage** | JSONL | Persistent evaluation corpus (append-only, audit-safe) |
-| **Integrity** | SHA-256 | Input hash verified across AI and backtest |
-| **Cloud** | Google Cloud (GCP) | Project infrastructure and Gemini credentials |
-| **Language** | Python 3.11+ | Core system |
-| **Testing** | pytest | 74 passing tests with O1-O7 regression suite |
+| Layer | Technology |
+|-------|-----------|
+| **AI reasoning** | Google Gemini (`gemini-3.7-flash` default, configurable via `GEMINI_MODEL`) — 3-call or 5-call consensus |
+| **ML signal model** | scikit-learn `HistGradientBoostingClassifier`, segmented per symbol × horizon bucket |
+| **Database** | Supabase (managed Postgres) — central, shared, real-time |
+| **Backend API** | FastAPI (`backend/main.py` — "AlphaVerity API") |
+| **Frontend** | React 19 + TypeScript + Vite + Tailwind CSS + Recharts |
+| **Interactive dashboard** | Streamlit (`core/stock_prediction_app.py`) |
+| **Market data** | RapidAPI TradingView (primary), yfinance (fallback), with transparent per-run provider attribution |
+| **Alternative data** | SEC EDGAR (insider trades), ApeWisdom (Reddit attention), Alpha Vantage (earnings/sentiment) |
+| **Language / runtime** | Python 3.11+, Node.js (frontend tooling) |
+| **Testing** | pytest — **868 passing, 1 skipped** across the full suite |
 
 ---
 
-## The Dashboard — 8 Sections, Zero Clutter
+## Repository Map
 
 ```
-Section 1 — Strategy Inputs Summary
-  Symbol · Date range · Capital · Direction · Side · DTE · Delta · Legs
-  Entry frequency · Benchmark · SHA-256 input hash
-
-Section 2 — Side-by-Side Comparison
-  ┌──────────────────────┬──────────────────────┐
-  │   AI PREDICTION      │  TASTYTRADE BACKTEST  │
-  │   (Independent)      │  (Ground Truth)       │
-  │                      │                       │
-  │  15 predicted metrics│  15 actual metrics    │
-  │  Calibration weight  │  Trade count          │
-  │  Model version       │  Win/loss breakdown   │
-  └──────────────────────┴──────────────────────┘
-
-Section 3 — Factor Score Radar
-  10 factor scores visualized as a spider chart
-
-Section 4 — Final Verified Decision Board
-  MATCH / PARTIAL / CONFLICT → BUY / SELL / HOLD / REVIEW / AVOID
-
-Section 5 — Accuracy Metrics
-  Decision accuracy · Return error · P&L error · Overall Strategy Accuracy
-
-Section 6 — Charts
-  Equity curve · Return distribution · AI vs backtest comparison
-
-Sections 7–8 — Developer Debug Expanders
-  RapidAPI context · Accuracy records · Calibration info · Auth status
-```
-
----
-
-## File Architecture
-
-```
-AI FINANCIAL ANALYST SYSTEM/
+Stock-Prediction-Agent/
 │
-├── streamlit_app.py                  ← Main UI (1,450+ lines, zero sidebar)
-├── strategy_prediction_agent.py      ← AI pipeline v3 (surrogate calibrated)
-├── strategy_calibration_engine.py    ← Self-improving calibration system
-├── strategy_backtest_comparator.py   ← AI vs backtest numeric comparison
-├── strategy_accuracy_engine.py       ← Accuracy tracking and quarantine
-├── strategy_validation.py            ← Central input validation gate
+├── core/                        ← Live product logic (34 modules)
+│   ├── stock_prediction_app.py      Streamlit dashboard (the live demo entry point)
+│   ├── gemini_stock_prediction_agent.py   Gemini consensus engine + every enrichment layer
+│   ├── stock_walkforward_validator.py     Leakage-safe walk-forward validation
+│   ├── stock_comparison_engine.py         Horizon-scaled decision + comparison logic
+│   ├── batch_validation_runner.py         Seeded multi-run backtest harness
+│   ├── segment_reliability.py             PROVEN/UNPROVEN classification
+│   ├── confidence_calibrator.py           Confidence-to-real-hit-rate mapping
+│   ├── ml_signal_model.py / ml_training_runner.py / ml_feature_extractor.py
+│   ├── insider_activity_service.py        SEC EDGAR insider signal
+│   ├── social_attention_service.py        ApeWisdom Reddit signal
+│   └── news_sentiment_service.py          Alpha Vantage earnings/sentiment
 │
-├── tools/
-│   └── tradingview_unified.py        ← RapidAPI client (TradingView host only)
+├── backend/                     ← FastAPI REST API
+│   ├── main.py                      uvicorn entry point ("AlphaVerity API")
+│   ├── orchestration.py             Shared prediction pipeline (same path the UI uses)
+│   └── routers/                     stock_predictions · pending_predictions · me
 │
-├── strategy_prediction_evaluation_runs.jsonl          ← Valid evaluation corpus
-├── strategy_prediction_evaluation_runs_invalid.jsonl  ← Quarantined records
+├── frontend/                    ← React + TypeScript dashboard (Vite, Tailwind, Recharts)
 │
-├── test_strategy_prediction_flow.py  ← 74 tests, O1-O7 regression suite
-├── requirements.txt
-└── .env                              ← API keys (never committed to source control)
+├── db/                          ← Central Postgres layer
+│   ├── connection.py                Supabase connection pooling
+│   ├── stock_prediction_repository.py   Save/load validated prediction records
+│   └── schema.sql / rls.sql
+│
+├── tools/                       ← External API clients
+│   ├── alpha_vantage_client.py · apewisdom_client.py · sec_edgar_client.py
+│   └── tradingview_*.py, rapidapi_client.py
+│
+├── tests/                       ← 868 passing tests
+├── scripts/adhoc/                ← One-off migration/backfill scripts
+├── discord_stock_prediction_agent/  ← Discord paper-trading bot (Alpaca paper endpoint only)
+├── legacy/                      ← Archived options-strategy pipeline (not the live flow)
+└── docs/                        ← Integration notes, diagnostic reports
 ```
 
 ---
@@ -366,251 +204,94 @@ AI FINANCIAL ANALYST SYSTEM/
 
 ```
 Python 3.11+
-tastytrade account with API access
-RapidAPI key (TradingView host)
-Google Cloud account with Gemini API enabled
+Node.js 18+ (for the React frontend)
+Google Gemini API key
+Supabase project (Postgres connection string)
+Optional: RapidAPI key, Alpha Vantage key, SEC EDGAR contact email
 ```
 
 ### Installation
 
 ```bash
 git clone <repository-url>
-cd "AI FINANCIAL ANALYST SYSTEM"
+cd Stock-Prediction-Agent
 
 python -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
-
 pip install -r requirements.txt
 ```
 
 ### Environment Configuration
 
-Create a `.env` file in the project root:
+Copy `.env.example` to `.env` and fill in real values — see that file for the complete, current list (Gemini, Supabase, RapidAPI, Alpha Vantage, SEC EDGAR contact, Discord, Alpaca).
 
-```env
-# Google AI
-GOOGLE_API_KEY=your_gemini_api_key
-AGENT_MODEL=gemini-2.5-flash
-
-# TradingView RapidAPI
-RAPIDAPI_KEY=your_rapidapi_key
-RAPIDAPI_HOST=trading-view.p.rapidapi.com
-RAPIDAPI_BASE_URL=https://trading-view.p.rapidapi.com
-
-# tastytrade (Production only — never use cert/sandbox)
-TASTYTRADE_API_BASE_URL=https://api.tastyworks.com
-TASTYTRADE_BACKTESTER_BASE_URL=https://backtester.vast.tastyworks.com
-TASTYTRADE_REFRESH_TOKEN=your_refresh_token
-TASTYTRADE_USER_AGENT=your-client/1.0
-
-# Google Cloud
-GOOGLE_CLOUD_PROJECT=your_project_id
-GOOGLE_CLOUD_REGION=us-central1
-```
-
-### Launch
+### Launch the live demo (Streamlit)
 
 ```bash
-streamlit run core/streamlit_app.py
+streamlit run core/stock_prediction_app.py
 ```
 
-The dashboard opens at `http://localhost:8501`
-
-### Run Tests
+### Launch the API + web dashboard
 
 ```bash
-pytest test_strategy_prediction_flow.py -v --tb=short
-# Expected: 74 passed
+# Terminal 1 — API
+uvicorn backend.main:app --reload --port 8000
+# Docs at http://localhost:8000/docs
+
+# Terminal 2 — frontend
+cd frontend
+npm install
+npm run dev
 ```
 
----
+### Run the tests
 
-## Example Run — MSFT Short Put
-
-**Input**
-```
-Symbol:           MSFT
-Direction:        Short  |  Side: Put
-DTE:              45     |  Delta: 30
-Legs:             1      |  Frequency: Monthly
-Start Date:       2021-06-25
-End Date:         2025-01-24
-Initial Capital:  $80,000
-```
-
-**AI Prediction (v3 Calibrated)**
-```
-Decision:         BUY  (calibration_weight=75%, similar_count=8)
-Total Return:     +231.4%   |  P&L:    +$185,120
-Final Capital:    $265,120  |  CAGR:   +42.1%
-Win Rate:         78.3%     |  Sharpe:  1.84
-Max Drawdown:     12.8%     |  Risk Score: 34 / 100
-```
-
-**tastytrade Backtest (Ground Truth)**
-```
-Decision:         BUY
-Total Return:     +221.9%   |  P&L:    +$177,520
-Final Capital:    $257,520  |  CAGR:   +40.8%
-Win Rate:         80.1%     |  Sharpe:  1.79
-Max Drawdown:     14.1%     |  Risk Score: 37 / 100
-```
-
-**Comparison Result**
-```
-Agreement:        MATCH — both engines agree: BUY ✓
-Return Error:     +9.5%    (within ±10% band → perfect score)
-P&L Error:        +$7,600
-Capital Error:    +$7,600  (+3.1%)
-Win Rate Error:   −1.8%
-Overall Accuracy: 91.4%    ← direction + numeric combined
+```bash
+pytest -q
+# 868 passed, 1 skipped
 ```
 
 ---
 
 ## Design Principles
 
-Every rule below is enforced in both code and tests. None of them are aspirational.
-
 | Principle | What it means in practice |
-|-----------|--------------------------|
-| **No data leakage** | The AI never sees the current backtest result before predicting. Calibration dataset excludes the exact current hash. |
-| **No fake data** | Every predicted metric is computed via deterministic formula or blended from real backtest records. Zero randomness. |
-| **No silent failures** | Invalid inputs block the entire pipeline. Backtest failures return explicit objects. Silent date-override retries do not exist. |
-| **No stale outputs** | Session state is cleared before every new run. A failed validation shows an error — not the previous run's results. |
-| **No symbol-independent values** | Formula output depends on RapidAPI market context, which is symbol-specific and time-stamped. |
-| **Provider transparency** | Historical data records the provider used. TradingView and NASDAQ are preferred; yfinance is a free last-resort historical provider. |
-| **Paper trading only** | The Discord extension can submit orders only to Alpaca's paper endpoint. Production configuration rejects a live Alpaca base URL. |
-
----
-
-## Test Coverage — 74 Tests
-
-```
-TestAIPrediction                       7 tests
-TestValidateStrategyInput              5 tests
-TestComparator                         7 tests
-TestAccuracyEngine                     4 tests
-TestEnrichBacktestMetrics              3 tests
-TestRapidAPIConfig                     1 test  — enforces trading-view host
-
-TestV2CalibratedPrediction             8 tests
-TestV3BacktestSurrogateCalibrated     12 tests
-  ├─ No yfinance in any new files
-  ├─ MODEL_VERSION = v3_backtest_surrogate_calibrated
-  ├─ CALCULATION_VERSION = 3.0
-  ├─ No backtest result leakage (raises AssertionError if leaked)
-  ├─ Deterministic hash — SHA-256[:16]
-  ├─ Backtest decision BUY for highly profitable strategies
-  ├─ Calibration excludes the current input hash
-  ├─ Calibration blending moves prediction toward empirical evidence
-  ├─ Overall accuracy penalizes large numeric errors
-  ├─ Overall accuracy high when prediction is close to backtest
-  ├─ Rolling verification creates v3-versioned records
-  └─ Similarity scoring bounded to [0.0, 1.0]
-
-TestO1ToO7ValidationRegressions       18 tests
-  ├─ Blank symbol blocked
-  ├─ Whitespace-only symbol blocked
-  ├─ XYZ (known placeholder) blocked
-  ├─ ABCXYZ (6 characters — invalid format) blocked
-  ├─ Real symbols AAPL / MSFT / TSLA / CVS / SPY / GOOGL / BRK.B pass
-  ├─ TSLA −727% return with 70% win rate → SELL (not HOLD)
-  ├─ CVS −28% return with 72.9% win rate → SELL (not HOLD)
-  ├─ Future end date 2027 blocked
-  ├─ Year 1000 start date blocked
-  ├─ Future start date blocked
-  ├─ Invalid date format (DD/MM/YYYY) blocked
-  ├─ Hardcoded auto-retry dates verified removed from source
-  ├─ Quarantine functions importable
-  ├─ Quarantine rejects fake symbol records
-  ├─ Quarantine rejects future end date records
-  ├─ Quarantine rejects pre-2000 date records
-  ├─ Quarantine accepts well-formed real records
-  └─ strategy_validation module fully importable
-```
-
----
-
-## Why This Is Different
-
-Most systems labeled "AI trading" do one of the following:
-
-| What they claim | What they actually do |
-|----------------|----------------------|
-| AI-powered predictions | Return the backtest result with a label |
-| Live market data | Pull stale Yahoo Finance prices |
-| Accuracy metrics | Report training accuracy on the same data used to build the model |
-| Validated inputs | Accept any string, including blank and year-1000 dates |
-| Real backtests | Run simulations on synthetic data |
-
-**This system does none of the above.**
-
-The AI predicts independently. The backtester verifies independently. The comparator measures the gap honestly. Invalid inputs are blocked before a single API call is made. Every claim is backed by a passing test.
-
----
-
-## Commercial Value Proposition
-
-**Institutional-grade methodology** — The three-stage surrogate calibration mirrors how quantitative hedge funds build prediction models: prior distribution, calibration data, blended posterior output.
-
-**Provable and auditable accuracy** — Every run appends a record to an immutable JSONL corpus. The system shows exactly how right or wrong the AI was, in which direction, and by how much.
-
-**Self-improving feedback loop** — The calibration dataset grows with every verified run. The system measurably improves its own numeric accuracy over time without retraining.
-
-**Production data sources only** — tastytrade production backtester, TradingView RapidAPI, Google Gemini 2.5 Flash. No mock APIs, no sandboxes, no synthetic data in the prediction path.
-
-**Enterprise-grade data integrity** — SHA-256 input hashing, quarantine ledger, session isolation, explicit failure states, zero silent errors.
-
-**Extensible architecture** — Strategy parameters, calibration weights, similarity factors, and accuracy components are all configurable. Adding new instruments or markets requires only new strategy input definitions.
+|-----------|---------------------------|
+| **No data leakage** | The AI never sees the target window before predicting; every new data source (SEC EDGAR, ApeWisdom, Alpha Vantage) is re-validated against its own as-of-date, not trusted from the upstream API's own filter alone. |
+| **No inflated accuracy** | Every accuracy badge reads live from the shared database. No hardcoded numbers, no stale snapshots, no local-file caches presented as current truth. |
+| **No forced decisions** | When the consensus genuinely disagrees, the system skips the prediction rather than output a coin-flip dressed as confidence. |
+| **No unproven claims about unproven segments** | A symbol/horizon combination with too little history says "insufficient data" — not a confident-looking number built on five runs. |
+| **Gate every model change on evidence** | New ML models must beat their own walk-forward baseline by a real margin before they're saved. New consensus architectures (like the debate mode) must win head-to-head on the batch harness before being defaulted on. |
+| **Literature-grounded targets** | 50-60% directional accuracy is treated as a real, legitimate edge — not a disappointment to be hidden, and not something to inflate past the point where it would be a leakage red flag. |
+| **Paper trading only** | The Discord extension can submit orders only to Alpaca's paper endpoint; production configuration rejects a live Alpaca base URL. |
 
 ---
 
 ## Discord Paper-Trading Agent
 
-The repository also contains a production-oriented Discord layer in
-`discord_stock_prediction_agent/`. It receives raw equity and options signals, routes
-normal trades through **Stock Price Validation**, routes options through **Options
-Strategy Validation**, and submits approved orders only to Alpaca's paper endpoint.
-
-Run it from the repository root:
+`discord_stock_prediction_agent/` runs a production-oriented Discord layer that receives raw equity and options signals, routes stock trades through Stock Price Validation, and submits approved orders only to Alpaca's paper endpoint.
 
 ```powershell
 python -m discord_stock_prediction_agent.discord_agent
 ```
 
-The bot uses two primary Discord channel IDs in the local `.env`:
+Full setup, environment variables, signal formats, and runtime controls (`!agent_on` / `!agent_off` / `!agent_mode`) are documented in [`discord_stock_prediction_agent/README.md`](discord_stock_prediction_agent/README.md).
 
-```env
-DISCORD_SIGNAL_CHANNEL_ID=your_stock_signals_channel_id
-AGENT_REVIEW_CHANNEL_ID=your_agent_review_channel_id
-```
+---
 
-Runtime decision controls:
+## Legacy: Options-Strategy Pipeline
 
-```text
-!agent_on    # project validation and decision gates enabled
-!agent_off   # valid BUY/SELL signals go directly to paper-order handling
-!agent_mode  # display current mode
-```
-
-Agent OFF does not disable parsing, position, contract, price, market-hours, paper
-endpoint, or broker safeguards. Full installation, Discord setup, environment variables,
-signal formats, queue/state locations, monitoring behavior, tests, and production notes
-are documented in
-[`discord_stock_prediction_agent/README.md`](discord_stock_prediction_agent/README.md).
+An earlier options-strategy backtesting pipeline (`strategy_prediction_agent.py`, `strategy_calibration_engine.py`, the tastytrade production backtester integration) is preserved under `legacy/` for reference. It is **not** part of the live product and is not run by the Quick Start commands above.
 
 ---
 
 ## Roadmap
 
-- [ ] Multi-leg strategy support — iron condors, calendars, strangles, butterflies
-- [ ] Portfolio-level prediction — multiple simultaneous strategies with correlation
-- [ ] Real-time market regime detection — VIX integration for dynamic calibration
-- [ ] Cross-broker backtesting — verify predictions against multiple data sources
-- [ ] REST API — institutional embedding and programmatic access
-- [ ] Strategy screener — AI recommends the top-ranked options strategies for current market conditions
-- [ ] Mobile-responsive layout
+- [ ] Validate the Bull/Bear debate consensus against the standard 3-call consensus on the batch harness, segment-by-segment, before considering a default flip
+- [ ] Alpha Vantage `NEWS_SENTIMENT` on a paid tier (currently gated by plan access)
+- [ ] Expand the SEC EDGAR / ApeWisdom feature set into the segmented ML ensemble as more live history accumulates
+- [ ] REST API authentication and multi-user scoping for the FastAPI backend
+- [ ] Mobile-responsive React dashboard
 
 ---
 
@@ -620,4 +301,4 @@ This project is proprietary software. All rights reserved.
 
 ---
 
-*Built with rigor. Verified with data. Improved by the market itself.*
+*Predicted independently. Verified against real history. Reported honestly — including when the honest number isn't exciting.*

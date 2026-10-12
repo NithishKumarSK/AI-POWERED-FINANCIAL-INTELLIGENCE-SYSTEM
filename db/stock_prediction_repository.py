@@ -210,7 +210,17 @@ def _find_existing_id(symbol: str, origin_date: Optional[str], horizon: int, tar
 def _row_to_jsonl_record(row: Dict[str, Any]) -> dict:
     """Reconstruct the old nested JSONL record shape from a DB row, so
     downstream code (get_accuracy_summary, _render_records, Gemini's
-    build_calibration_summary) keeps working unchanged."""
+    build_calibration_summary) keeps working unchanged.
+
+    ai_prediction_raw is the full raw result dict `run_gemini_stock_prediction`
+    returned at save time -- it carries _feature_packet (needed by
+    ml_feature_extractor.extract_from_db_records and core/case_retrieval.py's
+    similarity search) plus the LLM-alpha scores, none of which the fixed
+    7-field subset below used to expose. Without this, every DB-sourced
+    caller silently saw almost no usable feature vectors even though the
+    data was already sitting in the column.
+    """
+    ai_raw = row.get("ai_prediction_raw") or {}
     return {
         "timestamp": _d(row.get("created_at")),
         "run_id": row.get("run_id"),
@@ -226,6 +236,10 @@ def _row_to_jsonl_record(row: Dict[str, Any]) -> dict:
             "decision": row.get("decision"),
             "confidence_score": row.get("confidence_score"),
             "risk_score": row.get("risk_score"),
+            "_feature_packet": ai_raw.get("_feature_packet"),
+            "bull_conviction_score": ai_raw.get("bull_conviction_score"),
+            "bear_conviction_score": ai_raw.get("bear_conviction_score"),
+            "narrative_dependency_score": ai_raw.get("narrative_dependency_score"),
         },
         "actual_validation": {
             "origin_price": row.get("actual_origin_price"),

@@ -1,0 +1,6 @@
+# Let Git auto-detect text vs binary files and normalize line endings to LF
+# in the repository, checking them out as CRLF on Windows / LF elsewhere.
+# This makes the LF/CRLF conversion explicit instead of relying on each
+# contributor's core.autocrlf setting, and silences the per-file
+# "LF will be replaced by CRLF" warning on Windows.
+* text=auto

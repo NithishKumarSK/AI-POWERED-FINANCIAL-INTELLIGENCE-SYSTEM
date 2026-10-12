@@ -63,6 +63,15 @@ CHART_VISION_DETAIL_LOOKBACK_DAYS = int(os.getenv("CHART_VISION_DETAIL_LOOKBACK_
 # batch harness before ever being made the default. 5 Gemini calls instead
 # of 3 -- real latency cost (~2.5-4 min/prediction at this model's speed).
 ENABLE_DEBATE_CONSENSUS = os.getenv("ENABLE_DEBATE_CONSENSUS", "false").lower() == "true"
+# Self-learning case retrieval (core/case_retrieval.py). Default ON -- unlike
+# debate consensus this adds zero extra Gemini calls (one DB query + a prompt
+# section using data already fetched), so it carries none of the latency/cost
+# risk that justified defaulting debate consensus off. Still flagged so a
+# controlled A/B (same symbols/horizons/origin-dates, only this toggled) can
+# cleanly isolate its real effect instead of being confounded with whatever
+# else changed between two runs -- exactly the mistake the first same-day
+# attempt at this comparison made (different date ranges between arms).
+ENABLE_CASE_RETRIEVAL = os.getenv("ENABLE_CASE_RETRIEVAL", "true").lower() == "true"
 # Every other network call in this project (Alpaca, historical price fetch) has an
 # explicit timeout; this one didn't. A hung connection under real-world network
 # flakiness (observed directly: DNS reconnect blips, failed sends) would then block
@@ -576,7 +585,10 @@ def _load_calibration_source_records() -> List[dict]:
         return records
 
 
-def build_calibration_summary(symbol: str = "", horizon_days: int = 0, as_of_date: str = "") -> dict:
+def build_calibration_summary(
+    symbol: str = "", horizon_days: int = 0, as_of_date: str = "",
+    feature_packet: Optional[dict] = None,
+) -> dict:
     """Read past validated records and build a calibration summary for Gemini.
 
     as_of_date: when set (e.g. to a historical prediction's origin date), records
@@ -584,6 +596,10 @@ def build_calibration_summary(symbol: str = "", horizon_days: int = 0, as_of_dat
     a historical replay from seeing outcomes that hadn't resolved yet as of the
     origin being replayed. Empty (the default, used for live predictions where
     the cutoff is effectively "now") preserves prior unfiltered behavior.
+
+    feature_packet: when provided, also retrieves the nearest historical
+    precedents (core/case_retrieval.py) from this same leakage-safe record
+    set -- concrete past cases, not just aggregate percentages.
     """
     records = _load_calibration_source_records()
 
@@ -884,6 +900,21 @@ def build_calibration_summary(symbol: str = "", horizon_days: int = 0, as_of_dat
             # Degrade gracefully -- this is enrichment, not required for a
             # prediction to proceed.
             cal_summary["segment_reliability_error"] = f"{type(exc).__name__}: {exc}"
+
+    # Self-learning retrieval -- the k most similar past validated runs by
+    # feature-vector distance, from this SAME leakage-safe `records` list
+    # (already filtered to target_date < as_of_date above). Reuses that
+    # filtering rather than re-querying, so this can never see a precedent
+    # the aggregate stats above couldn't also see.
+    if ENABLE_CASE_RETRIEVAL and feature_packet and symbol:
+        try:
+            from case_retrieval import find_similar_cases
+            cal_summary["nearest_cases"] = find_similar_cases(
+                feature_packet, symbol, horizon_days, records,
+                current_origin_date=as_of_date, k=5,
+            )
+        except Exception as exc:
+            cal_summary["nearest_cases_error"] = f"{type(exc).__name__}: {exc}"
 
     return cal_summary
 
@@ -1511,6 +1542,49 @@ def _build_segment_reliability_section(calibration_summary: dict) -> str:
             "call is; widen uncertainty and prefer a lower confidence_score."
         )
     return f"SEGMENT RELIABILITY ({seg.get('segment', '')}): {note}\n\n"
+
+
+def _build_nearest_cases_section(calibration_summary: dict) -> str:
+    """Self-learning retrieval — concrete historical precedent, not just
+    aggregate percentages: the k most similar past validated runs (by
+    standardized feature-vector distance, core/case_retrieval.py) and what
+    actually happened to each one. Same spirit as symbol calibration / segment
+    reliability above, but grounded in specific comparable cases instead of a
+    blended rate, so a run that looks statistically fine in aggregate can
+    still surface a handful of very similar precedents that all went wrong."""
+    cases = calibration_summary.get("nearest_cases")
+    if not cases:
+        return ""
+
+    lines = [
+        "=" * 70,
+        f"NEAREST HISTORICAL PRECEDENTS -- {len(cases)} MOST SIMILAR PAST VALIDATED RUNS",
+        "(Concrete comparable cases ranked by feature similarity, not aggregate stats)",
+        "=" * 70,
+    ]
+    wrong_direction_repeat = 0
+    for c in cases:
+        outcome = "CORRECT" if c["decision_match"] else "WRONG"
+        tier = "same symbol" if c["match_tier"] == "SAME_SYMBOL" else "same horizon bucket, different symbol"
+        err = c.get("abs_return_error_pct")
+        err_s = f"{err}pp error" if err is not None else "error n/a"
+        lines.append(
+            f"  [{tier}] {c['symbol']} {c['horizon_days']}d (origin {c['origin_date']}): "
+            f"AI said {c['ai_decision']}, actual was {c['actual_decision']} -> {outcome} "
+            f"({err_s}, similarity dist={c['distance']})"
+        )
+        if not c["decision_match"]:
+            wrong_direction_repeat += 1
+
+    if wrong_direction_repeat >= 3:
+        lines.append(
+            f"  CAUTION: {wrong_direction_repeat}/{len(cases)} of the closest precedents were WRONG. "
+            "Do not mechanically repeat the same call pattern that failed on these similar setups -- "
+            "widen uncertainty and weigh this alongside (not instead of) the technical/fundamental signals."
+        )
+    lines.append("=" * 70)
+    lines.append("")
+    return "\n".join(lines) + "\n"
 
 
 def _build_options_context_section(opts: dict, horizon_days: int) -> str:
@@ -2223,7 +2297,7 @@ CALIBRATION FAILURE CONTEXT (learn from these to avoid repeating the same mistak
 {f'- {failure_guidance}' if failure_guidance else ''}
 
 {_idx_section}{_opts_section}{_tt_ctx_section}{_regime_section}{_pc_section}
-{_build_segment_reliability_section(calibration_summary)}NORMALIZED INPUT:
+{_build_segment_reliability_section(calibration_summary)}{_build_nearest_cases_section(calibration_summary)}NORMALIZED INPUT:
 {inp_json}
 
 FEATURE PACKET (computed from real historical bars — no future data):
@@ -3121,7 +3195,13 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
     # Calibration summary — as_of_date=origin_str keeps a historical replay from
     # seeing outcomes that hadn't resolved yet as of the origin being replayed;
     # for live predictions (origin_str ~= today) this is effectively unfiltered.
-    calibration_summary = build_calibration_summary(symbol=symbol, horizon_days=horizon_days, as_of_date=origin_str)
+    # feature_packet is passed through so build_calibration_summary can also
+    # retrieve nearest historical precedents (case_retrieval.py) from the same
+    # leakage-safe record set.
+    calibration_summary = build_calibration_summary(
+        symbol=symbol, horizon_days=horizon_days, as_of_date=origin_str,
+        feature_packet=feature_packet,
+    )
     if calibration_summary.get("symbol_calibration_error"):
         _context_enrichment_warnings["symbol_calibration"] = calibration_summary["symbol_calibration_error"]
 
