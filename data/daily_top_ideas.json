@@ -1,0 +1,810 @@
+{
+  "as_of_date": "2026-11-11",
+  "universe_size": 40,
+  "scored_count": 40,
+  "failed_symbols": [],
+  "top_ideas": [
+    {
+      "symbol": "AMZN",
+      "score": 3,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (55.4) \u2192 0",
+        "MACD": "BULLISH histogram+line positive \u2192 +2",
+        "SMA": "BULLISH price>255.26>254.18 \u2192 +2",
+        "BB": "Near UPPER band \u2192 -1",
+        "RET_20D": "Normal 6.6% \u2192 0",
+        "VOLUME": "NEUTRAL volume (0.77x avg) \u2192 0",
+        "ADX": "CHOPPY MARKET (ADX=13.0 < 20) \u2014 signals unreliable, override disabled",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "bullish",
+      "adx": 12.96,
+      "rsi": 55.37,
+      "origin_price": 270.87
+    },
+    {
+      "symbol": "NFLX",
+      "score": 3,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (44.3) \u2192 0",
+        "MACD": "BULLISH histogram positive \u2192 +1",
+        "SMA": "BEARISH price<65.55<70.32 \u2192 -2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Oversold -10.4% \u2192 +1",
+        "VOLUME": "NEUTRAL volume (0.58x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=32.2 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "BULLISH DIVERGENCE: price fell but RSI rose \u2192 reversal UP likely \u2192 +3",
+        "LEVEL": "reversal_risk=medium, near_support=True \u2192 0"
+      },
+      "trend_regime": "bearish",
+      "adx": 32.18,
+      "rsi": 44.32,
+      "origin_price": 63.26
+    },
+    {
+      "symbol": "KO",
+      "score": 3,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (64.2) \u2192 0",
+        "MACD": "BULLISH histogram+line positive \u2192 +2",
+        "SMA": "BULLISH price>93.93>90.24 \u2192 +2",
+        "BB": "Near UPPER band \u2192 -1",
+        "RET_20D": "Normal 5.6% \u2192 0",
+        "VOLUME": "NEUTRAL volume (0.91x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=33.1 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "bullish",
+      "adx": 33.09,
+      "rsi": 64.22,
+      "origin_price": 96.91
+    },
+    {
+      "symbol": "PEP",
+      "score": 3,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (64.7) \u2192 0",
+        "MACD": "BULLISH histogram+line positive \u2192 +2",
+        "SMA": "BULLISH price>136.42>133.41 \u2192 +2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Overextended +11.1% \u2192 -1",
+        "VOLUME": "NEUTRAL volume (0.72x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=42.1 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "bullish",
+      "adx": 42.08,
+      "rsi": 64.68,
+      "origin_price": 143.61
+    },
+    {
+      "symbol": "MRK",
+      "score": 3,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (47.5) \u2192 0",
+        "MACD": "BULLISH histogram+line positive \u2192 +2",
+        "SMA": "MILD BULLISH price>SMA20 \u2192 +1",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Normal 0.5% \u2192 0",
+        "VOLUME": "NEUTRAL volume (0.53x avg) \u2192 0",
+        "ADX": "WEAK TREND (ADX=20.6) \u2014 moderate confidence",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "sideways",
+      "adx": 20.58,
+      "rsi": 47.52,
+      "origin_price": 148.05
+    },
+    {
+      "symbol": "BAC",
+      "score": 2,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (49.4) \u2192 0",
+        "MACD": "BULLISH histogram positive \u2192 +1",
+        "SMA": "MILD BULLISH price>SMA20 \u2192 +1",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Normal -1.4% \u2192 0",
+        "VOLUME": "NEUTRAL volume (0.52x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=30.5 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=True \u2192 0"
+      },
+      "trend_regime": "sideways",
+      "adx": 30.48,
+      "rsi": 49.42,
+      "origin_price": 50.68
+    },
+    {
+      "symbol": "HD",
+      "score": 2,
+      "override": null,
+      "breakdown": {
+        "RSI": "UPPER NEUTRAL (68.2) \u2192 -1",
+        "MACD": "BULLISH histogram+line positive \u2192 +2",
+        "SMA": "BULLISH price>327.09>310.32 \u2192 +2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Overextended +18.8% \u2192 -1",
+        "VOLUME": "NEUTRAL volume (0.79x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=52.8 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "bullish",
+      "adx": 52.79,
+      "rsi": 68.25,
+      "origin_price": 351.0
+    },
+    {
+      "symbol": "PG",
+      "score": 2,
+      "override": null,
+      "breakdown": {
+        "RSI": "UPPER NEUTRAL (67.7) \u2192 -1",
+        "MACD": "BULLISH histogram+line positive \u2192 +2",
+        "SMA": "BULLISH price>161.77>152.96 \u2192 +2",
+        "BB": "Near UPPER band \u2192 -1",
+        "RET_20D": "Normal 7.7% \u2192 0",
+        "VOLUME": "NEUTRAL volume (0.76x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=48.0 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "bullish",
+      "adx": 48.03,
+      "rsi": 67.74,
+      "origin_price": 168.66
+    },
+    {
+      "symbol": "JNJ",
+      "score": 2,
+      "override": null,
+      "breakdown": {
+        "RSI": "UPPER NEUTRAL (69.4) \u2192 -1",
+        "MACD": "BULLISH histogram+line positive \u2192 +2",
+        "SMA": "BULLISH price>267.20>266.37 \u2192 +2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Overextended +10.6% \u2192 -1",
+        "VOLUME": "NEUTRAL volume (0.96x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=28.2 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "bullish",
+      "adx": 28.25,
+      "rsi": 69.39,
+      "origin_price": 280.78
+    },
+    {
+      "symbol": "LLY",
+      "score": 2,
+      "override": null,
+      "breakdown": {
+        "RSI": "UPPER NEUTRAL (71.7) \u2192 -1",
+        "MACD": "BULLISH histogram+line positive \u2192 +2",
+        "SMA": "BULLISH price>1326.71>1224.51 \u2192 +2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Overextended +18.5% \u2192 -1",
+        "VOLUME": "NEUTRAL volume (0.96x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=46.0 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=high, near_support=False \u2192 0"
+      },
+      "trend_regime": "bullish",
+      "adx": 46.01,
+      "rsi": 71.69,
+      "origin_price": 1432.29
+    },
+    {
+      "symbol": "UBER",
+      "score": 2,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (57.6) \u2192 0",
+        "MACD": "BULLISH histogram positive \u2192 +1",
+        "SMA": "MILD BULLISH price>SMA20 \u2192 +1",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Normal 1.1% \u2192 0",
+        "VOLUME": "NEUTRAL volume (0.65x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=33.7 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "sideways",
+      "adx": 33.74,
+      "rsi": 57.58,
+      "origin_price": 70.05
+    },
+    {
+      "symbol": "AAPL",
+      "score": 1,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (53.1) \u2192 0",
+        "MACD": "BEARISH histogram negative \u2192 -1",
+        "SMA": "BULLISH price>344.23>337.27 \u2192 +2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Normal 1.6% \u2192 0",
+        "VOLUME": "NEUTRAL volume (0.60x avg) \u2192 0",
+        "ADX": "CHOPPY MARKET (ADX=18.0 < 20) \u2014 signals unreliable, override disabled",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "sideways",
+      "adx": 18.04,
+      "rsi": 53.12,
+      "origin_price": 348.51
+    },
+    {
+      "symbol": "MSFT",
+      "score": 1,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (50.1) \u2192 0",
+        "MACD": "BEARISH histogram negative \u2192 -1",
+        "SMA": "BULLISH price>531.09>517.80 \u2192 +2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Normal -0.1% \u2192 0",
+        "VOLUME": "NEUTRAL volume (1.03x avg) \u2192 0",
+        "ADX": "CHOPPY MARKET (ADX=10.3 < 20) \u2014 signals unreliable, override disabled",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "sideways",
+      "adx": 10.29,
+      "rsi": 50.07,
+      "origin_price": 533.16
+    },
+    {
+      "symbol": "NVDA",
+      "score": 1,
+      "override": null,
+      "breakdown": {
+        "RSI": "OVERSOLD (19.3) \u2192 +2",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "BEARISH price<206.18<218.00 \u2192 -2",
+        "BB": "Near LOWER band \u2192 +1",
+        "RET_20D": "Oversold -23.7% \u2192 +1",
+        "VOLUME": "NEUTRAL volume (2.78x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=38.6 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "OVERSOLD AT SUPPORT (reversal_risk=high) \u2192 +1"
+      },
+      "trend_regime": "bearish",
+      "adx": 38.6,
+      "rsi": 19.28,
+      "origin_price": 168.89
+    },
+    {
+      "symbol": "PYPL",
+      "score": 1,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (56.2) \u2192 0",
+        "MACD": "BULLISH histogram+line positive \u2192 +2",
+        "SMA": "BULLISH price>57.56>55.35 \u2192 +2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Normal 4.8% \u2192 0",
+        "VOLUME": "NEUTRAL volume (0.54x avg) \u2192 0",
+        "ADX": "CHOPPY MARKET (ADX=17.8 < 20) \u2014 signals unreliable, override disabled",
+        "RSI_DIVERGENCE": "BEARISH DIVERGENCE: price rose but RSI fell \u2192 reversal DOWN likely \u2192 -3",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "bullish",
+      "adx": 17.81,
+      "rsi": 56.16,
+      "origin_price": 58.78
+    },
+    {
+      "symbol": "DIS",
+      "score": 1,
+      "override": null,
+      "breakdown": {
+        "RSI": "UPPER NEUTRAL (68.5) \u2192 -1",
+        "MACD": "BULLISH histogram+line positive \u2192 +2",
+        "SMA": "BULLISH price>112.95>108.49 \u2192 +2",
+        "BB": "Near UPPER band \u2192 -1",
+        "RET_20D": "Overextended +9.4% \u2192 -1",
+        "VOLUME": "NEUTRAL volume (0.98x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=39.3 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "bullish",
+      "adx": 39.29,
+      "rsi": 68.49,
+      "origin_price": 119.21
+    },
+    {
+      "symbol": "COST",
+      "score": 1,
+      "override": null,
+      "breakdown": {
+        "RSI": "UPPER NEUTRAL (66.2) \u2192 -1",
+        "MACD": "BULLISH histogram+line positive \u2192 +2",
+        "SMA": "BULLISH price>1015.26>957.27 \u2192 +2",
+        "BB": "Near UPPER band \u2192 -1",
+        "RET_20D": "Overextended +8.6% \u2192 -1",
+        "VOLUME": "NEUTRAL volume (0.63x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=55.9 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "bullish",
+      "adx": 55.86,
+      "rsi": 66.21,
+      "origin_price": 1066.14
+    },
+    {
+      "symbol": "GOOGL",
+      "score": 0,
+      "override": null,
+      "breakdown": {
+        "RSI": "OVERSOLD (25.0) \u2192 +2",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "BEARISH price<310.89<330.72 \u2192 -2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Oversold -17.3% \u2192 +1",
+        "VOLUME": "NEUTRAL volume (0.71x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=39.0 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "OVERSOLD AT SUPPORT (reversal_risk=medium) \u2192 +1"
+      },
+      "trend_regime": "bearish",
+      "adx": 38.96,
+      "rsi": 24.96,
+      "origin_price": 287.38
+    },
+    {
+      "symbol": "META",
+      "score": 0,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (35.9) \u2192 0",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "BEARISH price<651.54<677.57 \u2192 -2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Oversold -13.0% \u2192 +1",
+        "VOLUME": "NEUTRAL volume (0.53x avg) \u2192 0",
+        "ADX": "WEAK TREND (ADX=24.1) \u2014 moderate confidence",
+        "RSI_DIVERGENCE": "BULLISH DIVERGENCE: price fell but RSI rose \u2192 reversal UP likely \u2192 +3",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "sideways",
+      "adx": 24.07,
+      "rsi": 35.92,
+      "origin_price": 641.39
+    },
+    {
+      "symbol": "AMD",
+      "score": 0,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (45.8) \u2192 0",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "BEARISH price<518.50<548.56 \u2192 -2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Oversold -9.7% \u2192 +1",
+        "VOLUME": "NEUTRAL volume (1.53x avg) \u2192 0",
+        "ADX": "WEAK TREND (ADX=24.0) \u2014 moderate confidence",
+        "RSI_DIVERGENCE": "BULLISH DIVERGENCE: price fell but RSI rose \u2192 reversal UP likely \u2192 +3",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "sideways",
+      "adx": 24.02,
+      "rsi": 45.78,
+      "origin_price": 515.21
+    }
+  ],
+  "bottom_ideas": [
+    {
+      "symbol": "TSLA",
+      "score": -5,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (47.9) \u2192 0",
+        "MACD": "BEARISH histogram negative \u2192 -1",
+        "SMA": "MILD BEARISH price<SMA20 \u2192 -1",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Normal 3.4% \u2192 0",
+        "VOLUME": "NEUTRAL volume (0.59x avg) \u2192 0",
+        "ADX": "CHOPPY MARKET (ADX=17.6 < 20) \u2014 signals unreliable, override disabled",
+        "RSI_DIVERGENCE": "BEARISH DIVERGENCE: price rose but RSI fell \u2192 reversal DOWN likely \u2192 -3",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "sideways",
+      "adx": 17.6,
+      "rsi": 47.87,
+      "origin_price": 379.78
+    },
+    {
+      "symbol": "IBM",
+      "score": -5,
+      "override": "SELL",
+      "breakdown": {
+        "RSI": "NEUTRAL (40.9) \u2192 0",
+        "MACD": "BEARISH histogram negative \u2192 -1",
+        "SMA": "MILD BEARISH price<SMA20 \u2192 -1",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Normal 7.3% \u2192 0",
+        "VOLUME": "NEUTRAL volume (0.57x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=29.6 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "BEARISH DIVERGENCE: price rose but RSI fell \u2192 reversal DOWN likely \u2192 -3",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "sideways",
+      "adx": 29.58,
+      "rsi": 40.87,
+      "origin_price": 244.53
+    },
+    {
+      "symbol": "CVS",
+      "score": -4,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (42.9) \u2192 0",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "BEARISH price<89.88<90.13 \u2192 -2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Normal -1.5% \u2192 0",
+        "VOLUME": "NEUTRAL volume (1.37x avg) \u2192 0",
+        "ADX": "CHOPPY MARKET (ADX=19.7 < 20) \u2014 signals unreliable, override disabled",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "sideways",
+      "adx": 19.71,
+      "rsi": 42.88,
+      "origin_price": 89.01
+    },
+    {
+      "symbol": "SPY",
+      "score": -4,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (40.1) \u2192 0",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "BEARISH price<760.69<765.00 \u2192 -2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Normal -2.6% \u2192 0",
+        "VOLUME": "NEUTRAL volume (0.82x avg) \u2192 0",
+        "ADX": "CHOPPY MARKET (ADX=19.8 < 20) \u2014 signals unreliable, override disabled",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=True \u2192 0"
+      },
+      "trend_regime": "sideways",
+      "adx": 19.8,
+      "rsi": 40.07,
+      "origin_price": 749.92
+    },
+    {
+      "symbol": "QQQ",
+      "score": -4,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (35.9) \u2192 0",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "BEARISH price<700.86<719.39 \u2192 -2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Normal -7.4% \u2192 0",
+        "VOLUME": "NEUTRAL volume (0.75x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=39.1 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "bearish",
+      "adx": 39.06,
+      "rsi": 35.92,
+      "origin_price": 674.76
+    },
+    {
+      "symbol": "ADBE",
+      "score": -3,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (35.5) \u2192 0",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "MILD BEARISH price<SMA20 \u2192 -1",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Normal -1.7% \u2192 0",
+        "VOLUME": "NEUTRAL volume (0.72x avg) \u2192 0",
+        "ADX": "CHOPPY MARKET (ADX=11.0 < 20) \u2014 signals unreliable, override disabled",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=True \u2192 0"
+      },
+      "trend_regime": "bearish",
+      "adx": 11.03,
+      "rsi": 35.55,
+      "origin_price": 236.7
+    },
+    {
+      "symbol": "ORCL",
+      "score": -3,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (42.3) \u2192 0",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "BEARISH price<127.22<137.87 \u2192 -2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Oversold -9.6% \u2192 +1",
+        "VOLUME": "NEUTRAL volume (0.54x avg) \u2192 0",
+        "ADX": "CHOPPY MARKET (ADX=17.4 < 20) \u2014 signals unreliable, override disabled",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=True \u2192 0"
+      },
+      "trend_regime": "bearish",
+      "adx": 17.41,
+      "rsi": 42.32,
+      "origin_price": 117.98
+    },
+    {
+      "symbol": "CSCO",
+      "score": -3,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (37.2) \u2192 0",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "BEARISH price<105.12<108.34 \u2192 -2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Oversold -13.6% \u2192 +1",
+        "VOLUME": "NEUTRAL volume (0.93x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=25.0 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "bearish",
+      "adx": 25.01,
+      "rsi": 37.24,
+      "origin_price": 98.15
+    },
+    {
+      "symbol": "ABBV",
+      "score": -3,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (60.9) \u2192 0",
+        "MACD": "BEARISH histogram negative \u2192 -1",
+        "SMA": "BULLISH price>288.05>273.45 \u2192 +2",
+        "BB": "Near UPPER band \u2192 -1",
+        "RET_20D": "Normal 3.7% \u2192 0",
+        "VOLUME": "NEUTRAL volume (0.64x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=28.6 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "BEARISH DIVERGENCE: price rose but RSI fell \u2192 reversal DOWN likely \u2192 -3",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "bullish",
+      "adx": 28.58,
+      "rsi": 60.94,
+      "origin_price": 293.89
+    },
+    {
+      "symbol": "MDB",
+      "score": -3,
+      "override": null,
+      "breakdown": {
+        "RSI": "LOWER NEUTRAL (34.2) \u2192 +1",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "BEARISH price<354.03<368.54 \u2192 -2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Normal -6.8% \u2192 0",
+        "VOLUME": "NEUTRAL volume (0.79x avg) \u2192 0",
+        "ADX": "CHOPPY MARKET (ADX=16.9 < 20) \u2014 signals unreliable, override disabled",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "bearish",
+      "adx": 16.95,
+      "rsi": 34.19,
+      "origin_price": 331.98
+    },
+    {
+      "symbol": "SNOW",
+      "score": -3,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (40.4) \u2192 0",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "BEARISH price<311.57<326.67 \u2192 -2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Oversold -11.7% \u2192 +1",
+        "VOLUME": "NEUTRAL volume (0.81x avg) \u2192 0",
+        "ADX": "WEAK TREND (ADX=24.2) \u2014 moderate confidence",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "bearish",
+      "adx": 24.24,
+      "rsi": 40.37,
+      "origin_price": 295.76
+    },
+    {
+      "symbol": "INTC",
+      "score": -2,
+      "override": null,
+      "breakdown": {
+        "RSI": "LOWER NEUTRAL (25.2) \u2192 +1",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "BEARISH price<78.74<96.72 \u2192 -2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Oversold -40.8% \u2192 +1",
+        "VOLUME": "NEUTRAL volume (0.68x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=45.7 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=medium, near_support=False \u2192 0"
+      },
+      "trend_regime": "bearish",
+      "adx": 45.72,
+      "rsi": 25.23,
+      "origin_price": 58.13
+    },
+    {
+      "symbol": "UNH",
+      "score": -2,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (42.1) \u2192 0",
+        "MACD": "BEARISH histogram negative \u2192 -1",
+        "SMA": "MILD BEARISH price<SMA20 \u2192 -1",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Normal 2.4% \u2192 0",
+        "VOLUME": "NEUTRAL volume (0.79x avg) \u2192 0",
+        "ADX": "WEAK TREND (ADX=24.6) \u2014 moderate confidence",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=True \u2192 0"
+      },
+      "trend_regime": "sideways",
+      "adx": 24.56,
+      "rsi": 42.11,
+      "origin_price": 405.12
+    },
+    {
+      "symbol": "CAT",
+      "score": -2,
+      "override": null,
+      "breakdown": {
+        "RSI": "LOWER NEUTRAL (25.6) \u2192 +1",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "BEARISH price<665.56<752.06 \u2192 -2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Oversold -22.0% \u2192 +1",
+        "VOLUME": "NEUTRAL volume (1.04x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=50.0 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=medium, near_support=False \u2192 0"
+      },
+      "trend_regime": "bearish",
+      "adx": 49.98,
+      "rsi": 25.64,
+      "origin_price": 584.57
+    },
+    {
+      "symbol": "CRM",
+      "score": -1,
+      "override": null,
+      "breakdown": {
+        "RSI": "LOWER NEUTRAL (26.5) \u2192 +1",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "BEARISH price<233.98<237.80 \u2192 -2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Oversold -9.5% \u2192 +1",
+        "VOLUME": "NEUTRAL volume (1.09x avg) \u2192 0",
+        "ADX": "WEAK TREND (ADX=20.5) \u2014 moderate confidence",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "OVERSOLD AT SUPPORT (reversal_risk=medium) \u2192 +1"
+      },
+      "trend_regime": "bearish",
+      "adx": 20.47,
+      "rsi": 26.48,
+      "origin_price": 213.48
+    },
+    {
+      "symbol": "XOM",
+      "score": -1,
+      "override": null,
+      "breakdown": {
+        "RSI": "LOWER NEUTRAL (33.9) \u2192 +1",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "MILD BEARISH price<SMA20 \u2192 -1",
+        "BB": "Near LOWER band \u2192 +1",
+        "RET_20D": "Normal -7.1% \u2192 0",
+        "VOLUME": "NEUTRAL volume (0.81x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=30.3 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "reversal_risk=low, near_support=True \u2192 0"
+      },
+      "trend_regime": "bearish",
+      "adx": 30.27,
+      "rsi": 33.92,
+      "origin_price": 164.47
+    },
+    {
+      "symbol": "GOOGL",
+      "score": 0,
+      "override": null,
+      "breakdown": {
+        "RSI": "OVERSOLD (25.0) \u2192 +2",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "BEARISH price<310.89<330.72 \u2192 -2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Oversold -17.3% \u2192 +1",
+        "VOLUME": "NEUTRAL volume (0.71x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=39.0 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "No divergence detected \u2192 0",
+        "LEVEL": "OVERSOLD AT SUPPORT (reversal_risk=medium) \u2192 +1"
+      },
+      "trend_regime": "bearish",
+      "adx": 38.96,
+      "rsi": 24.96,
+      "origin_price": 287.38
+    },
+    {
+      "symbol": "META",
+      "score": 0,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (35.9) \u2192 0",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "BEARISH price<651.54<677.57 \u2192 -2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Oversold -13.0% \u2192 +1",
+        "VOLUME": "NEUTRAL volume (0.53x avg) \u2192 0",
+        "ADX": "WEAK TREND (ADX=24.1) \u2014 moderate confidence",
+        "RSI_DIVERGENCE": "BULLISH DIVERGENCE: price fell but RSI rose \u2192 reversal UP likely \u2192 +3",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "sideways",
+      "adx": 24.07,
+      "rsi": 35.92,
+      "origin_price": 641.39
+    },
+    {
+      "symbol": "AMD",
+      "score": 0,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (45.8) \u2192 0",
+        "MACD": "BEARISH histogram+line negative \u2192 -2",
+        "SMA": "BEARISH price<518.50<548.56 \u2192 -2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Oversold -9.7% \u2192 +1",
+        "VOLUME": "NEUTRAL volume (1.53x avg) \u2192 0",
+        "ADX": "WEAK TREND (ADX=24.0) \u2014 moderate confidence",
+        "RSI_DIVERGENCE": "BULLISH DIVERGENCE: price fell but RSI rose \u2192 reversal UP likely \u2192 +3",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "sideways",
+      "adx": 24.02,
+      "rsi": 45.78,
+      "origin_price": 515.21
+    },
+    {
+      "symbol": "V",
+      "score": 0,
+      "override": null,
+      "breakdown": {
+        "RSI": "NEUTRAL (59.3) \u2192 0",
+        "MACD": "BULLISH histogram+line positive \u2192 +2",
+        "SMA": "BULLISH price>411.85>387.53 \u2192 +2",
+        "BB": "INSIDE bands \u2192 0",
+        "RET_20D": "Overextended +8.1% \u2192 -1",
+        "VOLUME": "NEUTRAL volume (0.76x avg) \u2192 0",
+        "ADX": "STRONG TREND (ADX=42.5 > 25) \u2014 signals reliable",
+        "RSI_DIVERGENCE": "BEARISH DIVERGENCE: price rose but RSI fell \u2192 reversal DOWN likely \u2192 -3",
+        "LEVEL": "reversal_risk=low, near_support=False \u2192 0"
+      },
+      "trend_regime": "bullish",
+      "adx": 42.48,
+      "rsi": 59.27,
+      "origin_price": 423.0
+    }
+  ]
+}

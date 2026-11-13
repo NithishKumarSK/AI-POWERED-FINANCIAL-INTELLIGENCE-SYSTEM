@@ -1,0 +1,406 @@
+{
+  "TSLA:2026-10-26": {
+    "data": null,
+    "computed_at": 1794314146.1676078
+  },
+  "TSLA:2024-01-15": {
+    "data": null,
+    "computed_at": 1794116682.6280346
+  },
+  "TSLA:2025-06-10": {
+    "data": null,
+    "computed_at": 1794116816.2537374
+  },
+  "TSLA:2023-03-20": {
+    "data": null,
+    "computed_at": 1794116951.948106
+  },
+  "TSLA:2026-10-30": {
+    "data": null,
+    "computed_at": 1794117736.9772468
+  },
+  "TSLA:2026-09-01": {
+    "data": null,
+    "computed_at": 1794392791.56434
+  },
+  "TSLA:2025-01-02": {
+    "data": null,
+    "computed_at": 1794117377.7375283
+  },
+  "TSLA:2024-11-05": {
+    "data": null,
+    "computed_at": 1794117231.9637637
+  },
+  "TSLA:2023-08-14": {
+    "data": null,
+    "computed_at": 1794117867.908178
+  },
+  "TSLA:2025-09-09": {
+    "data": null,
+    "computed_at": 1794118285.1336005
+  },
+  "TSLA:2025-02-14": {
+    "data": null,
+    "computed_at": 1794118580.4559014
+  },
+  "TSLA:2024-07-07": {
+    "data": {
+      "event_date": "2024-07-05",
+      "direction": "UP",
+      "window_days": 5,
+      "price_snapshot": {
+        "open": 249.81,
+        "high": 252.37,
+        "low": 242.46,
+        "close": 251.52,
+        "previous_close": 246.39,
+        "lookback_close": 197.42,
+        "return_pct": 27.4035,
+        "day_return_pct": 2.0821,
+        "gap_pct": 1.388,
+        "range_pct": 4.0221,
+        "close_location_pct": 91.42
+      },
+      "liquidity": {
+        "volume": 154501200.0,
+        "avg_volume_20d": 89187650.0,
+        "volume_ratio_20d": 1.732,
+        "dollar_volume": 38860141824.0,
+        "avg_dollar_volume_20d": 17583775714.9,
+        "price_pass": true,
+        "liquidity_pass": true
+      },
+      "technical_context": {
+        "distance_to_52w_high_pct": -9.843,
+        "distance_to_52w_low_pct": 81.2104,
+        "prior_20d_return_pct": 40.9796,
+        "prior_50d_return_pct": 73.453,
+        "base_length_days": 6,
+        "base_depth_pct": 43.181,
+        "pattern_label": "EXTENDED_MOMENTUM",
+        "close_quality": "STRONG_CLOSE",
+        "extension_risk": "LOW"
+      },
+      "catalyst": {
+        "label": "NO_CLEAR_NEWS",
+        "confidence": 0.0,
+        "source_type": "price_only",
+        "summary": "UP 20% mover detected from price/volume data; catalyst not enriched."
+      },
+      "scores": {
+        "continuation_quality_score": 56,
+        "reversal_risk_score": 33,
+        "study_priority_score": 71,
+        "data_quality_score": 85
+      },
+      "labels": [
+        "UP",
+        "EXTENDED_MOMENTUM",
+        "STRONG_CLOSE",
+        "C_STUDY_ONLY"
+      ],
+      "handoffs": {
+        "stockbee_episodic_pivot": false,
+        "pead_screener": false,
+        "theme_detector": false,
+        "edge_candidate_agent": false,
+        "parabolic_short_watch": false
+      },
+      "data_quality": {
+        "flags": [
+          "SHORT_HISTORY_LT_260_BARS"
+        ],
+        "data_quality_score": 85
+      }
+    },
+    "computed_at": 1794118947.463657
+  },
+  "AAPL:2026-10-29": {
+    "data": null,
+    "computed_at": 1794123674.3085563
+  },
+  "TSLA:2024-04-22": {
+    "data": null,
+    "computed_at": 1794118038.501676
+  },
+  "TSLA:2024-09-30": {
+    "data": null,
+    "computed_at": 1794123234.2298412
+  },
+  "TSLA:2025-05-05": {
+    "data": null,
+    "computed_at": 1794307689.0060074
+  },
+  "TSLA:2023-06-12": {
+    "data": null,
+    "computed_at": 1794123454.643668
+  },
+  "TSLA:2026-10-28": {
+    "data": null,
+    "computed_at": 1794123556.2064104
+  },
+  "MSFT:2024-03-18": {
+    "data": null,
+    "computed_at": 1794123778.1642282
+  },
+  "NVDA:2026-10-30": {
+    "data": null,
+    "computed_at": 1794123887.5554943
+  },
+  "GOOGL:2025-07-21": {
+    "data": null,
+    "computed_at": 1794123963.1536543
+  },
+  "AMZN:2024-12-09": {
+    "data": null,
+    "computed_at": 1794124214.9624257
+  },
+  "META:2025-04-14": {
+    "data": null,
+    "computed_at": 1794124346.9670846
+  },
+  "TEST:2026-11-02": {
+    "data": null,
+    "computed_at": 1793709403.821274
+  },
+  "AAPL:2026-10-20": {
+    "data": null,
+    "computed_at": 1794116211.7134025
+  },
+  "TSLA:2026-10-31": {
+    "data": null,
+    "computed_at": 1794117093.9452443
+  },
+  "TSLA:2025-11-20": {
+    "data": null,
+    "computed_at": 1794122879.2526474
+  },
+  "TSLA:2023-11-01": {
+    "data": null,
+    "computed_at": 1794122994.8502202
+  },
+  "TSLA:2026-01-15": {
+    "data": null,
+    "computed_at": 1794123125.433973
+  },
+  "JPM:2025-10-06": {
+    "data": null,
+    "computed_at": 1794124668.9934633
+  },
+  "TSLA:2025-03-10": {
+    "data": null,
+    "computed_at": 1794307935.0634594
+  },
+  "XOM:2023-09-25": {
+    "data": null,
+    "computed_at": 1794124853.9277818
+  },
+  "TSLA:2023-07-01": {
+    "data": null,
+    "computed_at": 1794124897.873166
+  },
+  "TSLA:2024-10-15": {
+    "data": null,
+    "computed_at": 1794125030.3209028
+  },
+  "TSLA:2025-08-01": {
+    "data": null,
+    "computed_at": 1794125153.2405283
+  },
+  "TSLA:2023-02-10": {
+    "data": null,
+    "computed_at": 1794125271.9472194
+  },
+  "TSLA:2025-12-01": {
+    "data": null,
+    "computed_at": 1794125426.5584774
+  },
+  "TSLA:2024-06-20": {
+    "data": null,
+    "computed_at": 1794125562.6159763
+  },
+  "TSLA:2024-02-20": {
+    "data": null,
+    "computed_at": 1794308046.6744914
+  },
+  "TSLA:2025-07-15": {
+    "data": null,
+    "computed_at": 1794308173.0920024
+  },
+  "TSLA:2023-05-05": {
+    "data": null,
+    "computed_at": 1794308368.5237002
+  },
+  "TSLA:2026-01-05": {
+    "data": null,
+    "computed_at": 1794308569.3354962
+  },
+  "TSLA:2024-12-01": {
+    "data": null,
+    "computed_at": 1794308775.142781
+  },
+  "TSLA:2025-10-20": {
+    "data": null,
+    "computed_at": 1794308982.1758215
+  },
+  "TSLA:2023-09-18": {
+    "data": null,
+    "computed_at": 1794309194.326061
+  },
+  "TSLA:2026-02-10": {
+    "data": null,
+    "computed_at": 1794309402.7126734
+  },
+  "TSLA:2024-06-15": {
+    "data": null,
+    "computed_at": 1794309620.145008
+  },
+  "AAPL:2025-01-15": {
+    "data": null,
+    "computed_at": 1794309809.4028797
+  },
+  "AAPL:2024-05-10": {
+    "data": null,
+    "computed_at": 1794310015.1053035
+  },
+  "AAPL:2023-11-01": {
+    "data": null,
+    "computed_at": 1794310236.0616736
+  },
+  "MSFT:2026-09-15": {
+    "data": null,
+    "computed_at": 1794310437.9584122
+  },
+  "MSFT:2025-04-01": {
+    "data": null,
+    "computed_at": 1794310590.3797898
+  },
+  "MSFT:2024-08-20": {
+    "data": null,
+    "computed_at": 1794310720.054596
+  },
+  "MSFT:2023-06-05": {
+    "data": null,
+    "computed_at": 1794310869.9605017
+  },
+  "NVDA:2026-10-15": {
+    "data": null,
+    "computed_at": 1794311149.2110634
+  },
+  "NVDA:2025-02-10": {
+    "data": null,
+    "computed_at": 1794311401.4528499
+  },
+  "NVDA:2024-11-20": {
+    "data": null,
+    "computed_at": 1794311677.5384657
+  },
+  "NVDA:2023-07-10": {
+    "data": null,
+    "computed_at": 1794311926.0943344
+  },
+  "GOOGL:2026-09-20": {
+    "data": null,
+    "computed_at": 1794312151.3856418
+  },
+  "GOOGL:2025-05-05": {
+    "data": null,
+    "computed_at": 1794312345.8624403
+  },
+  "GOOGL:2024-09-10": {
+    "data": null,
+    "computed_at": 1794312476.2877424
+  },
+  "GOOGL:2023-12-01": {
+    "data": null,
+    "computed_at": 1794312628.131315
+  },
+  "AMZN:2026-10-05": {
+    "data": null,
+    "computed_at": 1794312746.6577888
+  },
+  "AMZN:2025-06-20": {
+    "data": null,
+    "computed_at": 1794312877.349518
+  },
+  "AMZN:2024-03-15": {
+    "data": null,
+    "computed_at": 1794313016.0793033
+  },
+  "AMZN:2023-10-10": {
+    "data": null,
+    "computed_at": 1794313155.8668098
+  },
+  "TSLA:2025-04-18": {
+    "data": null,
+    "computed_at": 1794314842.948227
+  },
+  "TSLA:2024-10-01": {
+    "data": null,
+    "computed_at": 1794314966.1852953
+  },
+  "TSLA:2023-02-15": {
+    "data": null,
+    "computed_at": 1794315183.7401102
+  },
+  "TSLA:2026-03-10": {
+    "data": null,
+    "computed_at": 1794315308.0944927
+  },
+  "TSLA:2025-08-22": {
+    "data": null,
+    "computed_at": 1794315438.3980289
+  },
+  "TEST:2026-11-10": {
+    "data": null,
+    "computed_at": 1794391171.3755383
+  },
+  "TSLA:2026-10-05": {
+    "data": null,
+    "computed_at": 1794391604.752611
+  },
+  "TSLA:2026-09-05": {
+    "data": null,
+    "computed_at": 1794391738.083641
+  },
+  "TSLA:2026-10-01": {
+    "data": null,
+    "computed_at": 1794392725.5188897
+  },
+  "TSLA:2026-07-01": {
+    "data": null,
+    "computed_at": 1794392920.9437745
+  },
+  "TSLA:2026-08-01": {
+    "data": null,
+    "computed_at": 1794392924.7187197
+  },
+  "TSLA:2026-05-01": {
+    "data": null,
+    "computed_at": 1794393050.0788243
+  },
+  "TSLA:2026-06-01": {
+    "data": null,
+    "computed_at": 1794393071.6715655
+  },
+  "TSLA:2026-09-15": {
+    "data": null,
+    "computed_at": 1794395813.9521081
+  },
+  "TSLA:2026-09-20": {
+    "data": null,
+    "computed_at": 1794396142.0777714
+  },
+  "NVDA:2026-11-12": {
+    "data": null,
+    "computed_at": 1794539887.605983
+  },
+  "NVDA:2026-11-11": {
+    "data": null,
+    "computed_at": 1794540121.2021098
+  },
+  "TEST:2026-11-12": {
+    "data": null,
+    "computed_at": 1794541682.993136
+  }
+}

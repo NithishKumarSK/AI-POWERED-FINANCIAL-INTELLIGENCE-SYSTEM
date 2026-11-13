@@ -24,6 +24,7 @@ Environment variables:
 """
 from __future__ import annotations
 
+import concurrent.futures
 import hashlib
 import json
 import math
@@ -46,7 +47,7 @@ from record_dedup import dedup_records, sort_by_target_date
 AI_PROVIDER             = os.getenv("AI_PROVIDER", "gemini").lower()
 ALLOW_BASELINE_FALLBACK = os.getenv("ALLOW_BASELINE_FALLBACK", "false").lower() == "true"
 GEMINI_MODEL            = os.getenv("GEMINI_MODEL", os.getenv("AGENT_MODEL", "gemini-3.7-flash"))
-_GEMINI_KEY             = os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
+_GEMINI_KEY             = os.getenv("GOOGLE_API_KEY", "") or os.getenv("GEMINI_API_KEY", "")
 
 # Chart-vision input (default OFF): attaches two chart images (wide structural +
 # short detail -- a single timeframe was validated to underperform sending both,
@@ -63,6 +64,68 @@ CHART_VISION_DETAIL_LOOKBACK_DAYS = int(os.getenv("CHART_VISION_DETAIL_LOOKBACK_
 # batch harness before ever being made the default. 5 Gemini calls instead
 # of 3 -- real latency cost (~2.5-4 min/prediction at this model's speed).
 ENABLE_DEBATE_CONSENSUS = os.getenv("ENABLE_DEBATE_CONSENSUS", "false").lower() == "true"
+# Research Expansion Program -- judge-based aggregation, replacing majority
+# vote (_call_gemini_judge_consensus). Evidence: "When Agents Disagree: The
+# Selection Bottleneck" (arXiv 2603.20324) found judge-based selection beats
+# majority voting by a huge margin (Bradley-Terry 0.810 vs 0.496), while
+# majority voting itself is statistically indistinguishable from a single
+# model (p=0.669) -- and this project's OWN data shows the same pattern: the
+# 3 consensus calls agree 72% of the time, but agreement doesn't predict
+# accuracy (52.5% vs 53.3%). OPT-IN, default off: the study's own disclosed
+# caveat is same-family judge/generator self-evaluation bias, so JUDGE_MODEL
+# below defaults to a DIFFERENT model than GEMINI_MODEL, and this must clear
+# the same Phase 5 batch-harness bar as Component 5 before ever defaulting on.
+ENABLE_JUDGE_AGGREGATION = os.getenv("ENABLE_JUDGE_AGGREGATION", "false").lower() == "true"
+# Named GEMINI_JUDGE_MODEL (not the generic "JUDGE_MODEL") -- confirmed live
+# this session that a bare "JUDGE_MODEL" name collides with an unrelated
+# pre-existing environment variable already set on this machine (pointing
+# at a non-Gemini model id), which would have silently broken every judge
+# call. This project-specific name avoids that collision.
+JUDGE_MODEL = os.getenv("GEMINI_JUDGE_MODEL", "gemini-3.1-pro-preview")
+# Research Expansion Program -- per-prediction LAP-style leakage probe
+# (core/lap_leakage_probe.py). OPT-IN, default off: costs one extra Gemini
+# call per prediction. Confirmed live this session: a stripped ticker+date
+# probe shows 92.5% avg confidence on well-known historical dates vs 0% on
+# genuinely future dates -- this flag runs that same check against THIS
+# prediction's own target_date, surfacing a `leakage_probe` field in the
+# result (never blocks or alters the prediction itself on failure).
+ENABLE_LAP_PROBE_PER_PREDICTION = os.getenv("ENABLE_LAP_PROBE_PER_PREDICTION", "false").lower() == "true"
+# Research Expansion Program -- genuinely diverse 3-call consensus (masked
+# feature packets: technicals-only / news-only / regime-only), replacing
+# the existing 3 calls' identical-evidence-different-framing design. See
+# _call_gemini_diverse_consensus docstring. OPT-IN, default off -- needs the
+# same Phase 5 batch-harness validation as every other opt-in consensus mode
+# before ever becoming default. Composes with ENABLE_JUDGE_AGGREGATION.
+ENABLE_DIVERSE_CONSENSUS = os.getenv("ENABLE_DIVERSE_CONSENSUS", "false").lower() == "true"
+# Research Expansion Program -- conformal-prediction-style range widening
+# (core/conformal_range_calibrator.py). Real, live-measured baseline: the
+# deterministic range predictor's raw band contained the actual price swing
+# 79.9% of the time (n=304); this applies a calibrated widening multiplier,
+# fit from that same real data, to target a chosen coverage level instead of
+# whatever the raw band happens to achieve. OPT-IN, default off -- changes
+# the reported low/high band width, a real behavior change that needs
+# explicit opt-in like every other experimental component here.
+ENABLE_CONFORMAL_RANGE = os.getenv("ENABLE_CONFORMAL_RANGE", "false").lower() == "true"
+# Must match a key in data/conformal_range_calibration.json's
+# "by_target_coverage" dict -- Python's str(0.90) == "0.9", not "0.90", so
+# this default is "0.9", not "0.90" (confirmed live against the real file).
+CONFORMAL_TARGET_COVERAGE = os.getenv("CONFORMAL_TARGET_COVERAGE", "0.9")
+# Research Expansion Program -- per-headline news scoring
+# (core/per_headline_news_scorer.py), the actual mechanism behind
+# Lopez-Lira & Tang's real edge (per-headline YES/NO, not one aggregate
+# sentiment score). OPT-IN, default off -- one extra Gemini call per
+# prediction, live-only (same gate as the Yahoo headlines it reuses).
+ENABLE_PER_HEADLINE_NEWS_SCORING = os.getenv("ENABLE_PER_HEADLINE_NEWS_SCORING", "false").lower() == "true"
+# Research Expansion Program, Component 6 follow-up -- promotes the shadow ML
+# model (see "ML signal cross-check, SHADOW MODE ONLY" below) from logged-only
+# to an active decision override, but ONLY on segments with their own
+# dedicated trained model (never the generic default_model, which was never
+# shown to help -- see SegmentedModel). OPT-IN, default off: real head-to-head
+# evidence exists for exactly 5 segments (a 20-case probe found the shadow
+# model correct 64.3% of the time vs Gemini's 35.7%, n=14 -- see
+# scratchpad/ml_shadow_ev_probe_results.json), but that's still a small
+# sample: this must be validated at larger scale before ever defaulting on.
+ENABLE_ML_SEGMENT_OVERRIDE = os.getenv("ENABLE_ML_SEGMENT_OVERRIDE", "false").lower() == "true"
 # Self-learning case retrieval (core/case_retrieval.py). Default ON -- unlike
 # debate consensus this adds zero extra Gemini calls (one DB query + a prompt
 # section using data already fetched), so it carries none of the latency/cost
@@ -82,6 +145,17 @@ ENABLE_CASE_RETRIEVAL = os.getenv("ENABLE_CASE_RETRIEVAL", "true").lower() == "t
 # generous enough for a real deep-thinking response, bounded enough to guarantee the
 # call eventually fails cleanly instead of hanging indefinitely.
 GEMINI_REQUEST_TIMEOUT_MS = int(os.getenv("GEMINI_REQUEST_TIMEOUT_MS", "60000"))
+# Hard, ACTUALLY-enforced wall-clock cap per consensus call, applied with
+# concurrent.futures' own .result(timeout=...) in _call_gemini_consensus --
+# unlike GEMINI_REQUEST_TIMEOUT_MS above (an httpx per-read-chunk timeout
+# that does NOT bound a streaming "thinking" response's total duration,
+# confirmed live this session: genuine successful calls took 92-191s past
+# that 60s setting, and some calls hung 45+ minutes with no response at
+# all). Set well above the real observed 92-191s range for a genuinely
+# successful deep-thinking call on this project's configured GEMINI_MODEL,
+# so this only ever discards a true runaway hang, never a good, just-slow
+# answer.
+_CONSENSUS_CALL_HARD_TIMEOUT_S = float(os.getenv("GEMINI_CONSENSUS_CALL_HARD_TIMEOUT_S", "240"))
 # Chart-vision pilot run (20 predictions, ENABLE_CHART_VISION=true) hit an 8/20
 # outright-failure rate on 503 UNAVAILABLE / 504 DEADLINE_EXCEEDED / ReadTimeout
 # -- zero such failures occurred on the identical symbol/horizon/origin set with
@@ -104,16 +178,26 @@ _RETURN_CLAMP_MAX  = 20.0
 _RETURN_CLAMP_MIN  = -20.0
 
 
-def _get_horizon_thresholds(horizon_days: int, symbol: str = "") -> Tuple[float, float]:
-    """Return (buy_threshold, sell_threshold).
+def _get_horizon_thresholds(horizon_days: int, symbol: str = "", expected_range_pct: Optional[float] = None) -> Tuple[float, float]:
+    """Return (buy_threshold, sell_threshold) -- shown to Gemini in the prompt as the
+    bar for a decisive BUY/SELL call.
 
-    HOLD-ELIMINATION MODE: threshold is near-zero (±0.1%) for all horizons and symbols.
-    Any positive predicted return → BUY. Any negative → SELL.
-    Guardrail overrides Gemini's raw HOLD output based purely on sign of predicted_return_pct.
+    MUST match stock_comparison_engine.decision_thresholds_for_horizon exactly: that
+    function is the REAL guardrail _apply_guardrails enforces after Gemini responds,
+    and is also what grades the ground-truth actual_decision. Before this fix, this
+    function independently returned a flat +/-0.1% ("HOLD-elimination mode") -- so
+    Gemini was told "any nonzero return is decisive" while actually being graded
+    against a properly horizon-scaled +/-2% (at 7d) band. That mismatch (not a lack of
+    skill) is the direct, confirmed cause of exact decision-match (34.4%) sitting far
+    below directional match (54.0%) across this project's own 475-prediction dataset:
+    Gemini had no way to know what threshold it was actually being held to.
+
+    expected_range_pct is accepted for backward compatibility with existing call
+    sites but intentionally unused -- the single source of truth for this threshold
+    is decision_thresholds_for_horizon, not a second, independently-tuned formula.
     """
-    # Near-zero threshold: any positive = BUY, any negative = SELL
-    # 0.1% prevents triggering on floating-point noise at exactly 0.00%
-    return (0.1, -0.1)
+    from stock_comparison_engine import decision_thresholds_for_horizon
+    return decision_thresholds_for_horizon(horizon_days)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -249,6 +333,93 @@ def _calc_adx(bars: List[dict], period: int = 14) -> Optional[float]:
         return round(sum(dx_vals[-period:]) / period, 2)
     except Exception:
         return None
+
+
+# ── Research Expansion Program Component -- indicator completeness pass:
+# CCI, Williams %R, CMF, Stochastic. Zhong & Hitchcock (arXiv 2108.10826) used
+# all four alongside RSI/MACD; we had RSI/MACD/ADX/ATR/Bollinger but not
+# these. Same free OHLCV bars already fetched for everything else -- no new
+# data source, no new API key, pure arithmetic.
+def _calc_cci(bars: List[dict], period: int = 20) -> Optional[float]:
+    """Commodity Channel Index. >100 = strong uptrend/overbought,
+    <-100 = strong downtrend/oversold."""
+    if len(bars) < period:
+        return None
+    try:
+        tps = []
+        for b in bars[-period:]:
+            h = float(b.get("high") or b.get("close") or 0)
+            l = float(b.get("low") or b.get("close") or 0)
+            c = float(b.get("close") or 0)
+            tps.append((h + l + c) / 3.0)
+        sma_tp = sum(tps) / period
+        mean_dev = sum(abs(tp - sma_tp) for tp in tps) / period
+        if mean_dev == 0:
+            return 0.0
+        return round((tps[-1] - sma_tp) / (0.015 * mean_dev), 2)
+    except Exception:
+        return None
+
+
+def _calc_williams_r(bars: List[dict], period: int = 14) -> Optional[float]:
+    """Williams %R. Ranges -100..0; below -80 = oversold, above -20 = overbought."""
+    if len(bars) < period:
+        return None
+    try:
+        window = bars[-period:]
+        highs = [float(b.get("high") or b.get("close") or 0) for b in window]
+        lows  = [float(b.get("low")  or b.get("close") or 0) for b in window]
+        close = float(window[-1].get("close") or 0)
+        hh, ll = max(highs), min(lows)
+        if hh == ll:
+            return -50.0
+        return round((hh - close) / (hh - ll) * -100.0, 2)
+    except Exception:
+        return None
+
+
+def _calc_cmf(bars: List[dict], period: int = 20) -> Optional[float]:
+    """Chaikin Money Flow. Ranges roughly -1..1; positive = buying pressure."""
+    if len(bars) < period:
+        return None
+    try:
+        window = bars[-period:]
+        mfv_sum, vol_sum = 0.0, 0.0
+        for b in window:
+            h = float(b.get("high") or b.get("close") or 0)
+            l = float(b.get("low") or b.get("close") or 0)
+            c = float(b.get("close") or 0)
+            v = float(b.get("volume") or 0)
+            mfm = ((c - l) - (h - c)) / (h - l) if (h - l) != 0 else 0.0
+            mfv_sum += mfm * v
+            vol_sum += v
+        if vol_sum == 0:
+            return None
+        return round(mfv_sum / vol_sum, 4)
+    except Exception:
+        return None
+
+
+def _calc_stochastic(bars: List[dict], period: int = 14, d_period: int = 3) -> Tuple[Optional[float], Optional[float]]:
+    """Stochastic %K / %D. Above 80 = overbought, below 20 = oversold."""
+    if len(bars) < period + d_period - 1:
+        return None, None
+    try:
+        k_vals = []
+        for i in range(period - 1, len(bars)):
+            window = bars[i - period + 1:i + 1]
+            highs = [float(b.get("high") or b.get("close") or 0) for b in window]
+            lows  = [float(b.get("low")  or b.get("close") or 0) for b in window]
+            close = float(window[-1].get("close") or 0)
+            hh, ll = max(highs), min(lows)
+            k_vals.append(50.0 if hh == ll else (close - ll) / (hh - ll) * 100.0)
+        if len(k_vals) < d_period:
+            return round(k_vals[-1], 2) if k_vals else None, None
+        k = round(k_vals[-1], 2)
+        d = round(sum(k_vals[-d_period:]) / d_period, 2)
+        return k, d
+    except Exception:
+        return None, None
 
 
 # ── PHASE 10: RSI Divergence Detector ─────────────────────────────────────────
@@ -405,6 +576,12 @@ def build_stock_feature_packet(
     latest_vol = vols[-1] if vols else None
     vol_ratio20 = round(latest_vol / avg_vol20, 4) if avg_vol20 and avg_vol20 > 0 and latest_vol else None
 
+    # Indicator-completeness pass -- CCI, Williams %R, CMF, Stochastic
+    cci20       = _calc_cci(ai_visible_bars, 20)
+    williams_r14 = _calc_williams_r(ai_visible_bars, 14)
+    cmf20       = _calc_cmf(ai_visible_bars, 20)
+    stoch_k14, stoch_d3 = _calc_stochastic(ai_visible_bars, 14, 3)
+
     # Phase 8 — ADX trend strength
     adx14 = _calc_adx(ai_visible_bars, 14)
     adx_regime = (
@@ -500,6 +677,10 @@ def build_stock_feature_packet(
             "MACD_signal":          macd_signal,
             "MACD_histogram":       macd_hist,
             "rate_of_change_20":    r20d,
+            "CCI_20":               cci20,
+            "Williams_R_14":        williams_r14,
+            "STOCH_K_14":           stoch_k14,
+            "STOCH_D_3":            stoch_d3,
         },
         "volatility": {
             "annualized_volatility": ann_vol,
@@ -525,6 +706,7 @@ def build_stock_feature_packet(
             "avg_volume_60":  avg_vol60,
             "latest_volume":  latest_vol,
             "volume_ratio_20": vol_ratio20,
+            "CMF_20":          cmf20,
         },
         "support_resistance": {
             "recent_support":           recent_support,
@@ -1862,6 +2044,17 @@ def _build_regime_section(feature_packet: dict, calibration_summary: dict) -> st
     else:
         lines.append("  RSI Divergence:   None detected — no divergence signal.")
 
+    # Item #6 ("adapt methodology per regime") -- ground the qualitative
+    # regime read above in this project's own real, measured track record
+    # for that exact regime, not just a generic platitude.
+    try:
+        from segment_reliability import regime_reliability_note
+        _regime_note = regime_reliability_note(regime, adx_regime)
+        if _regime_note:
+            lines.append(_regime_note.rstrip("\n"))
+    except Exception:
+        pass
+
     # Combined regime signal
     if regime == "bullish" and rsi and rsi > 50 and macd_h and macd_h > 0:
         lines.append("  REGIME VERDICT:   STRONG BULL — all 3 regime signals agree -> BUY bias")
@@ -1935,7 +2128,8 @@ def _build_gemini_prompt(
         "TQQQ": ("3x Long NASDAQ ETF",  "leveraged NASDAQ — extremely volatile"),
     }
     # Compute thresholds BEFORE _idx_section so buy_thr/sell_thr are available in the SPX/SPY block
-    buy_thr, sell_thr = _get_horizon_thresholds(horizon_days, _sym_upper)
+    _expected_range_pct = (feature_packet.get("return_magnitude_formula") or {}).get("expected_range_pct")
+    buy_thr, sell_thr = _get_horizon_thresholds(horizon_days, _sym_upper, _expected_range_pct)
 
     _is_index = _sym_upper in _INDEX_ETF_MAP
     _idx_section = ""
@@ -2322,7 +2516,7 @@ SIGNAL SCORES (deterministic, computed from feature packet — these are the obj
 REQUIRED JSON RESPONSE (return ONLY this JSON, no other text):
 {{
   "status": "SUCCESS",
-  "chain_of_thought": "<string: your answers to the 8 chain-of-thought steps above, concatenated>",
+  "chain_of_thought": "<compact, one short phrase per step, e.g. 'T:BULLISH M:ACCEL V:CONTRACT MA:ABOVE Cal:<1 phrase> Opt:<1 phrase> Bull:7 Bear:3' — NOT prose paragraphs>",
   "ai_provider": "gemini",
   "predicted_return_pct": <float, clamped to -20.0 to +20.0>,
   "confidence_score": <integer 0-100>,
@@ -2332,18 +2526,15 @@ REQUIRED JSON RESPONSE (return ONLY this JSON, no other text):
   "bearish_score_assessment": <integer 0-100, your assessment of bearish evidence>,
   "narrative_dependency_score": <integer 0-100: how much does THIS call depend on narrative/sentiment/news-driven factors rather than pure price-technicals? 0 = purely technical (e.g. a broad index following its trend), 100 = the call hinges on story/sentiment/catalyst factors that technicals alone can't capture (e.g. a single volatile stock driven by news flow)>,
   "primary_signal": "<single most important indicator driving your prediction>",
-  "trend_assessment": "<3-4 sentences: What is the current trend regime (bullish/bearish/sideways)? Where is price relative to SMA20, SMA50, SMA200? How long has this trend been in place? Is the trend strengthening or weakening based on the last 20-60 days of price action?>",
-  "momentum_assessment": "<3-4 sentences: What is the exact RSI value and what does it signal (overbought/oversold/neutral)? What direction is MACD histogram pointing and is it accelerating or decelerating? How does the Rate of Change (ROC) confirm or conflict with RSI? Is momentum building or exhausting?>",
-  "volatility_assessment": "<2-3 sentences: What does ATR tell us about current volatility relative to its average? Are Bollinger Bands expanding or contracting? Does current volatility support or argue against a directional move in the prediction window?>",
-  "benchmark_assessment": "<2-3 sentences: How has this stock performed relative to its benchmark over the past 20 and 60 days? Is it outperforming or underperforming? What does relative strength tell us about market sentiment toward this stock?>",
-  "bull_case": "<2-3 sentences: What is the specific price target and catalyst for a bullish outcome? Which combination of indicators most strongly supports upside? What must hold true for this scenario to play out?>",
-  "bear_case": "<2-3 sentences: What is the specific price level and catalyst for a bearish outcome? Which indicators signal downside risk? What would trigger further selling pressure?>",
-  "main_reason": "<6-8 sentences: Start with WHAT decision was made and WHY that specific decision was reached. Explain WHERE price is positioned (support/resistance/trend levels). Explain HOW the key indicators (RSI, MACD, trend) combine to support this call. State WHEN this analysis is most likely to play out (early, mid, or late in the prediction window). Explain WHAT RISK factors exist. State what CONFIRMATION signal would strengthen conviction. End with the overall confidence level and what would change the call.>",
-  "hold_reason": "<only if decision is HOLD — 3-4 sentences explaining exactly which bullish signals cancel which bearish signals and why neither side has sufficient edge to commit>",
-  "why_not_opposite_decision": "<3-4 sentences: Explain specifically why the opposite direction was rejected. Which indicators argued for the opposite? Why were those signals overruled? What would need to change for the opposite call to be valid?>",
-  "invalidating_conditions": ["<specific price level or indicator reading that would invalidate this call>", "<second invalidating condition>", "<third invalidating condition>"],
-  "calibration_notes": "<2 sentences on what past failure patterns you avoided in this prediction and how calibration history influenced your confidence level>",
-  "key_features_used": ["REQUIRED FIRST ENTRY: your return magnitude calculation — e.g. 'ATR14=12.4, price=741, daily_vol=1.67%, sqrt(30)=5.48, range=9.16%, direction_factor=0.38 → predicted=+3.48%'", "second most important feature with exact value", "third feature", "fourth feature", "fifth feature"],
+  "trend_assessment": "<EXACTLY 1 sentence: trend regime + where price sits vs SMA20/50/200>",
+  "momentum_assessment": "<EXACTLY 1 sentence: RSI value + MACD direction, building or exhausting>",
+  "volatility_assessment": "<EXACTLY 1 sentence: ATR vs average, Bollinger expanding or contracting>",
+  "benchmark_assessment": "<EXACTLY 1 sentence: outperforming or underperforming benchmark, by how much>",
+  "bull_case": "<EXACTLY 1 sentence: price target + single strongest bullish catalyst>",
+  "bear_case": "<EXACTLY 1 sentence: price level + single strongest bearish catalyst>",
+  "main_reason": "<2-3 sentences total: the decision, the single strongest supporting reason, and the main risk that could invalidate it.>",
+  "why_not_opposite_decision": "<EXACTLY 1 sentence: the single strongest signal that argued for the opposite call and why it was overruled>",
+  "key_features_used": ["REQUIRED FIRST ENTRY: your return magnitude calculation — e.g. 'ATR14=12.4, price=741, daily_vol=1.67%, sqrt(30)=5.48, range=9.16%, direction_factor=0.38 → predicted=+3.48%'", "second most important feature with exact value", "third feature"],
   "data_limitations": ["list of 1-3 specific data gaps that could affect accuracy — be specific about what is missing and how it matters"],
   "options_strategy_assessment": "<REQUIRED if OPTIONS STRATEGY CONTEXT was provided above, else null. State: (1) Does current ATR support required move? (2) Is directional alignment FAVORABLE/NEUTRAL/UNFAVORABLE? (3) For short DTE (<=5 days): does ATR support enough single-day move? (4) One-sentence verdict on whether this position makes sense given current market.>",
   "user_strategy_evaluation": {{
@@ -2833,7 +3024,28 @@ def _tally_consensus_votes(results: List[dict], call_labels: List[str], fallback
     if total_attempted == 0:
         # True failure — every call errored/failed to parse. Fall back to a single
         # direct call (no consensus possible).
-        fallback = fallback_fn()
+        #
+        # Hard-timeout-protected, same as the 3 consensus calls themselves
+        # (_CONSENSUS_CALL_HARD_TIMEOUT_S) -- confirmed live this session that
+        # without this, a fallback call reached only when ALL 3 consensus
+        # calls already failed/timed out could itself hang past 9 minutes
+        # with no bound at all, since fallback_fn() previously called
+        # _call_gemini directly, bypassing the ThreadPoolExecutor wrapper
+        # entirely and relying solely on GEMINI_REQUEST_TIMEOUT_MS's broken
+        # per-chunk (not total-duration) httpx timeout.
+        _fb_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        _fb_future = _fb_executor.submit(fallback_fn)
+        try:
+            fallback = _fb_future.result(timeout=_CONSENSUS_CALL_HARD_TIMEOUT_S)
+        except concurrent.futures.TimeoutError:
+            fallback = {
+                "status": "FAILED", "decision": "REVIEW", "gemini_used": False,
+                "error": f"fallback call exceeded the {_CONSENSUS_CALL_HARD_TIMEOUT_S:.0f}s hard timeout -- abandoned",
+            }
+        except Exception as exc:
+            fallback = {"status": "FAILED", "decision": "REVIEW", "gemini_used": False,
+                        "error": f"{type(exc).__name__}: {exc}"}
+        _fb_executor.shutdown(wait=False)
         fallback["consensus_votes"]      = {"BUY": 0, "SELL": 0, "HOLD": 0}
         fallback["consensus_confidence"] = "LOW"
         fallback["consensus_calls"]      = []
@@ -2857,6 +3069,27 @@ def _tally_consensus_votes(results: List[dict], call_labels: List[str], fallback
     sell_count = sum(1 for _, r in successful if r.get("decision") == "SELL")
 
     n = len(results)
+
+    # Majority-HOLD with a minority directional dissenter (e.g. 2 HOLD + 1 BUY)
+    # -- a real majority preference for "don't trade this," not the genuine
+    # 3-way noise the skip gate below exists for. This is the pattern that
+    # actually fires in production (confirmed from real logged skips this
+    # session, e.g. "Votes: {'BUY': 1, 'SELL': 0, 'HOLD': 2}") -- a true,
+    # irreducible 1-BUY/1-SELL/1-HOLD split with no majority on anything
+    # still falls through to the LOW branch below unaffected (hold_count==1
+    # there, not >=2) -- see test_genuinely_mixed_low_confidence_still_skipped.
+    if hold_count >= 2:
+        hold_calls = [r for _, r in attempted if r.get("decision") not in ("BUY", "SELL")]
+        chosen_result = dict(hold_calls[0]) if hold_calls else dict(attempted[0][1])
+        chosen_result["decision"] = "HOLD"
+        chosen_result["consensus_votes"]      = {"BUY": buy_count, "SELL": sell_count, "HOLD": hold_count}
+        chosen_result["consensus_confidence"] = "MEDIUM"
+        chosen_result["consensus_calls"]      = [
+            {"call": call_labels[i], "decision": r.get("decision", "FAILED"), "status": r.get("status", "FAILED")}
+            for i, r in enumerate(results)
+        ]
+        return chosen_result
+
     # Confidence reflects how many of the attempted calls actually agreed on a
     # direction — a HOLD/REVIEW among them is weaker evidence than clean
     # directional agreement, even though it can't change which side wins.
@@ -2939,8 +3172,59 @@ def _apply_technical_override_and_return(chosen_result: dict, feature_packet: di
     # see them. Moved to run_gemini_stock_prediction, after those scores are
     # folded into feature_packet, so the shadow model gets the full feature
     # set instead of a permanently-incomplete one. See that function for the
-    # real block (search "ML signal cross-check, SHADOW MODE ONLY").
+    # real block (search "ML signal cross-check").
     return chosen_result
+
+
+def _apply_ml_segment_override(
+    gemini_result: dict,
+    ml_pred: dict,
+    has_dedicated_segment_model: bool,
+    origin_price: float,
+    initial_capital: float,
+    enabled: bool,
+) -> dict:
+    """Research Expansion Program, Component 6 follow-up.
+
+    Promotes the shadow ML model (ml_pred, from ml_signal_model.predict_proba)
+    from logged-only to an active decision override -- but ONLY when BOTH:
+      - `enabled` (ENABLE_ML_SEGMENT_OVERRIDE) is on, and
+      - `has_dedicated_segment_model` is True, i.e. this (symbol, horizon)
+        segment has its OWN trained model, not the blended default_model
+        fallback (which has no supporting evidence -- see SegmentedModel).
+
+    Mutates and returns gemini_result. No-op (returns unchanged) when either
+    gate fails, when ml_pred is falsy, or when ml_pred's decision already
+    agrees with gemini_result's -- nothing to override in that case.
+    """
+    if not (enabled and has_dedicated_segment_model and ml_pred):
+        return gemini_result
+    if ml_pred.get("decision") == gemini_result.get("decision"):
+        return gemini_result
+
+    original_decision = gemini_result.get("decision")
+    original_return    = gemini_result.get("predicted_return_pct")
+    gemini_result["decision"] = ml_pred["decision"]
+
+    # Same recompute pattern as the technical override above -- keep
+    # return/target/capital/P&L fields consistent with the new decision.
+    sign      = 1.0 if ml_pred["decision"] == "BUY" else -1.0
+    magnitude = abs(float(original_return or 0.0))
+    new_return, new_target, new_capital, new_pl = _recompute_price_fields(
+        sign * magnitude, origin_price, initial_capital,
+    )
+    gemini_result["predicted_return_pct"]    = new_return
+    gemini_result["predicted_target_price"]  = new_target
+    gemini_result["predicted_final_capital"] = new_capital
+    gemini_result["predicted_total_pl"]      = new_pl
+    gemini_result["decision_reason"] = (
+        f"ML SEGMENT OVERRIDE (segment={ml_pred.get('segment')}, "
+        f"p_buy={ml_pred.get('p_buy')}, p_sell={ml_pred.get('p_sell')}): "
+        f"this segment's dedicated model disagreed with Gemini consensus. "
+        f"Original AI consensus: {original_decision} "
+        f"({original_return}% return -> {new_return}% return)"
+    )
+    return gemini_result
 
 
 def _call_gemini_consensus(
@@ -2961,6 +3245,239 @@ def _call_gemini_consensus(
     chart_images (when provided) is the SAME {"wide": ..., "detail": ...} pair
     attached to all 3 calls -- the underlying visual evidence is identical
     across reasoning modes, only the text prompt's framing differs.
+
+    The 3 calls are INDEPENDENT (same feature_packet, different reasoning-mode
+    framing only) and run CONCURRENTLY, not sequentially. Confirmed live this
+    session: run sequentially, 3 real deep-thinking calls took up to ~570s
+    total (92-191s each); GEMINI_REQUEST_TIMEOUT_MS's own 60s HTTP timeout
+    does NOT bound a call's real wall-clock duration here (google-genai's
+    httpx-based timeout is a per-read-chunk timeout, not a total-duration
+    cap, and a "thinking" model streams tokens throughout, so the timer
+    keeps resetting) -- some calls were observed hanging 45+ minutes with
+    no response at all. Running the 3 calls concurrently turns the total
+    latency from sum(3 calls) into max(3 calls) at zero cost to prediction
+    quality (identical calls, just not serialized), and the explicit
+    `.result(timeout=...)` below is this project's own enforced hard cap --
+    a call that exceeds it is abandoned (its background thread may keep
+    running until the underlying connection eventually errors out, but the
+    prediction path does not wait on it) and counted as a failed vote for
+    that mode, exactly like any other `_call_gemini` failure already is.
+    _CONSENSUS_CALL_HARD_TIMEOUT_S is set well above the real 92-191s
+    latencies observed for genuinely successful deep-thinking calls with
+    this project's configured GEMINI_MODEL (gemini-3.1-pro-preview), so a
+    good, just-slow call is never discarded -- only a true runaway hang is.
+    """
+    call_labels, results, fallback_fn = _run_three_independent_candidates(
+        normalized_input, feature_packet, calibration_summary, origin_price, initial_capital,
+        earnings_warning=earnings_warning, market_movers_context=market_movers_context,
+        chart_images=chart_images,
+    )
+    chosen_result = _tally_consensus_votes(results, call_labels, fallback_fn)
+    return _apply_technical_override_and_return(chosen_result, feature_packet, origin_price, initial_capital)
+
+
+# ── Research Expansion Program -- genuinely diverse candidate calls ────────
+# This project's own data shows the existing 3-call consensus (same full
+# feature_packet, only prompt FRAMING differs) agrees 72% of the time, and
+# agreement doesn't predict accuracy (52.5% vs 53.3%) -- the calls aren't
+# actually diverse, just re-reading the same evidence with different
+# rhetoric. The Selection Bottleneck study's judge-beats-vote result assumes
+# a genuinely diverse candidate pool; without that, judge-based aggregation
+# has little to select BETWEEN. This masks feature_packet itself into 3
+# disjoint evidence subsets -- technicals-only, news/fundamentals-only,
+# market-regime-only -- so each call reasons from different real evidence,
+# not just a different tone on identical evidence.
+_TECHNICAL_SECTIONS = {
+    "returns", "trend", "momentum", "volatility", "volume",
+    "support_resistance", "benchmark_comparison", "reversal_signals",
+    "return_magnitude_formula",
+}
+_NEWS_FUNDAMENTAL_KEYS = {
+    "returns", "news_sentiment_score", "news_sentiment_article_count",
+    "sec_8k_filing_count", "yahoo_headline_count", "earnings_days_away",
+    "insider_buy_count", "insider_sell_count", "insider_net_signal",
+    "congress_buy_count", "congress_sell_count", "congress_net_signal",
+    "institutional_holder_count", "institutional_flow_score",
+    "sec_revenue", "sec_revenue_yoy_pct", "sec_net_income",
+    "sec_net_income_yoy_pct", "sec_eps_diluted", "pe_ratio", "pb_ratio", "ps_ratio",
+    "pead_composite_score", "earnings_reaction_score", "canslim_composite_score",
+    "dividend_growth_score", "dividend_cagr_3yr", "value_dividend_score",
+    "reddit_mentions", "reddit_mentions_24h_change",
+}
+_REGIME_KEYS = {
+    "returns", "benchmark_comparison", "macro_regime_composite_score",
+    "market_breadth_200ma", "market_breadth_8ma", "market_uptrend_ratio",
+    "ftd_dual_confirmation", "ibd_qqq_d25_count", "market_top_risk_score",
+    "fed_funds_rate_pct", "treasury_10y_yield_pct",
+    "macro_event_days_away", "macro_event_tier",
+    "downtrend_median_duration_days", "downtrend_p90_duration_days",
+}
+_FEATURE_PACKET_METADATA_KEYS = {
+    "status", "n_bars", "data_quality_score", "symbol", "benchmark",
+    "price_basis", "origin_price", "requested_ctx_start", "effective_ctx_start",
+    "ctx_start", "origin_date", "horizon_days",
+}
+
+
+def _mask_feature_packet_for_diversity(feature_packet: dict, mode: str) -> dict:
+    """Returns a deep-ish copy of feature_packet containing ONLY metadata +
+    the evidence cluster for `mode` ("technicals_only" | "news_only" |
+    "regime_only"). Sections/keys outside that cluster are dropped entirely
+    (not nulled) so the prompt's JSON dump genuinely doesn't mention them --
+    a call can't "see" evidence that isn't in its packet."""
+    masked = {k: v for k, v in feature_packet.items() if k in _FEATURE_PACKET_METADATA_KEYS}
+    if mode == "technicals_only":
+        for section in _TECHNICAL_SECTIONS:
+            if section in feature_packet:
+                masked[section] = feature_packet[section]
+    elif mode == "news_only":
+        for key in _NEWS_FUNDAMENTAL_KEYS:
+            if key in feature_packet:
+                masked[key] = feature_packet[key]
+    elif mode == "regime_only":
+        for key in _REGIME_KEYS:
+            if key in feature_packet:
+                masked[key] = feature_packet[key]
+    else:
+        return dict(feature_packet)
+    return masked
+
+
+def _run_three_diverse_candidates(
+    normalized_input: dict,
+    feature_packet: dict,
+    calibration_summary: dict,
+    origin_price: float,
+    initial_capital: float,
+    earnings_warning: str = "",
+    market_movers_context: str = "",
+    chart_images: Optional[Dict[str, bytes]] = None,
+) -> Tuple[List[str], List[dict], Any]:
+    """Same shape/contract as _run_three_independent_candidates, but each
+    call gets a DIFFERENT, masked feature_packet (technicals-only /
+    news-only / regime-only) instead of the same full packet with a
+    different prompt framing."""
+    masked_packets = {
+        "technicals_only": _mask_feature_packet_for_diversity(feature_packet, "technicals_only"),
+        "news_only": _mask_feature_packet_for_diversity(feature_packet, "news_only"),
+        "regime_only": _mask_feature_packet_for_diversity(feature_packet, "regime_only"),
+    }
+
+    def _make_call(mode: str):
+        return _call_gemini(
+            normalized_input, masked_packets[mode], calibration_summary, origin_price, initial_capital,
+            earnings_warning=earnings_warning, market_movers_context=market_movers_context,
+            chart_images=chart_images,
+        )
+
+    call_labels = ["technicals_only", "news_only", "regime_only"]
+    results: List[dict] = [None, None, None]  # type: ignore[list-item]
+
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
+    future_to_index = {executor.submit(_make_call, mode): i for i, mode in enumerate(call_labels)}
+    for future in future_to_index:
+        i = future_to_index[future]
+        try:
+            results[i] = future.result(timeout=_CONSENSUS_CALL_HARD_TIMEOUT_S)
+        except concurrent.futures.TimeoutError:
+            results[i] = {
+                "status": "FAILED", "gemini_used": False,
+                "error": f"diverse call ({call_labels[i]}) exceeded the "
+                         f"{_CONSENSUS_CALL_HARD_TIMEOUT_S:.0f}s hard timeout -- abandoned, not awaited further",
+                "gemini_latency_ms": _CONSENSUS_CALL_HARD_TIMEOUT_S * 1000,
+            }
+        except Exception as exc:
+            results[i] = {
+                "status": "FAILED", "gemini_used": False,
+                "error": f"{type(exc).__name__}: {exc}", "gemini_latency_ms": 0,
+            }
+    executor.shutdown(wait=False)
+
+    def _fallback():
+        return _call_gemini(
+            normalized_input, feature_packet, calibration_summary, origin_price, initial_capital,
+            earnings_warning=earnings_warning, market_movers_context=market_movers_context,
+            chart_images=chart_images,
+        )
+
+    return call_labels, results, _fallback
+
+
+def _call_gemini_diverse_consensus(
+    normalized_input: dict,
+    feature_packet: dict,
+    calibration_summary: dict,
+    origin_price: float,
+    initial_capital: float,
+    earnings_warning: str = "",
+    market_movers_context: str = "",
+    chart_images: Optional[Dict[str, bytes]] = None,
+) -> dict:
+    """Research Expansion Program -- genuinely diverse 3-call consensus
+    (technicals-only / news-only / regime-only, masked feature packets).
+    OPT-IN (ENABLE_DIVERSE_CONSENSUS). Composes with ENABLE_JUDGE_AGGREGATION
+    if also set (judge over genuinely diverse candidates is the configuration
+    the Selection Bottleneck study's result actually supports); otherwise
+    falls back to the same majority-vote tally every other consensus mode
+    uses, so this is directly comparable to the standard 3-call baseline via
+    the Phase 5 batch harness."""
+    call_labels, results, fallback_fn = _run_three_diverse_candidates(
+        normalized_input, feature_packet, calibration_summary, origin_price, initial_capital,
+        earnings_warning=earnings_warning, market_movers_context=market_movers_context,
+        chart_images=chart_images,
+    )
+
+    if ENABLE_JUDGE_AGGREGATION:
+        judge_outcome = _judge_select_candidate(results, call_labels)
+        if judge_outcome is not None:
+            chosen_result = dict(results[judge_outcome["chosen_index"]])
+            buy_count = sum(1 for r in results if r.get("decision") == "BUY")
+            sell_count = sum(1 for r in results if r.get("decision") == "SELL")
+            hold_count = sum(1 for r in results if r.get("status") == "SUCCESS" and r.get("decision") not in ("BUY", "SELL"))
+            chosen_result["consensus_votes"] = {"BUY": buy_count, "SELL": sell_count, "HOLD": hold_count}
+            chosen_result["consensus_calls"] = [
+                {"call": call_labels[i], "decision": r.get("decision", "FAILED"), "status": r.get("status", "FAILED")}
+                for i, r in enumerate(results)
+            ]
+            conf = judge_outcome.get("judge_confidence")
+            chosen_result["consensus_confidence"] = (
+                "HIGH" if isinstance(conf, (int, float)) and conf >= 70
+                else "MEDIUM" if isinstance(conf, (int, float)) and conf >= 40
+                else "LOW"
+            )
+            chosen_result["aggregation_method"] = "judge_over_diverse_candidates"
+            chosen_result["judge_chosen_call"] = call_labels[judge_outcome["chosen_index"]]
+            chosen_result["judge_reasoning"] = judge_outcome["judge_reasoning"]
+            chosen_result["judge_confidence"] = conf
+            chosen_result["judge_model"] = judge_outcome["judge_model"]
+            return _apply_technical_override_and_return(chosen_result, feature_packet, origin_price, initial_capital)
+
+    chosen_result = _tally_consensus_votes(results, call_labels, fallback_fn)
+    chosen_result["aggregation_method"] = "majority_vote_over_diverse_candidates"
+    return _apply_technical_override_and_return(chosen_result, feature_packet, origin_price, initial_capital)
+
+
+def _run_three_independent_candidates(
+    normalized_input: dict,
+    feature_packet: dict,
+    calibration_summary: dict,
+    origin_price: float,
+    initial_capital: float,
+    earnings_warning: str = "",
+    market_movers_context: str = "",
+    chart_images: Optional[Dict[str, bytes]] = None,
+) -> Tuple[List[str], List[dict], Any]:
+    """Shared candidate-generation step for _call_gemini_consensus (majority
+    vote) and _call_gemini_judge_consensus (judge-based selection) -- the 3
+    independent calls themselves are identical either way; only how their
+    outputs get aggregated into one final decision differs. Extracted so
+    both aggregation mechanisms share identical, already-tested call/timeout
+    semantics instead of two copies drifting apart (same reasoning
+    _tally_consensus_votes was already extracted for).
+
+    Returns (call_labels, results, fallback_fn) -- fallback_fn takes no
+    arguments and makes one direct single call, for callers to use only if
+    every candidate failed outright.
     """
     def _make_call(mode: Optional[str]):
         cal = dict(calibration_summary)
@@ -2974,12 +3491,37 @@ def _call_gemini_consensus(
             chart_images=chart_images,
         )
 
-    result1 = _make_call(None)               # standard
-    result2 = _make_call("devils_advocate")
-    result3 = _make_call("pure_technical")
-
-    results = [result1, result2, result3]
     call_labels = ["standard", "devils_advocate", "pure_technical"]
+    modes: List[Optional[str]] = [None, "devils_advocate", "pure_technical"]
+    results: List[dict] = [None, None, None]  # type: ignore[list-item]
+
+    # Deliberately NOT a `with ThreadPoolExecutor() as executor:` block --
+    # the context manager's __exit__ calls shutdown(wait=True), which blocks
+    # until every submitted thread finishes, including one we've already
+    # given up on below via .result(timeout=...). That would silently
+    # reintroduce the exact hang this fix exists to prevent. The executor
+    # (and any thread still stuck inside a true runaway call) is abandoned
+    # without a blocking shutdown; Python reclaims it once those threads
+    # eventually finish or the process exits.
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
+    future_to_index = {executor.submit(_make_call, mode): i for i, mode in enumerate(modes)}
+    for future in future_to_index:
+        i = future_to_index[future]
+        try:
+            results[i] = future.result(timeout=_CONSENSUS_CALL_HARD_TIMEOUT_S)
+        except concurrent.futures.TimeoutError:
+            results[i] = {
+                "status": "FAILED", "gemini_used": False,
+                "error": f"consensus call ({call_labels[i]}) exceeded the "
+                         f"{_CONSENSUS_CALL_HARD_TIMEOUT_S:.0f}s hard timeout -- abandoned, not awaited further",
+                "gemini_latency_ms": _CONSENSUS_CALL_HARD_TIMEOUT_S * 1000,
+            }
+        except Exception as exc:
+            results[i] = {
+                "status": "FAILED", "gemini_used": False,
+                "error": f"{type(exc).__name__}: {exc}", "gemini_latency_ms": 0,
+            }
+    executor.shutdown(wait=False)
 
     def _fallback():
         return _call_gemini(
@@ -2988,7 +3530,136 @@ def _call_gemini_consensus(
             chart_images=chart_images,
         )
 
-    chosen_result = _tally_consensus_votes(results, call_labels, _fallback)
+    return call_labels, results, _fallback
+
+
+def _judge_select_candidate(results: List[dict], call_labels: List[str]) -> Optional[dict]:
+    """Research Expansion Program -- judge-based aggregation (see
+    ENABLE_JUDGE_AGGREGATION docstring near the top of this file). Shows a
+    DIFFERENT model (JUDGE_MODEL, not GEMINI_MODEL -- the research's own
+    disclosed same-family-bias caveat) the 3 candidate decisions + their
+    reasoning, and asks it to pick which one to adopt.
+
+    Returns a dict with keys {"chosen_index": int, "judge_reasoning": str,
+    "judge_confidence": int} on success, or None on any failure (caller
+    must fall back to majority voting -- this is an experimental, opt-in
+    path and must never be the reason a prediction fails outright).
+    """
+    if not _GEMINI_KEY:
+        return None
+
+    candidates_desc = []
+    for i, (label, r) in enumerate(zip(call_labels, results)):
+        if r.get("status") != "SUCCESS":
+            candidates_desc.append(f"Candidate {i} ({label}): FAILED -- {r.get('error', 'unknown error')}")
+            continue
+        candidates_desc.append(
+            f"Candidate {i} ({label}): decision={r.get('decision')}, "
+            f"confidence_score={r.get('confidence_score')}, risk_score={r.get('risk_score')}, "
+            f"predicted_return_pct={r.get('predicted_return_pct')}, "
+            f"reasoning=\"{str(r.get('reasoning', ''))[:400]}\""
+        )
+
+    judge_prompt = (
+        "You are a neutral judge reviewing 3 independent stock-prediction calls made by "
+        "another AI model about the SAME stock/time period, each using a different "
+        "reasoning framing (standard, devil's-advocate/contrarian, pure-technical-only). "
+        "They may disagree. Your job is NOT to average them or default to the majority -- "
+        "pick whichever ONE candidate has the strongest, most internally consistent "
+        "reasoning given its own stated evidence, even if it is the minority view.\n\n"
+        + "\n".join(candidates_desc) +
+        "\n\nRespond with ONLY a JSON object, no other text:\n"
+        '{"chosen_index": <0, 1, or 2 -- a FAILED candidate can never be chosen>, '
+        '"judge_reasoning": "<1-2 sentences: why this one over the others>", '
+        '"judge_confidence_0_100": <integer>}'
+    )
+
+    try:
+        from google import genai
+        from google.genai import types as genai_types
+
+        client = genai.Client(api_key=_GEMINI_KEY, http_options=genai_types.HttpOptions(timeout=30000))
+        response = _generate_content_with_retry(
+            client,
+            model=JUDGE_MODEL,
+            contents=judge_prompt,
+            config=genai_types.GenerateContentConfig(
+                temperature=0.0,
+                max_output_tokens=500,
+                response_mime_type="application/json",
+                thinking_config=genai_types.ThinkingConfig(thinking_budget=1024),
+            ),
+        )
+        raw = (response.text or "").strip()
+        json_text = _extract_json(raw)
+        parsed = json.loads(json_text)
+        chosen_index = int(parsed.get("chosen_index"))
+        if chosen_index not in (0, 1, 2) or results[chosen_index].get("status") != "SUCCESS":
+            return None
+        return {
+            "chosen_index": chosen_index,
+            "judge_reasoning": str(parsed.get("judge_reasoning", "")),
+            "judge_confidence": parsed.get("judge_confidence_0_100"),
+            "judge_model": JUDGE_MODEL,
+        }
+    except Exception:
+        return None
+
+
+def _call_gemini_judge_consensus(
+    normalized_input: dict,
+    feature_packet: dict,
+    calibration_summary: dict,
+    origin_price: float,
+    initial_capital: float,
+    earnings_warning: str = "",
+    market_movers_context: str = "",
+    chart_images: Optional[Dict[str, bytes]] = None,
+) -> dict:
+    """Research Expansion Program -- judge-based aggregation. Runs the SAME
+    3 independent candidate calls as _call_gemini_consensus, but instead of
+    a majority vote, a 4th call (a different model, JUDGE_MODEL) picks which
+    ONE candidate to adopt. Falls back to majority voting if the judge call
+    itself fails for any reason (network, parsing, bad index) -- this is an
+    experimental, opt-in path (ENABLE_JUDGE_AGGREGATION) and must degrade
+    gracefully, never block a prediction.
+
+    4 Gemini calls total (3 candidates + 1 judge) -- one more than the
+    standard 3-call consensus, cheaper than the 5-call debate consensus.
+    """
+    call_labels, results, fallback_fn = _run_three_independent_candidates(
+        normalized_input, feature_packet, calibration_summary, origin_price, initial_capital,
+        earnings_warning=earnings_warning, market_movers_context=market_movers_context,
+        chart_images=chart_images,
+    )
+
+    judge_outcome = _judge_select_candidate(results, call_labels)
+    if judge_outcome is None:
+        # Judge failed/declined -- fall back to the proven majority-vote path.
+        chosen_result = _tally_consensus_votes(results, call_labels, fallback_fn)
+        chosen_result["aggregation_method"] = "majority_vote_fallback_judge_unavailable"
+        return _apply_technical_override_and_return(chosen_result, feature_packet, origin_price, initial_capital)
+
+    chosen_result = dict(results[judge_outcome["chosen_index"]])
+    buy_count  = sum(1 for r in results if r.get("decision") == "BUY")
+    sell_count = sum(1 for r in results if r.get("decision") == "SELL")
+    hold_count = sum(1 for r in results if r.get("status") == "SUCCESS" and r.get("decision") not in ("BUY", "SELL"))
+    chosen_result["consensus_votes"]      = {"BUY": buy_count, "SELL": sell_count, "HOLD": hold_count}
+    chosen_result["consensus_calls"]      = [
+        {"call": call_labels[i], "decision": r.get("decision", "FAILED"), "status": r.get("status", "FAILED")}
+        for i, r in enumerate(results)
+    ]
+    conf = judge_outcome.get("judge_confidence")
+    chosen_result["consensus_confidence"] = (
+        "HIGH" if isinstance(conf, (int, float)) and conf >= 70
+        else "MEDIUM" if isinstance(conf, (int, float)) and conf >= 40
+        else "LOW"
+    )
+    chosen_result["aggregation_method"] = "judge"
+    chosen_result["judge_chosen_call"]  = call_labels[judge_outcome["chosen_index"]]
+    chosen_result["judge_reasoning"]    = judge_outcome["judge_reasoning"]
+    chosen_result["judge_confidence"]   = conf
+    chosen_result["judge_model"]        = judge_outcome["judge_model"]
     return _apply_technical_override_and_return(chosen_result, feature_packet, origin_price, initial_capital)
 
 
@@ -3207,37 +3878,588 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
 
     _origin_is_recent = _is_recent_origin(origin_str)
 
-    # Research Expansion Program, Component 1 — SEC EDGAR insider transactions
-    # (free, official, no key). Same scoping/degrade-gracefully discipline as
-    # the Alpha Vantage block above: non-index symbols only, as-of-date
-    # filtered so it's safe for historical replay too.
-    if not _is_index_symbol:
+    # Per-prediction leakage probe -- OPT-IN (ENABLE_LAP_PROBE_PER_PREDICTION),
+    # one extra Gemini call, never blocks the main prediction on failure.
+    _leakage_probe_result: Optional[dict] = None
+    if ENABLE_LAP_PROBE_PER_PREDICTION and target_str:
+        try:
+            from lap_leakage_probe import check_leakage_for_prediction
+            _leakage_probe_result = check_leakage_for_prediction(symbol, target_str)
+        except Exception as exc:
+            _leakage_probe_result = {"checked": False, "error": f"{type(exc).__name__}: {exc}"}
+
+    # ---- Context-enrichment data fetches, run CONCURRENTLY -----------------
+    # Each of the ~28 free/alt-data providers below (SEC EDGAR, ApeWisdom,
+    # macro/regime/breadth/FTD/IBD/market-top, the CANSLIM/VCP/Stockbee/PEAD/
+    # dividend screens, put/call ratio, market movers, chart vision, etc.) is
+    # an independent, read-only lookup keyed only on (symbol, origin_str) --
+    # none of them reads another's output or feeds the next one. Running them
+    # sequentially (as before) meant their latencies simply added up on top of
+    # the Gemini call itself -- this was the actual, honest reason a single
+    # prediction could take far longer than the Gemini call alone would
+    # suggest. Firing them concurrently (same ThreadPoolExecutor pattern
+    # already used for the 3 Gemini consensus calls) collapses that sum down
+    # to roughly the slowest single provider. This changes nothing about WHAT
+    # data is fetched, how it's parsed, or what Gemini ultimately sees --
+    # every feature_packet key/warning ends up identical to the sequential
+    # version, just collected faster. The whole batch is bounded by one
+    # ceiling (default 25s) so a single slow/dead free provider -- or all of
+    # them, e.g. during a DNS outage -- can never stall a prediction the way
+    # the unbounded Gemini calls used to; tasks still running past the
+    # deadline are abandoned (not waited on) and simply recorded as a warning.
+    _ENRICHMENT_BATCH_TIMEOUT_S = float(os.getenv("CONTEXT_ENRICHMENT_BATCH_TIMEOUT_S", "25"))
+
+    def _task_insider():
+        if _is_index_symbol:
+            return {}
         try:
             from insider_activity_service import fetch_insider_activity
-            _insider_data, _insider_err = fetch_insider_activity(symbol, origin_str)
-            if _insider_data:
-                feature_packet["insider_buy_count"] = _insider_data.get("buy_count")
-                feature_packet["insider_sell_count"] = _insider_data.get("sell_count")
-                feature_packet["insider_net_signal"] = _insider_data.get("net_signal")
-            elif _insider_err:
-                _context_enrichment_warnings["sec_edgar_insider"] = _insider_err
+            _data, _err = fetch_insider_activity(symbol, origin_str)
+            if _data:
+                return {"feature": {
+                    "insider_buy_count": _data.get("buy_count"),
+                    "insider_sell_count": _data.get("sell_count"),
+                    "insider_net_signal": _data.get("net_signal"),
+                }}
+            if _err:
+                return {"warning": ("sec_edgar_insider", _err)}
+            return {}
         except Exception as exc:
-            _context_enrichment_warnings["sec_edgar_insider"] = f"{type(exc).__name__}: {exc}"
+            return {"warning": ("sec_edgar_insider", f"{type(exc).__name__}: {exc}")}
 
-    # Research Expansion Program, Component 2 — ApeWisdom Reddit attention
-    # (free, keyless). LIVE-ONLY (current snapshot, no point-in-time
-    # capability) -- gated to _origin_is_recent, same as market movers.
-    if not _is_index_symbol and _origin_is_recent:
+    def _task_reddit():
+        if _is_index_symbol or not _origin_is_recent:
+            return {}
         try:
             from social_attention_service import fetch_reddit_attention
-            _reddit_data, _reddit_err = fetch_reddit_attention(symbol)
-            if _reddit_data:
-                feature_packet["reddit_mentions"] = _reddit_data.get("mentions")
-                feature_packet["reddit_mentions_24h_change"] = _reddit_data.get("mentions_24h_change")
-            elif _reddit_err:
-                _context_enrichment_warnings["apewisdom_reddit"] = _reddit_err
+            _data, _err = fetch_reddit_attention(symbol)
+            if _data:
+                return {"feature": {
+                    "reddit_mentions": _data.get("mentions"),
+                    "reddit_mentions_24h_change": _data.get("mentions_24h_change"),
+                }}
+            if _err:
+                return {"warning": ("apewisdom_reddit", _err)}
+            return {}
         except Exception as exc:
-            _context_enrichment_warnings["apewisdom_reddit"] = f"{type(exc).__name__}: {exc}"
+            return {"warning": ("apewisdom_reddit", f"{type(exc).__name__}: {exc}")}
+
+    def _task_macro_data():
+        try:
+            from macro_data_service import fetch_macro_snapshot
+            _data, _err = fetch_macro_snapshot(origin_str)
+            out = {}
+            if _data:
+                out["feature"] = {
+                    "fed_funds_rate_pct": _data.get("fed_funds_rate_pct"),
+                    "treasury_10y_yield_pct": _data.get("treasury_10y_yield_pct"),
+                }
+            if _err:
+                out["warning"] = ("macro_data", _err)
+            return out
+        except Exception as exc:
+            return {"warning": ("macro_data", f"{type(exc).__name__}: {exc}")}
+
+    def _task_congress():
+        if _is_index_symbol:
+            return {}
+        try:
+            from congress_trade_service import fetch_congress_trades
+            _data, _err = fetch_congress_trades(symbol, origin_str)
+            if _data:
+                return {"feature": {
+                    "congress_buy_count": _data.get("buy_count"),
+                    "congress_sell_count": _data.get("sell_count"),
+                    "congress_net_signal": _data.get("net_signal"),
+                }}
+            if _err:
+                return {"warning": ("congress_trades", _err)}
+            return {}
+        except Exception as exc:
+            return {"warning": ("congress_trades", f"{type(exc).__name__}: {exc}")}
+
+    def _task_institutional_holdings():
+        if _is_index_symbol:
+            return {}
+        try:
+            from institutional_holdings_service import fetch_institutional_holders
+            _data, _err = fetch_institutional_holders(symbol, origin_str)
+            if _data:
+                return {"feature": {"institutional_holder_count": _data.get("holder_count")}}
+            if _err:
+                return {"warning": ("institutional_holdings", _err)}
+            return {}
+        except Exception as exc:
+            return {"warning": ("institutional_holdings", f"{type(exc).__name__}: {exc}")}
+
+    def _task_market_breadth():
+        try:
+            from market_breadth_service import fetch_market_breadth_snapshot
+            _data, _err = fetch_market_breadth_snapshot(origin_str)
+            out = {}
+            if _data:
+                out["feature"] = {
+                    "market_breadth_200ma": _data.get("breadth_200ma"),
+                    "market_breadth_8ma": _data.get("breadth_8ma"),
+                    "market_uptrend_ratio": _data.get("uptrend_ratio"),
+                }
+            if _err:
+                out["warning"] = ("market_breadth", _err)
+            return out
+        except Exception as exc:
+            return {"warning": ("market_breadth", f"{type(exc).__name__}: {exc}")}
+
+    def _task_macro_regime():
+        try:
+            from macro_regime_service import compute_macro_regime
+            _data, _err = compute_macro_regime(origin_str)
+            out = {}
+            if _data:
+                out["feature"] = {
+                    "macro_regime_composite_score": _data.get("composite_score"),
+                    "macro_regime_current": _data.get("current_regime"),
+                    "macro_regime_confidence": _data.get("confidence"),
+                }
+            if _err:
+                out["warning"] = ("macro_regime", _err)
+            return out
+        except Exception as exc:
+            return {"warning": ("macro_regime", f"{type(exc).__name__}: {exc}")}
+
+    def _task_ftd_status():
+        try:
+            from ftd_status_service import compute_ftd_status
+            _data, _err = compute_ftd_status(origin_str)
+            out = {}
+            if _data:
+                out["feature"] = {
+                    "ftd_combined_state": _data.get("combined_state"),
+                    "ftd_dual_confirmation": _data.get("dual_confirmation"),
+                }
+            if _err:
+                out["warning"] = ("ftd_status", _err)
+            return out
+        except Exception as exc:
+            return {"warning": ("ftd_status", f"{type(exc).__name__}: {exc}")}
+
+    def _task_ibd_distribution_day():
+        try:
+            from ibd_distribution_day_service import compute_ibd_distribution_day_status
+            _data, _err = compute_ibd_distribution_day_status(origin_str)
+            out = {}
+            if _data:
+                out["feature"] = {
+                    "ibd_overall_risk_level": _data.get("overall_risk_level"),
+                    "ibd_qqq_d25_count": _data.get("qqq_d25_count"),
+                }
+            if _err:
+                out["warning"] = ("ibd_distribution_day", _err)
+            return out
+        except Exception as exc:
+            return {"warning": ("ibd_distribution_day", f"{type(exc).__name__}: {exc}")}
+
+    def _task_market_top_detector():
+        try:
+            from market_top_detector_service import compute_market_top_risk
+            _data, _err = compute_market_top_risk(origin_str)
+            out = {}
+            if _data:
+                out["feature"] = {
+                    "market_top_risk_score": _data.get("composite_score"),
+                    "market_top_risk_zone": _data.get("zone"),
+                }
+            if _err:
+                out["warning"] = ("market_top_detector", _err)
+            return out
+        except Exception as exc:
+            return {"warning": ("market_top_detector", f"{type(exc).__name__}: {exc}")}
+
+    def _task_sec_8k():
+        if _is_index_symbol:
+            return {}
+        try:
+            from free_news_service import fetch_sec_8k_count
+            _data, _err = fetch_sec_8k_count(symbol, origin_str)
+            if _data:
+                return {"feature": {"sec_8k_filing_count": _data.get("filing_count")}}
+            if _err:
+                return {"warning": ("sec_8k_filings", _err)}
+            return {}
+        except Exception as exc:
+            return {"warning": ("sec_8k_filings", f"{type(exc).__name__}: {exc}")}
+
+    def _task_yahoo_headlines():
+        if _is_index_symbol or not _origin_is_recent:
+            return {}
+        try:
+            from free_news_service import fetch_yahoo_headline_tags
+            _data, _err = fetch_yahoo_headline_tags(symbol)
+            if _data:
+                feature = {
+                    "yahoo_headline_count": _data.get("headline_count"),
+                    "yahoo_headline_tags": _data.get("tags"),
+                }
+                # Research Expansion Program -- per-headline scoring (Lopez-Lira
+                # & Tang's actual mechanism). OPT-IN: one extra Gemini call,
+                # only when there are real titles to classify.
+                if ENABLE_PER_HEADLINE_NEWS_SCORING and _data.get("titles"):
+                    try:
+                        from per_headline_news_scorer import score_headlines
+                        _hl_data, _hl_err = score_headlines(symbol, _data["titles"])
+                        if _hl_data:
+                            feature.update(_hl_data)
+                        elif _hl_err:
+                            return {"feature": feature, "warning": ("per_headline_news_scoring", _hl_err)}
+                    except Exception as _hl_exc:
+                        return {"feature": feature, "warning": ("per_headline_news_scoring", f"{type(_hl_exc).__name__}: {_hl_exc}")}
+                return {"feature": feature}
+            if _err:
+                return {"warning": ("yahoo_headlines", _err)}
+            return {}
+        except Exception as exc:
+            return {"warning": ("yahoo_headlines", f"{type(exc).__name__}: {exc}")}
+
+    def _task_sec_financials():
+        if _is_index_symbol:
+            return {}
+        try:
+            from sec_financials_service import fetch_key_financials, compute_valuation_ratios
+            _data, _err = fetch_key_financials(symbol, origin_str)
+            out: dict = {}
+            feature: dict = {}
+            if _data:
+                feature.update({
+                    "sec_revenue": _data.get("revenue"),
+                    "sec_revenue_yoy_pct": _data.get("revenue_yoy_pct"),
+                    "sec_net_income": _data.get("net_income"),
+                    "sec_net_income_yoy_pct": _data.get("net_income_yoy_pct"),
+                    "sec_eps_diluted": _data.get("eps_diluted"),
+                })
+            elif _err:
+                out["warning"] = ("sec_financials", _err)
+
+            # P/E, P/B, P/S -- uses the SAME origin_price already used for
+            # every other feature in this packet, never a live quote.
+            _ratio_data, _ratio_err = compute_valuation_ratios(symbol, origin_str, origin_price)
+            if _ratio_data:
+                feature.update(_ratio_data)
+            elif _ratio_err and "warning" not in out:
+                out["warning"] = ("sec_valuation_ratios", _ratio_err)
+
+            if feature:
+                out["feature"] = feature
+            return out
+        except Exception as exc:
+            return {"warning": ("sec_financials", f"{type(exc).__name__}: {exc}")}
+
+    def _task_downtrend_duration():
+        try:
+            from downtrend_duration_service import fetch_downtrend_stats
+            _data, _err = fetch_downtrend_stats(symbol, origin_str)
+            out = {}
+            if _data:
+                out["feature"] = {
+                    "downtrend_median_duration_days": _data.get("median_duration_days"),
+                    "downtrend_p90_duration_days": _data.get("p90_duration_days"),
+                }
+            if _err:
+                out["warning"] = ("downtrend_duration", _err)
+            return out
+        except Exception as exc:
+            return {"warning": ("downtrend_duration", f"{type(exc).__name__}: {exc}")}
+
+    def _task_pead_screener():
+        if _is_index_symbol:
+            return {}
+        try:
+            from pead_screener_service import fetch_pead_analysis
+            _data, _err = fetch_pead_analysis(symbol, origin_str)
+            out = {}
+            if _data:
+                out["feature"] = {
+                    "pead_composite_score": _data.get("composite_score"),
+                    "pead_stage": _data.get("stage"),
+                }
+            if _err:
+                out["warning"] = ("pead_screener", _err)
+            return out
+        except Exception as exc:
+            return {"warning": ("pead_screener", f"{type(exc).__name__}: {exc}")}
+
+    def _task_earnings_trade_analyzer():
+        if _is_index_symbol:
+            return {}
+        try:
+            from earnings_trade_analyzer_service import fetch_earnings_trade_analysis
+            _data, _err = fetch_earnings_trade_analysis(symbol, origin_str)
+            out = {}
+            if _data:
+                out["feature"] = {
+                    "earnings_reaction_score": _data["composite"].get("composite_score"),
+                    "earnings_reaction_grade": _data["composite"].get("grade"),
+                }
+            if _err:
+                out["warning"] = ("earnings_trade_analyzer", _err)
+            return out
+        except Exception as exc:
+            return {"warning": ("earnings_trade_analyzer", f"{type(exc).__name__}: {exc}")}
+
+    def _task_exhaustion_hammer():
+        if _is_index_symbol:
+            return {}
+        try:
+            from stockbee_exhaustion_hammer_service import fetch_exhaustion_hammer_analysis
+            _data, _err = fetch_exhaustion_hammer_analysis(symbol, origin_str)
+            if _data:
+                return {"feature": {
+                    "hammer_setup_score": _data.get("setup_score"),
+                    "hammer_state": _data.get("state"),
+                }}
+            if _err:
+                return {"warning": ("stockbee_exhaustion_hammer", _err)}
+            return {}
+        except Exception as exc:
+            return {"warning": ("stockbee_exhaustion_hammer", f"{type(exc).__name__}: {exc}")}
+
+    def _task_momentum_burst():
+        if _is_index_symbol:
+            return {}
+        try:
+            from stockbee_momentum_burst_service import fetch_momentum_burst_analysis
+            _data, _err = fetch_momentum_burst_analysis(symbol, origin_str)
+            if _data:
+                return {"feature": {
+                    "momentum_burst_score": _data.get("setup_score"),
+                    "momentum_burst_state": _data.get("state"),
+                }}
+            if _err:
+                return {"warning": ("stockbee_momentum_burst", _err)}
+            return {}
+        except Exception as exc:
+            return {"warning": ("stockbee_momentum_burst", f"{type(exc).__name__}: {exc}")}
+
+    def _task_episodic_pivot():
+        if _is_index_symbol:
+            return {}
+        try:
+            from stockbee_episodic_pivot_analyzer_service import fetch_episodic_pivot_analysis
+            _data, _err = fetch_episodic_pivot_analysis(symbol, origin_str)
+            out = {}
+            if _data:
+                out["feature"] = {
+                    "episodic_pivot_score": _data.get("composite_score"),
+                    "episodic_pivot_state": _data.get("state"),
+                }
+            if _err:
+                out["warning"] = ("stockbee_episodic_pivot", _err)
+            return out
+        except Exception as exc:
+            return {"warning": ("stockbee_episodic_pivot", f"{type(exc).__name__}: {exc}")}
+
+    def _task_vcp_screener():
+        if _is_index_symbol:
+            return {}
+        try:
+            from vcp_screener_service import fetch_vcp_analysis
+            _data, _err = fetch_vcp_analysis(symbol, origin_str)
+            if _data:
+                return {"feature": {
+                    "vcp_composite_score": _data.get("composite_score"),
+                    "vcp_execution_state": _data.get("execution_state"),
+                }}
+            if _err:
+                return {"warning": ("vcp_screener", _err)}
+            return {}
+        except Exception as exc:
+            return {"warning": ("vcp_screener", f"{type(exc).__name__}: {exc}")}
+
+    def _task_canslim():
+        if _is_index_symbol:
+            return {}
+        try:
+            from canslim_screener_service import fetch_canslim_analysis
+            _data, _err = fetch_canslim_analysis(symbol, origin_str)
+            if _data:
+                return {"feature": {
+                    "canslim_composite_score": _data.get("composite_score"),
+                    "canslim_rating": _data.get("rating"),
+                }}
+            if _err:
+                return {"warning": ("canslim_screener", _err)}
+            return {}
+        except Exception as exc:
+            return {"warning": ("canslim_screener", f"{type(exc).__name__}: {exc}")}
+
+    def _task_dividend_growth_pullback():
+        if _is_index_symbol:
+            return {}
+        try:
+            from dividend_growth_pullback_screener_service import fetch_dividend_growth_pullback_analysis
+            _data, _err = fetch_dividend_growth_pullback_analysis(symbol, origin_str)
+            out = {}
+            if _data:
+                out["feature"] = {
+                    "dividend_growth_score": _data.get("composite_score"),
+                    "dividend_cagr_3yr": _data.get("dividend_cagr_3yr"),
+                }
+            if _err:
+                out["warning"] = ("dividend_growth_pullback", _err)
+            return out
+        except Exception as exc:
+            return {"warning": ("dividend_growth_pullback", f"{type(exc).__name__}: {exc}")}
+
+    def _task_value_dividend():
+        if _is_index_symbol:
+            return {}
+        try:
+            from value_dividend_screener_service import fetch_value_dividend_analysis
+            _data, _err = fetch_value_dividend_analysis(symbol, origin_str)
+            out = {}
+            if _data:
+                out["feature"] = {
+                    "value_dividend_score": _data.get("composite_score"),
+                    "dividend_stable": _data.get("dividend_stable"),
+                }
+            if _err:
+                out["warning"] = ("value_dividend_screener", _err)
+            return out
+        except Exception as exc:
+            return {"warning": ("value_dividend_screener", f"{type(exc).__name__}: {exc}")}
+
+    def _task_20pct_study():
+        if _is_index_symbol:
+            return {}
+        try:
+            from stockbee_20pct_study_service import fetch_20pct_study
+            _data, _err = fetch_20pct_study(symbol, origin_str)
+            out = {}
+            if _data:
+                out["feature"] = {
+                    "twenty_pct_study_score": _data["scores"].get("continuation_quality_score"),
+                    "twenty_pct_study_direction": _data.get("direction"),
+                }
+            if _err:
+                out["warning"] = ("stockbee_20pct_study", _err)
+            return out
+        except Exception as exc:
+            return {"warning": ("stockbee_20pct_study", f"{type(exc).__name__}: {exc}")}
+
+    def _task_macro_calendar():
+        if not _origin_is_recent:
+            return {}
+        try:
+            from macro_calendar_service import fetch_macro_event_risk
+            _data, _err = fetch_macro_event_risk(origin_str, lookahead_days=horizon_days)
+            out = {}
+            if _data:
+                out["feature"] = {
+                    "macro_event_days_away": _data.get("days_to_nearest_event"),
+                    "macro_event_tier": _data.get("nearest_event_tier"),
+                }
+            if _err:
+                out["warning"] = ("macro_calendar", _err)
+            return out
+        except Exception as exc:
+            return {"warning": ("macro_calendar", f"{type(exc).__name__}: {exc}")}
+
+    def _task_institutional_flow():
+        if _is_index_symbol:
+            return {}
+        try:
+            from institutional_flow_tracker_service import fetch_institutional_flow
+            _data, _err = fetch_institutional_flow(symbol, origin_str)
+            out = {}
+            if _data:
+                out["feature"] = {
+                    "institutional_flow_score": _data.get("flow_score"),
+                    "institutional_flow_classification": _data.get("classification"),
+                }
+            if _err:
+                out["warning"] = ("institutional_flow_tracker", _err)
+            return out
+        except Exception as exc:
+            return {"warning": ("institutional_flow_tracker", f"{type(exc).__name__}: {exc}")}
+
+    def _task_put_call_ratio():
+        if not _origin_is_recent:
+            return {}
+        try:
+            return {"put_call_data": _get_put_call_ratio(symbol)}
+        except Exception:
+            return {"put_call_data": {"available": False}}
+
+    def _task_market_movers():
+        if not _origin_is_recent:
+            return {}
+        try:
+            from rapidapi_market_service import fetch_top_movers_for_gemini
+            _result = fetch_top_movers_for_gemini()
+            if _result.get("status") == "SUCCESS":
+                return {"market_movers_context": _result.get("context_text", "")}
+            return {"warning": ("market_movers", str(_result.get("message") or _result.get("status") or "unavailable"))}
+        except Exception as exc:
+            return {"warning": ("market_movers", f"{type(exc).__name__}: {exc}")}
+
+    def _task_chart_vision():
+        if not ENABLE_CHART_VISION:
+            return {}
+        try:
+            from chart_rendering import render_chart_pair
+            _images = render_chart_pair(
+                history, symbol, origin_str,
+                wide_lookback_days=CHART_VISION_WIDE_LOOKBACK_DAYS,
+                detail_lookback_days=CHART_VISION_DETAIL_LOOKBACK_DAYS,
+            )
+            return {"chart_images": _images}
+        except Exception as exc:
+            return {"warning": ("chart_vision", f"{type(exc).__name__}: {exc}")}
+
+    _enrichment_tasks = [
+        _task_insider, _task_reddit, _task_macro_data, _task_congress,
+        _task_institutional_holdings, _task_market_breadth, _task_macro_regime,
+        _task_ftd_status, _task_ibd_distribution_day, _task_market_top_detector,
+        _task_sec_8k, _task_yahoo_headlines, _task_sec_financials,
+        _task_downtrend_duration, _task_pead_screener, _task_earnings_trade_analyzer,
+        _task_exhaustion_hammer, _task_momentum_burst, _task_episodic_pivot,
+        _task_vcp_screener, _task_canslim, _task_dividend_growth_pullback,
+        _task_value_dividend, _task_20pct_study, _task_macro_calendar,
+        _task_institutional_flow, _task_put_call_ratio, _task_market_movers,
+        _task_chart_vision,
+    ]
+
+    _market_movers_context = ""
+    _chart_images: Optional[Dict[str, bytes]] = None
+    if not _origin_is_recent:
+        calibration_summary["put_call_data"] = {"available": False, "reason": "historical_replay"}
+
+    _enrichment_executor = concurrent.futures.ThreadPoolExecutor(max_workers=len(_enrichment_tasks))
+    _enrichment_futures = {_enrichment_executor.submit(_task): _task for _task in _enrichment_tasks}
+    _enrichment_done, _enrichment_not_done = concurrent.futures.wait(
+        _enrichment_futures.keys(), timeout=_ENRICHMENT_BATCH_TIMEOUT_S
+    )
+    for _future in _enrichment_done:
+        _task = _enrichment_futures[_future]
+        try:
+            _task_result = _future.result() or {}
+        except Exception as exc:
+            _task_result = {"warning": (_task.__name__.replace("_task_", ""), f"{type(exc).__name__}: {exc}")}
+        if _task_result.get("feature"):
+            feature_packet.update(_task_result["feature"])
+        if _task_result.get("warning"):
+            _w_key, _w_val = _task_result["warning"]
+            _context_enrichment_warnings[_w_key] = _w_val
+        if "put_call_data" in _task_result:
+            calibration_summary["put_call_data"] = _task_result["put_call_data"]
+        if "market_movers_context" in _task_result:
+            _market_movers_context = _task_result["market_movers_context"]
+        if "chart_images" in _task_result:
+            _chart_images = _task_result["chart_images"]
+    for _future in _enrichment_not_done:
+        _task = _enrichment_futures[_future]
+        _context_enrichment_warnings[_task.__name__.replace("_task_", "")] = (
+            f"Did not complete within {_ENRICHMENT_BATCH_TIMEOUT_S}s enrichment budget."
+        )
+    _enrichment_executor.shutdown(wait=False)
 
     # Earnings-window warning for the prompt. Previously called the RapidAPI
     # tradingview_calendar endpoint here, confirmed dead this session (404,
@@ -3266,51 +4488,22 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
         except Exception:
             pass
 
-    # Phase 5 — fetch put/call ratio and inject into calibration_summary. yfinance's
-    # options chain is always the LIVE chain (no date param) — same leakage risk.
-    if _origin_is_recent:
-        try:
-            _pc_ratio_data = _get_put_call_ratio(symbol)
-            calibration_summary["put_call_data"] = _pc_ratio_data
-        except Exception:
-            calibration_summary["put_call_data"] = {"available": False}
-    else:
-        calibration_summary["put_call_data"] = {"available": False, "reason": "historical_replay"}
-
-    # Fetch live market movers for LIVE predictions only (leakage-safe: origin within last 7 days)
-    _market_movers_context = ""
-    try:
-        if _origin_is_recent:
-            from rapidapi_market_service import fetch_top_movers_for_gemini
-            _movers_result = fetch_top_movers_for_gemini()
-            if _movers_result.get("status") == "SUCCESS":
-                _market_movers_context = _movers_result.get("context_text", "")
-            else:
-                _context_enrichment_warnings["market_movers"] = str(_movers_result.get("message") or _movers_result.get("status") or "unavailable")
-    except Exception as exc:
-        _context_enrichment_warnings["market_movers"] = f"{type(exc).__name__}: {exc}"
-
-    # Chart-vision input (default OFF, ENABLE_CHART_VISION). Unlike put/call ratio
-    # or the yfinance earnings fallback, this is NOT gated by _is_recent_origin --
-    # it only uses `history`, which is already leakage-filtered/asserted clean by
-    # this point, so it's equally safe for historical replays and live predictions.
-    _chart_images: Optional[Dict[str, bytes]] = None
-    if ENABLE_CHART_VISION:
-        try:
-            from chart_rendering import render_chart_pair
-            _chart_images = render_chart_pair(
-                history, symbol, origin_str,
-                wide_lookback_days=CHART_VISION_WIDE_LOOKBACK_DAYS,
-                detail_lookback_days=CHART_VISION_DETAIL_LOOKBACK_DAYS,
-            )
-        except Exception as exc:
-            _context_enrichment_warnings["chart_vision"] = f"{type(exc).__name__}: {exc}"
-
     # Call Gemini consensus engine -- Phase 1 (triple call, majority vote) by
-    # default, or Component 5's bull/bear debate consensus if explicitly
-    # opted into via ENABLE_DEBATE_CONSENSUS (see that function's docstring
-    # for why this isn't the default).
-    _consensus_fn = _call_gemini_debate_consensus if ENABLE_DEBATE_CONSENSUS else _call_gemini_consensus
+    # default, or an opt-in alternative aggregation: Component 5's bull/bear
+    # debate consensus (ENABLE_DEBATE_CONSENSUS) or judge-based selection
+    # (ENABLE_JUDGE_AGGREGATION, see that function's docstring). Both are
+    # experimental; debate takes precedence if a caller somehow sets both,
+    # since it was the earlier-validated of the two opt-in paths.
+    if ENABLE_DEBATE_CONSENSUS:
+        _consensus_fn = _call_gemini_debate_consensus
+    elif ENABLE_DIVERSE_CONSENSUS:
+        # Handles ENABLE_JUDGE_AGGREGATION internally too (judge over
+        # genuinely diverse candidates, if both flags are set).
+        _consensus_fn = _call_gemini_diverse_consensus
+    elif ENABLE_JUDGE_AGGREGATION:
+        _consensus_fn = _call_gemini_judge_consensus
+    else:
+        _consensus_fn = _call_gemini_consensus
     gemini_result = _consensus_fn(
         spi, feature_packet, calibration_summary, origin_price, initial_cap,
         earnings_warning=_earnings_warning,
@@ -3340,18 +4533,20 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
     feature_packet["bear_conviction_score"] = gemini_result.get("bear_conviction_score")
     feature_packet["narrative_dependency_score"] = gemini_result.get("narrative_dependency_score")
 
-    # Phase 4 — ML signal cross-check, SHADOW MODE ONLY. Logged alongside every
-    # prediction for comparison, never allowed to change decision/return/price
-    # fields -- motivated by this session's own finding that a simpler, older
-    # baseline model already beats the newer triple-consensus architecture
-    # (58.8% vs 47.6% direction match), i.e. more LLM sophistication alone made
-    # things worse. This must accumulate real head-to-head evidence (via the
-    # Phase 5 batch harness) before it's ever trusted to affect a live decision.
-    # Absent model (not yet trained -- see ml_training_runner.py) is the normal,
-    # expected state, not an error. Runs here (not inside _call_gemini_consensus)
-    # so feature_packet already includes Component 4's LLM-alpha scores above.
+    # Phase 4 — ML signal cross-check. Logged alongside every prediction for
+    # comparison (ml_signal_shadow), and -- ONLY on segments with their own
+    # dedicated trained model, and ONLY when ENABLE_ML_SEGMENT_OVERRIDE is on
+    # -- allowed to override decision/return/price fields. Motivated by this
+    # session's own repeated finding that a simpler, older baseline model
+    # beats the newer triple-consensus architecture (most recently: 64.3% vs
+    # 35.7% direction match on the 5 segments with dedicated models, n=14).
+    # Every other segment stays shadow-only (logged, never acted on) since
+    # there's no supporting evidence there. Absent model (not yet trained --
+    # see ml_training_runner.py) is the normal, expected state, not an error.
+    # Runs here (not inside _call_gemini_consensus) so feature_packet already
+    # includes Component 4's LLM-alpha scores above.
     try:
-        from ml_signal_model import load_model, predict_proba
+        from ml_signal_model import load_model, predict_proba, SegmentedModel
         from ml_feature_extractor import feature_packet_to_vector
         from segment_reliability import segment_label as _segment_label_fn
         _ml_model = load_model()
@@ -3364,6 +4559,14 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
                     _ml_pred["agrees_with_final_decision"] = (_ml_pred["decision"] == gemini_result.get("decision"))
                     _ml_pred["segment"] = _seg
                     gemini_result["ml_signal_shadow"] = _ml_pred
+
+                    _has_dedicated_segment_model = (
+                        isinstance(_ml_model, SegmentedModel) and _seg in _ml_model.models
+                    )
+                    gemini_result = _apply_ml_segment_override(
+                        gemini_result, _ml_pred, _has_dedicated_segment_model,
+                        origin_price, initial_cap, ENABLE_ML_SEGMENT_OVERRIDE,
+                    )
     except Exception as _ml_exc:
         gemini_result["ml_signal_shadow_error"] = f"{type(_ml_exc).__name__}: {_ml_exc}"
 
@@ -3422,6 +4625,47 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
     except Exception:
         _calibrated_confidence = None
 
+    # Signal-quality layer -- this project's own live DB shows predicted-move
+    # SIZE is inversely related to correctness too (<2% predicted move: 73.6%
+    # direction-match, n=129; 2-5%: 48.9%, n=350; >5%: 48.3%, n=265), the same
+    # inverted pattern already fixed for stated confidence above. Combines
+    # both calibrated hit rates into one display-only tier -- never changes
+    # decision/predicted_return_pct/target_price, purely additive, exactly
+    # the "sit on top of each raw prediction, never replace it" requirement.
+    _magnitude_calibrated_hit_rate = None
+    try:
+        _mag_map_path = ROOT / "data" / "magnitude_calibration_map.json"
+        if _mag_map_path.exists():
+            from magnitude_calibrator import calibrate_magnitude as _calibrate_magnitude
+            _mag_map = json.loads(_mag_map_path.read_text(encoding="utf-8"))
+            _magnitude_calibrated_hit_rate = _calibrate_magnitude(gemini_result.get("predicted_return_pct"), _mag_map)
+    except Exception:
+        _magnitude_calibrated_hit_rate = None
+
+    try:
+        from magnitude_calibrator import signal_quality_tier as _signal_quality_tier
+        _signal_quality = _signal_quality_tier(_calibrated_confidence, _magnitude_calibrated_hit_rate)
+    except Exception:
+        _signal_quality = {"signal_quality_score": None, "signal_quality_tier": "UNKNOWN"}
+
+    # Position sizing -- see core/position_sizing.py for why this exists and
+    # why it insists on calibrated_confidence over the raw, confirmed-
+    # inversely-correlated confidence_score whenever a calibration map is
+    # available.
+    try:
+        from position_sizing import compute_position_size
+        _recommended_position = compute_position_size(
+            decision=gemini_result["decision"],
+            initial_capital=initial_cap,
+            confidence_score=gemini_result.get("confidence_score"),
+            calibrated_confidence_score=_calibrated_confidence,
+            risk_score=gemini_result.get("risk_score"),
+            trend_regime=(feature_packet.get("trend") or {}).get("trend_regime"),
+            signal_quality_tier=_signal_quality.get("signal_quality_tier"),
+        )
+    except Exception as _pos_exc:
+        _recommended_position = {"status": "ERROR", "reason": f"{type(_pos_exc).__name__}: {_pos_exc}"}
+
     # Gemini reasoning (combine assessments)
     reasoning_parts = [
         gemini_result.get("reasoning") or "",
@@ -3429,6 +4673,118 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
         gemini_result.get("momentum_assessment") or "",
     ]
     reasoning = " | ".join(p for p in reasoning_parts if p)[:800] or "Gemini prediction completed."
+
+    # Price range + which-day-within-the-window prediction (range_timing_predictor.py).
+    # Deterministic -- no extra Gemini call. The range half is backtested at
+    # 77% band-containment and generalizes to any horizon (ATR x sqrt(horizon)
+    # scaling). The day-offset half is only swapped to the KNN precedent model
+    # (measured ~52%/~48% within-+/-1-day hit rate) for horizons close to the
+    # 7d window it was actually validated on -- outside that range its day
+    # guesses would be silently miscalibrated, so they're left unconfident
+    # (None) rather than implying a backtested number that doesn't apply.
+    _range_timing: dict = {}
+    try:
+        from range_timing_predictor import (
+            predict_price_range_and_timing, predict_day_offset_knn, load_range_timing_training_set,
+        )
+        _rt_pred = predict_price_range_and_timing(feature_packet)
+        if _rt_pred.get("status") == "OK":
+            _range_timing = {
+                "predicted_low_price":       _rt_pred["predicted_low_price"],
+                "predicted_high_price":      _rt_pred["predicted_high_price"],
+                "predicted_low_day_offset":  _rt_pred["predicted_low_day_offset"],
+                "predicted_high_day_offset": _rt_pred["predicted_high_day_offset"],
+                "range_basis":               _rt_pred["range_basis"],
+                "day_timing_source":         "rule_based",
+                "low_day_within_1_confidence_pct":  None,
+                "high_day_within_1_confidence_pct": None,
+            }
+            if 3 <= horizon_days <= 10:
+                _training_cases = load_range_timing_training_set()
+                if _training_cases:
+                    from ml_feature_extractor import feature_packet_to_vector
+                    _vec = feature_packet_to_vector(feature_packet)
+                    _knn = predict_day_offset_knn(_vec, _training_cases) if _vec else {"status": "INSUFFICIENT"}
+                    if _knn.get("status") == "OK":
+                        _range_timing["predicted_low_day_offset"]  = _knn["predicted_low_day_offset"]
+                        _range_timing["predicted_high_day_offset"] = _knn["predicted_high_day_offset"]
+                        _range_timing["day_timing_source"] = "knn_precedent"
+                        _range_timing["low_day_within_1_confidence_pct"]  = _knn["low_day_within_1_confidence_pct"]
+                        _range_timing["high_day_within_1_confidence_pct"] = _knn["high_day_within_1_confidence_pct"]
+                        _range_timing["day_timing_basis"] = _knn["basis"]
+
+            # Conformal widening -- OPT-IN, see ENABLE_CONFORMAL_RANGE docstring.
+            # Never replaces the raw predicted_low/high_price fields; adds
+            # conformal_low/high_price alongside them.
+            if ENABLE_CONFORMAL_RANGE and _range_timing.get("predicted_low_price") is not None:
+                try:
+                    from conformal_range_calibrator import apply_conformal_widening
+                    _conf_path = ROOT / "data" / "conformal_range_calibration.json"
+                    if _conf_path.exists():
+                        _conf_data = json.loads(_conf_path.read_text(encoding="utf-8"))
+                        _conf_fit = (_conf_data.get("by_target_coverage") or {}).get(CONFORMAL_TARGET_COVERAGE)
+                        if _conf_fit and _conf_fit.get("multiplier"):
+                            _conf_out = apply_conformal_widening(
+                                _range_timing["predicted_low_price"],
+                                _range_timing["predicted_high_price"],
+                                _conf_fit["multiplier"],
+                            )
+                            _range_timing.update(_conf_out)
+                            _range_timing["conformal_target_coverage"] = CONFORMAL_TARGET_COVERAGE
+                except Exception as _conf_exc:
+                    _context_enrichment_warnings["conformal_range"] = f"{type(_conf_exc).__name__}: {_conf_exc}"
+    except Exception as exc:
+        _context_enrichment_warnings["range_timing"] = f"{type(exc).__name__}: {exc}"
+
+    # Day-by-day predicted price path -- ALWAYS computed, for EVERY
+    # prediction (not opt-in): extends the already-live ATR-sqrt(time) range
+    # math (range_timing above) to every day in the horizon, not just the
+    # terminal low/high. See day_by_day_path_predictor.py's own
+    # methodology_note for the honest disclosure of what this is (a real
+    # formula interpolation between two real endpoints) and isn't (a fresh
+    # AI forecast per day).
+    _daily_price_path: dict = {"path": [], "methodology_note": ""}
+    _stock_entry_exit: dict = {}
+    try:
+        from day_by_day_path_predictor import predict_daily_path, best_entry_exit_days
+        _atr_daily_pct = (feature_packet.get("volatility") or {}).get("ATR_daily_pct")
+        _daily_price_path = predict_daily_path(
+            origin_price, pred_return, horizon_days, atr_daily_pct=_atr_daily_pct,
+        )
+        if _daily_price_path.get("path"):
+            _stock_entry_exit = best_entry_exit_days(
+                _daily_price_path["path"], bullish=(pred_return is not None and pred_return >= 0),
+            )
+    except Exception as exc:
+        _context_enrichment_warnings["daily_price_path"] = f"{type(exc).__name__}: {exc}"
+
+    # Day-by-day options valuation -- only when the caller passes an
+    # explicit options_evaluation spec on spi (strike/option_type/dte/
+    # contracts, optionally premium_paid_per_share for an already-owned
+    # position). Separate from the existing TT-integrated strike-selection
+    # options_params (which resolves a strike via delta/premium targeting
+    # against a real or Black-Scholes-fallback chain for a different,
+    # heavier backtest flow) -- this is the simple, explicit-parameter path
+    # for "I already know my strike/DTE/premium, show me the daily path."
+    _options_daily_path: Optional[dict] = None
+    _opts_eval = spi.get("options_evaluation") or {}
+    if _opts_eval.get("strike") and _opts_eval.get("option_type") and _opts_eval.get("dte") and _daily_price_path.get("path"):
+        try:
+            from options_path_evaluator import evaluate_options_path
+            _annual_vol = (feature_packet.get("volatility") or {}).get("annualized_volatility")
+            _rfr = feature_packet.get("treasury_10y_yield_pct")
+            _options_daily_path = evaluate_options_path(
+                _daily_price_path["path"],
+                strike=float(_opts_eval["strike"]),
+                option_type=str(_opts_eval["option_type"]),
+                dte_at_day0=int(_opts_eval["dte"]),
+                contracts=int(_opts_eval.get("contracts", 1)),
+                annual_volatility_pct=_annual_vol or 30.0,
+                premium_paid_per_share=_opts_eval.get("premium_paid_per_share"),
+                risk_free_rate_pct=_rfr or 4.0,
+            )
+        except Exception as exc:
+            _context_enrichment_warnings["options_daily_path"] = f"{type(exc).__name__}: {exc}"
 
     return {
         "status":                       "SUCCESS",
@@ -3460,6 +4816,15 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
         "decision_reason":              gemini_result["decision_reason"],
         "confidence_score":             gemini_result["confidence_score"],
         "calibrated_confidence_score":  _calibrated_confidence,
+        "magnitude_calibrated_hit_rate": _magnitude_calibrated_hit_rate,
+        "signal_quality_score":         _signal_quality.get("signal_quality_score"),
+        "signal_quality_tier":          _signal_quality.get("signal_quality_tier"),
+        "leakage_probe":                _leakage_probe_result,
+        "daily_price_path":             _daily_price_path.get("path", []),
+        "daily_price_path_methodology_note": _daily_price_path.get("methodology_note", ""),
+        "stock_entry_exit_recommendation": _stock_entry_exit,
+        "options_daily_path":           _options_daily_path,
+        "recommended_position":         _recommended_position,
         "risk_score":                   gemini_result["risk_score"],
         "data_quality_score":           gemini_result["data_quality_score"],
         "signal_scores":                gemini_result.get("signal_scores", {}),
@@ -3486,12 +4851,22 @@ def run_gemini_stock_prediction(spi: dict, price_history_context: List[dict]) ->
         "consensus_votes":                  gemini_result.get("consensus_votes", {}),
         "consensus_confidence":             gemini_result.get("consensus_confidence", ""),
         "consensus_calls":                  gemini_result.get("consensus_calls", []),
+        "aggregation_method":               gemini_result.get("aggregation_method", "majority_vote"),
+        "judge_chosen_call":                gemini_result.get("judge_chosen_call"),
+        "judge_reasoning":                  gemini_result.get("judge_reasoning"),
+        "judge_confidence":                 gemini_result.get("judge_confidence"),
+        "judge_model":                      gemini_result.get("judge_model"),
         "technical_override_score":         gemini_result.get("technical_override_score", {}),
         "ml_signal_shadow":                 gemini_result.get("ml_signal_shadow"),
         "debate_transcript":                gemini_result.get("debate_transcript"),
         "market_movers_used":           bool(_market_movers_context),
         "chart_vision_used":            bool(_chart_images),
         "context_enrichment_warnings":  _context_enrichment_warnings,
+        "predicted_low_price":              _range_timing.get("predicted_low_price"),
+        "predicted_high_price":             _range_timing.get("predicted_high_price"),
+        "predicted_low_day_offset":         _range_timing.get("predicted_low_day_offset"),
+        "predicted_high_day_offset":        _range_timing.get("predicted_high_day_offset"),
+        "range_timing":                     _range_timing,
         "_feature_packet":              feature_packet,
         "_calibration_summary":         calibration_summary,
         "_gemini_raw_json":             gemini_result.get("gemini_raw_json", {}),

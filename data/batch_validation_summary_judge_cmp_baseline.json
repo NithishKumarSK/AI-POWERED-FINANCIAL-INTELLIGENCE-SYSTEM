@@ -1,0 +1,67 @@
+{
+  "generated_at": "2026-11-11T10:31:14.252633",
+  "symbols": [
+    "TSLA"
+  ],
+  "horizons": [
+    14
+  ],
+  "total_runs": 6,
+  "valid_runs": 6,
+  "failed_runs": 0,
+  "data_unavailable_count": 0,
+  "symbols_failed": [],
+  "decision_match_pct": 16.7,
+  "direction_match_pct": 16.7,
+  "avg_return_error_pp": 7.5615,
+  "median_return_error_pp": 5.4074,
+  "hold_rate_pct": 16.7,
+  "false_buy_count": 2,
+  "false_sell_count": 2,
+  "over_hold_count": 1,
+  "match_by_symbol": {
+    "TSLA": {
+      "runs": 6,
+      "matches": 1,
+      "match_pct": 16.7,
+      "avg_return_error_pp": 7.5615,
+      "median_return_error_pp": 5.4074
+    }
+  },
+  "match_by_horizon": {
+    "14": {
+      "runs": 6,
+      "matches": 1,
+      "match_pct": 16.7
+    }
+  },
+  "match_by_segment": {
+    "TSLA|8-14d": {
+      "symbol": "TSLA",
+      "horizon_bucket": "8-14d",
+      "runs": 6,
+      "decision_match_pct": 16.7,
+      "direction_match_pct": 16.7
+    }
+  },
+  "top_failure_reasons": [
+    {
+      "reason": "WRONG_MAGNITUDE",
+      "count": 3
+    },
+    {
+      "reason": "VOLATILITY_SHIFT_MISSED",
+      "count": 1
+    },
+    {
+      "reason": "TREND_REVERSAL_MISSED",
+      "count": 1
+    }
+  ],
+  "recommended_prompt_changes": [
+    "VOLATILITY_SHIFT_MISSED: add vol-regime change detection to feature packet.",
+    "TREND_REVERSAL_MISSED: inject news/earnings context into Gemini prompt.",
+    "WRONG_MAGNITUDE: recalibrate predicted_return_pct scaling vs actual by horizon.",
+    "Match rate below 30% — investigate feature quality and prompt clarity."
+  ]
+}

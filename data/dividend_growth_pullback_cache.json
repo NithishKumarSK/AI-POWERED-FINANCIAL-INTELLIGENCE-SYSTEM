@@ -1,0 +1,1682 @@
+{
+  "TSLA:2026-10-26": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 391.62,
+      "rsi_14": 60.03,
+      "profit_margin_pct": 4.0,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794314155.1545308
+  },
+  "TSLA:2024-01-15": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 62.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 218.89,
+      "rsi_14": 31.34,
+      "profit_margin_pct": 15.41,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794116696.6844923
+  },
+  "TSLA:2025-06-10": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 308.58,
+      "rsi_14": 47.22,
+      "profit_margin_pct": 7.26,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794116824.59049
+  },
+  "TSLA:2023-03-20": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 42.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 180.13,
+      "rsi_14": 49.64,
+      "profit_margin_pct": 15.41,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794116959.4565372
+  },
+  "TSLA:2026-10-30": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 399.81,
+      "rsi_14": 60.23,
+      "profit_margin_pct": 4.0,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794117769.7946334
+  },
+  "TSLA:2026-09-01": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 367.95,
+      "rsi_14": 57.02,
+      "profit_margin_pct": 4.0,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794392872.5270934
+  },
+  "TSLA:2025-01-02": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 42.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 403.84,
+      "rsi_14": 52.79,
+      "profit_margin_pct": 15.5,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794117378.6055171
+  },
+  "TSLA:2024-11-05": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 42.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 242.84,
+      "rsi_14": 52.64,
+      "profit_margin_pct": 15.5,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794117233.6444151
+  },
+  "TSLA:2023-08-14": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 56.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 242.65,
+      "rsi_14": 39.2,
+      "profit_margin_pct": 15.41,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794117881.393895
+  },
+  "TSLA:2025-09-09": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 346.4,
+      "rsi_14": 57.69,
+      "profit_margin_pct": 7.26,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794118299.2170308
+  },
+  "TSLA:2025-02-14": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 48.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 355.94,
+      "rsi_14": 38.85,
+      "profit_margin_pct": 7.26,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794118605.3346548
+  },
+  "TSLA:2024-07-07": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 42.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 251.52,
+      "rsi_14": 85.61,
+      "profit_margin_pct": 15.5,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794119017.0236132
+  },
+  "AAPL:2026-10-29": {
+    "data": {
+      "symbol": "AAPL",
+      "composite_score": 50.0,
+      "dividend_cagr_3yr": 4.18,
+      "dividend_consistent": true,
+      "dividend_years_of_growth": 3,
+      "latest_annual_dividend": 1.0277448454973799,
+      "dividend_yield_pct": 0.29,
+      "current_price": 348.91,
+      "rsi_14": 62.13,
+      "profit_margin_pct": 26.92,
+      "payout_ratio_pct": 13.77,
+      "fcf_payout_ratio_pct": 15.61,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794123679.6584697
+  },
+  "TSLA:2024-04-22": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 68.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 147.05,
+      "rsi_14": 29.61,
+      "profit_margin_pct": 15.5,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794118050.0643015
+  },
+  "TSLA:2025-11-20": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 403.99,
+      "rsi_14": 41.04,
+      "profit_margin_pct": 7.26,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794122883.884718
+  },
+  "TSLA:2024-09-30": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 42.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 260.46,
+      "rsi_14": 67.85,
+      "profit_margin_pct": 15.5,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794123239.5985281
+  },
+  "TSLA:2025-05-05": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 287.21,
+      "rsi_14": 58.43,
+      "profit_margin_pct": 7.26,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794123351.1375506
+  },
+  "TSLA:2023-06-12": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 42.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 244.4,
+      "rsi_14": 84.75,
+      "profit_margin_pct": 15.41,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794123461.0591242
+  },
+  "TSLA:2026-10-28": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 404.22,
+      "rsi_14": 62.92,
+      "profit_margin_pct": 4.0,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794123566.4615593
+  },
+  "MSFT:2024-03-18": {
+    "data": {
+      "symbol": "MSFT",
+      "composite_score": 50.0,
+      "dividend_cagr_3yr": 10.38,
+      "dividend_consistent": true,
+      "dividend_years_of_growth": 3,
+      "latest_annual_dividend": 2.6498929336188435,
+      "dividend_yield_pct": 0.65,
+      "current_price": 408.4698,
+      "rsi_14": 56.33,
+      "profit_margin_pct": 34.15,
+      "payout_ratio_pct": 27.36,
+      "fcf_payout_ratio_pct": 33.29,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794123788.9220755
+  },
+  "NVDA:2026-10-30": {
+    "data": {
+      "symbol": "NVDA",
+      "composite_score": 65.0,
+      "dividend_cagr_3yr": -36.98,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 1,
+      "latest_annual_dividend": 0.03973239781349433,
+      "dividend_yield_pct": 0.02,
+      "current_price": 204.64,
+      "rsi_14": 34.53,
+      "profit_margin_pct": 55.6,
+      "payout_ratio_pct": 0.81,
+      "fcf_payout_ratio_pct": 0.95,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794123890.0625443
+  },
+  "GOOGL:2025-07-21": {
+    "data": {
+      "symbol": "GOOGL",
+      "composite_score": 45.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 184.415,
+      "rsi_14": 66.34,
+      "profit_margin_pct": 28.6,
+      "payout_ratio_pct": 7.35,
+      "fcf_payout_ratio_pct": 10.12,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794123969.2924445
+  },
+  "AMZN:2024-12-09": {
+    "data": {
+      "symbol": "AMZN",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 227.03,
+      "rsi_14": 73.68,
+      "profit_margin_pct": 8.68,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794124219.9414446
+  },
+  "META:2025-04-14": {
+    "data": {
+      "symbol": "META",
+      "composite_score": 45.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 540.9508,
+      "rsi_14": 40.71,
+      "profit_margin_pct": 37.91,
+      "payout_ratio_pct": 8.13,
+      "fcf_payout_ratio_pct": 9.38,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794124359.2424963
+  },
+  "TEST:2026-11-02": {
+    "data": {
+      "symbol": "TEST",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 39.346,
+      "rsi_14": 61.12,
+      "profit_margin_pct": null,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1793709403.939828
+  },
+  "AAPL:2026-10-20": {
+    "data": {
+      "symbol": "AAPL",
+      "composite_score": 50.0,
+      "dividend_cagr_3yr": 4.18,
+      "dividend_consistent": true,
+      "dividend_years_of_growth": 3,
+      "latest_annual_dividend": 1.0277448454973799,
+      "dividend_yield_pct": 0.3,
+      "current_price": 339.5,
+      "rsi_14": 57.0,
+      "profit_margin_pct": 26.92,
+      "payout_ratio_pct": 13.77,
+      "fcf_payout_ratio_pct": 15.61,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794116220.1745684
+  },
+  "TSLA:2026-10-31": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 399.81,
+      "rsi_14": 61.05,
+      "profit_margin_pct": 4.0,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794117097.2979696
+  },
+  "TSLA:2023-11-01": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 68.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 200.84,
+      "rsi_14": 28.43,
+      "profit_margin_pct": 15.41,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794122993.6101053
+  },
+  "TSLA:2026-01-15": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 439.2,
+      "rsi_14": 46.45,
+      "profit_margin_pct": 7.26,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794123129.2750504
+  },
+  "JPM:2025-10-06": {
+    "data": {
+      "symbol": "JPM",
+      "composite_score": 50.0,
+      "dividend_cagr_3yr": 6.52,
+      "dividend_consistent": true,
+      "dividend_years_of_growth": 3,
+      "latest_annual_dividend": 5.134769017019798,
+      "dividend_yield_pct": 1.7,
+      "current_price": 302.7001,
+      "rsi_14": 56.26,
+      "profit_margin_pct": 32.93,
+      "payout_ratio_pct": 25.28,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794124681.5412283
+  },
+  "TSLA:2025-03-10": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 60.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 262.67,
+      "rsi_14": 26.92,
+      "profit_margin_pct": 7.26,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794307942.6137865
+  },
+  "XOM:2023-09-25": {
+    "data": {
+      "symbol": "XOM",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 104.1528,
+      "rsi_14": 56.14,
+      "profit_margin_pct": null,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794124852.3014545
+  },
+  "TSLA:2023-07-01": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 42.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 261.77,
+      "rsi_14": 66.48,
+      "profit_margin_pct": 15.41,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794124912.5957794
+  },
+  "TSLA:2024-10-15": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 56.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 219.16,
+      "rsi_14": 39.4,
+      "profit_margin_pct": 15.5,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794125044.908216
+  },
+  "TSLA:2025-08-01": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 308.27,
+      "rsi_14": 44.03,
+      "profit_margin_pct": 7.26,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794125157.6513615
+  },
+  "TSLA:2023-02-10": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 42.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 207.32,
+      "rsi_14": 76.22,
+      "profit_margin_pct": 15.41,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794125292.138581
+  },
+  "TSLA:2025-12-01": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 430.17,
+      "rsi_14": 51.82,
+      "profit_margin_pct": 7.26,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794125438.485648
+  },
+  "TSLA:2024-06-20": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 42.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 184.86,
+      "rsi_14": 60.42,
+      "profit_margin_pct": 15.5,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794125566.589966
+  },
+  "TSLA:2024-02-20": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 42.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 199.95,
+      "rsi_14": 47.31,
+      "profit_margin_pct": 15.5,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794308060.9549017
+  },
+  "TSLA:2025-07-15": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 316.9,
+      "rsi_14": 48.53,
+      "profit_margin_pct": 7.26,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794308178.8729517
+  },
+  "TSLA:2023-05-05": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 56.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 161.2,
+      "rsi_14": 37.62,
+      "profit_margin_pct": 15.41,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794308375.3086863
+  },
+  "TSLA:2026-01-05": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 438.07,
+      "rsi_14": 40.78,
+      "profit_margin_pct": 7.26,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794308587.3286524
+  },
+  "TSLA:2024-12-01": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 42.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 345.16,
+      "rsi_14": 63.38,
+      "profit_margin_pct": 15.5,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794308792.8914459
+  },
+  "TSLA:2025-10-20": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 439.31,
+      "rsi_14": 57.45,
+      "profit_margin_pct": 7.26,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794309007.7856476
+  },
+  "TSLA:2023-09-18": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 42.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 274.39,
+      "rsi_14": 61.58,
+      "profit_margin_pct": 15.41,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794309204.9467273
+  },
+  "TSLA:2026-02-10": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 417.32,
+      "rsi_14": 44.31,
+      "profit_margin_pct": 4.0,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794309420.555011
+  },
+  "TSLA:2024-06-15": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 42.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 178.01,
+      "rsi_14": 53.5,
+      "profit_margin_pct": 15.5,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794309641.119577
+  },
+  "AAPL:2025-01-15": {
+    "data": {
+      "symbol": "AAPL",
+      "composite_score": 70.0,
+      "dividend_cagr_3yr": 4.85,
+      "dividend_consistent": true,
+      "dividend_years_of_growth": 3,
+      "latest_annual_dividend": 0.9887010691457964,
+      "dividend_yield_pct": 0.43,
+      "current_price": 231.5993,
+      "rsi_14": 34.63,
+      "profit_margin_pct": 23.97,
+      "payout_ratio_pct": 16.25,
+      "fcf_payout_ratio_pct": 14.0,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794309831.254578
+  },
+  "AAPL:2024-05-10": {
+    "data": {
+      "symbol": "AAPL",
+      "composite_score": 50.0,
+      "dividend_cagr_3yr": 5.76,
+      "dividend_consistent": true,
+      "dividend_years_of_growth": 3,
+      "latest_annual_dividend": 0.9501948041640603,
+      "dividend_yield_pct": 0.52,
+      "current_price": 182.5796,
+      "rsi_14": 67.34,
+      "profit_margin_pct": 25.31,
+      "payout_ratio_pct": 15.49,
+      "fcf_payout_ratio_pct": 15.09,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794310035.128137
+  },
+  "AAPL:2023-11-01": {
+    "data": {
+      "symbol": "AAPL",
+      "composite_score": 59.0,
+      "dividend_cagr_3yr": -33.11,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 2,
+      "latest_annual_dividend": 0.9090508721185748,
+      "dividend_yield_pct": 0.54,
+      "current_price": 168.4911,
+      "rsi_14": 38.47,
+      "profit_margin_pct": 25.31,
+      "payout_ratio_pct": 14.87,
+      "fcf_payout_ratio_pct": 13.32,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794310242.4507675
+  },
+  "MSFT:2026-09-15": {
+    "data": {
+      "symbol": "MSFT",
+      "composite_score": 50.0,
+      "dividend_cagr_3yr": 10.22,
+      "dividend_consistent": true,
+      "dividend_years_of_growth": 3,
+      "latest_annual_dividend": 3.5482356098215484,
+      "dividend_yield_pct": 0.7,
+      "current_price": 505.41,
+      "rsi_14": 63.14,
+      "profit_margin_pct": 40.31,
+      "payout_ratio_pct": 19.77,
+      "fcf_payout_ratio_pct": 39.48,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794310457.5858564
+  },
+  "MSFT:2025-04-01": {
+    "data": {
+      "symbol": "MSFT",
+      "composite_score": 64.0,
+      "dividend_cagr_3yr": 10.31,
+      "dividend_consistent": true,
+      "dividend_years_of_growth": 3,
+      "latest_annual_dividend": 2.914848038559379,
+      "dividend_yield_pct": 0.79,
+      "current_price": 371.0344,
+      "rsi_14": 35.46,
+      "profit_margin_pct": 35.96,
+      "payout_ratio_pct": 24.7,
+      "fcf_payout_ratio_pct": 29.39,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794310598.757829
+  },
+  "MSFT:2024-08-20": {
+    "data": {
+      "symbol": "MSFT",
+      "composite_score": 50.0,
+      "dividend_cagr_3yr": 10.31,
+      "dividend_consistent": true,
+      "dividend_years_of_growth": 3,
+      "latest_annual_dividend": 2.914848038559379,
+      "dividend_yield_pct": 0.7,
+      "current_price": 414.9747,
+      "rsi_14": 50.24,
+      "profit_margin_pct": 35.96,
+      "payout_ratio_pct": 24.7,
+      "fcf_payout_ratio_pct": 29.39,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794310727.8034227
+  },
+  "MSFT:2023-06-05": {
+    "data": {
+      "symbol": "MSFT",
+      "composite_score": 50.0,
+      "dividend_cagr_3yr": 10.53,
+      "dividend_consistent": true,
+      "dividend_years_of_growth": 3,
+      "latest_annual_dividend": 2.4051724137931036,
+      "dividend_yield_pct": 0.74,
+      "current_price": 327.0317,
+      "rsi_14": 70.58,
+      "profit_margin_pct": 36.69,
+      "payout_ratio_pct": 24.93,
+      "fcf_payout_ratio_pct": 27.84,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794310882.743107
+  },
+  "NVDA:2026-10-15": {
+    "data": {
+      "symbol": "NVDA",
+      "composite_score": 59.0,
+      "dividend_cagr_3yr": -36.98,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 1,
+      "latest_annual_dividend": 0.03973239781349433,
+      "dividend_yield_pct": 0.02,
+      "current_price": 217.23,
+      "rsi_14": 39.26,
+      "profit_margin_pct": 55.6,
+      "payout_ratio_pct": 0.81,
+      "fcf_payout_ratio_pct": 0.95,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794311151.0354848
+  },
+  "NVDA:2025-02-10": {
+    "data": {
+      "symbol": "NVDA",
+      "composite_score": 45.0,
+      "dividend_cagr_3yr": -36.85,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 2,
+      "latest_annual_dividend": 0.15838011226944668,
+      "dividend_yield_pct": 0.12,
+      "current_price": 129.5014,
+      "rsi_14": 48.83,
+      "profit_margin_pct": 48.85,
+      "payout_ratio_pct": 1.33,
+      "fcf_payout_ratio_pct": 1.41,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794311417.3849373
+  },
+  "NVDA:2024-11-20": {
+    "data": {
+      "symbol": "NVDA",
+      "composite_score": 45.0,
+      "dividend_cagr_3yr": -36.85,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 2,
+      "latest_annual_dividend": 0.15838011226944668,
+      "dividend_yield_pct": 0.11,
+      "current_price": 146.6166,
+      "rsi_14": 60.22,
+      "profit_margin_pct": 48.85,
+      "payout_ratio_pct": 1.33,
+      "fcf_payout_ratio_pct": 1.41,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794311699.6524193
+  },
+  "NVDA:2023-07-10": {
+    "data": {
+      "symbol": "NVDA",
+      "composite_score": 42.0,
+      "dividend_cagr_3yr": -36.87,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 1,
+      "latest_annual_dividend": 0.1587554846429996,
+      "dividend_yield_pct": 0.37,
+      "current_price": 42.3729,
+      "rsi_14": 64.45,
+      "profit_margin_pct": 16.19,
+      "payout_ratio_pct": 9.11,
+      "fcf_payout_ratio_pct": 7.23,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794311946.5106118
+  },
+  "GOOGL:2026-09-20": {
+    "data": {
+      "symbol": "GOOGL",
+      "composite_score": 50.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": true,
+      "dividend_years_of_growth": 3,
+      "latest_annual_dividend": 0.8216680294358135,
+      "dividend_yield_pct": 0.24,
+      "current_price": 349.54,
+      "rsi_14": 56.03,
+      "profit_margin_pct": 32.81,
+      "payout_ratio_pct": 7.6,
+      "fcf_payout_ratio_pct": 13.72,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794312172.3920827
+  },
+  "GOOGL:2025-05-05": {
+    "data": {
+      "symbol": "GOOGL",
+      "composite_score": 45.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 163.2607,
+      "rsi_14": 56.34,
+      "profit_margin_pct": 28.6,
+      "payout_ratio_pct": 7.35,
+      "fcf_payout_ratio_pct": 10.12,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794312346.3565338
+  },
+  "GOOGL:2024-09-10": {
+    "data": {
+      "symbol": "GOOGL",
+      "composite_score": 71.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 147.673,
+      "rsi_14": 25.76,
+      "profit_margin_pct": 24.01,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "NO_DIVIDEND",
+      "sustainable": false,
+      "sustainability_note": "No dividend payment was reported; no sustainability bonus is awarded."
+    },
+    "computed_at": 1794312480.6161406
+  },
+  "GOOGL:2023-12-01": {
+    "data": {
+      "symbol": "GOOGL",
+      "composite_score": 45.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 131.2808,
+      "rsi_14": 46.93,
+      "profit_margin_pct": 21.2,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "NO_DIVIDEND",
+      "sustainable": false,
+      "sustainability_note": "No dividend payment was reported; no sustainability bonus is awarded."
+    },
+    "computed_at": 1794312629.9105785
+  },
+  "AMZN:2026-10-05": {
+    "data": {
+      "symbol": "AMZN",
+      "composite_score": 42.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 251.4,
+      "rsi_14": 44.39,
+      "profit_margin_pct": 18.87,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794312755.1759505
+  },
+  "AMZN:2025-06-20": {
+    "data": {
+      "symbol": "AMZN",
+      "composite_score": 39.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 212.52,
+      "rsi_14": 62.05,
+      "profit_margin_pct": 10.34,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794312889.2842278
+  },
+  "AMZN:2024-03-15": {
+    "data": {
+      "symbol": "AMZN",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 178.75,
+      "rsi_14": 62.63,
+      "profit_margin_pct": 5.29,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794313027.823641
+  },
+  "AMZN:2023-10-10": {
+    "data": {
+      "symbol": "AMZN",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 128.26,
+      "rsi_14": 42.81,
+      "profit_margin_pct": 2.54,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794313168.694894
+  },
+  "TSLA:2025-04-18": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 241.37,
+      "rsi_14": 42.48,
+      "profit_margin_pct": 7.26,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794314848.7890074
+  },
+  "TSLA:2024-10-01": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 42.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 261.63,
+      "rsi_14": 69.37,
+      "profit_margin_pct": 15.5,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794314978.8991857
+  },
+  "TSLA:2023-02-15": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 42.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 209.25,
+      "rsi_14": 70.46,
+      "profit_margin_pct": 15.41,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794315188.9006364
+  },
+  "TSLA:2026-03-10": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 398.68,
+      "rsi_14": 41.79,
+      "profit_margin_pct": 4.0,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794315318.489223
+  },
+  "TSLA:2025-08-22": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 320.11,
+      "rsi_14": 44.64,
+      "profit_margin_pct": 7.26,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794315454.8376698
+  },
+  "TEST:2026-11-10": {
+    "data": {
+      "symbol": "TEST",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 37.564,
+      "rsi_14": 50.96,
+      "profit_margin_pct": null,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794391172.46809
+  },
+  "TSLA:2026-10-05": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 378.73,
+      "rsi_14": 60.21,
+      "profit_margin_pct": 4.0,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794391606.1260731
+  },
+  "TSLA:2026-09-05": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 354.08,
+      "rsi_14": 50.15,
+      "profit_margin_pct": 4.0,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794391761.9380033
+  },
+  "TSLA:2026-10-01": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 354.81,
+      "rsi_14": 47.56,
+      "profit_margin_pct": 4.0,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794392870.7437577
+  },
+  "TSLA:2026-08-01": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 54.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 311.21,
+      "rsi_14": 31.16,
+      "profit_margin_pct": 4.0,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794392953.6219022
+  },
+  "TSLA:2026-07-01": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 420.6,
+      "rsi_14": 57.31,
+      "profit_margin_pct": 4.0,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794392954.2986772
+  },
+  "TSLA:2026-06-01": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 435.79,
+      "rsi_14": 61.48,
+      "profit_margin_pct": 4.0,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794393088.108328
+  },
+  "TSLA:2026-05-01": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 381.63,
+      "rsi_14": 51.86,
+      "profit_margin_pct": 4.0,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794393094.6246872
+  },
+  "TSLA:2026-09-15": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 358.97,
+      "rsi_14": 49.81,
+      "profit_margin_pct": 4.0,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794395826.4121797
+  },
+  "TSLA:2026-09-20": {
+    "data": {
+      "symbol": "TSLA",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 364.27,
+      "rsi_14": 51.99,
+      "profit_margin_pct": 4.0,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794396153.3165734
+  },
+  "NVDA:2026-11-12": {
+    "data": {
+      "symbol": "NVDA",
+      "composite_score": 71.0,
+      "dividend_cagr_3yr": -36.98,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 1,
+      "latest_annual_dividend": 0.03973239781349433,
+      "dividend_yield_pct": 0.02,
+      "current_price": 166.19,
+      "rsi_14": 26.53,
+      "profit_margin_pct": 55.6,
+      "payout_ratio_pct": 0.81,
+      "fcf_payout_ratio_pct": 0.95,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794539893.7439175
+  },
+  "NVDA:2026-11-11": {
+    "data": {
+      "symbol": "NVDA",
+      "composite_score": 71.0,
+      "dividend_cagr_3yr": -36.98,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 1,
+      "latest_annual_dividend": 0.03973239781349433,
+      "dividend_yield_pct": 0.02,
+      "current_price": 173.73,
+      "rsi_14": 29.38,
+      "profit_margin_pct": 55.6,
+      "payout_ratio_pct": 0.81,
+      "fcf_payout_ratio_pct": 0.95,
+      "fcf_coverage_status": "COVERED",
+      "sustainable": true,
+      "sustainability_note": "Earnings payout is below 80% and free cash flow covers dividends with a buffer."
+    },
+    "computed_at": 1794540134.5059102
+  },
+  "TEST:2026-11-12": {
+    "data": {
+      "symbol": "TEST",
+      "composite_score": 34.0,
+      "dividend_cagr_3yr": null,
+      "dividend_consistent": false,
+      "dividend_years_of_growth": 0,
+      "latest_annual_dividend": null,
+      "dividend_yield_pct": null,
+      "current_price": 38.332,
+      "rsi_14": 54.85,
+      "profit_margin_pct": null,
+      "payout_ratio_pct": null,
+      "fcf_payout_ratio_pct": null,
+      "fcf_coverage_status": "MISSING_DATA",
+      "sustainable": false,
+      "sustainability_note": "Dividend payment data is unavailable; sustainability cannot be confirmed."
+    },
+    "computed_at": 1794541690.7333415
+  }
+}

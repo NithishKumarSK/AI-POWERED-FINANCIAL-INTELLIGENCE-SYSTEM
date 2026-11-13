@@ -53,6 +53,13 @@ FEATURE_SPEC: List[Tuple[str, str, str]] = [
     ("ADX_14",                        "trend",               "ADX_14"),
     ("RSI_14",                         "momentum",            "RSI_14"),
     ("MACD_histogram",                  "momentum",            "MACD_histogram"),
+    # Indicator-completeness pass (Zhong & Hitchcock, arXiv 2108.10826, used
+    # all four) -- same free OHLCV bars already fetched for everything else.
+    ("CCI_20",                          "momentum",            "CCI_20"),
+    ("Williams_R_14",                   "momentum",            "Williams_R_14"),
+    ("STOCH_K_14",                       "momentum",            "STOCH_K_14"),
+    ("STOCH_D_3",                        "momentum",            "STOCH_D_3"),
+    ("CMF_20",                           "volume",              "CMF_20"),
     ("annualized_volatility",            "volatility",          "annualized_volatility"),
     ("ATR_daily_pct",                     "volatility",          "ATR_daily_pct"),
     ("BB_position",                        "volatility",          "BB_position"),
@@ -83,6 +90,107 @@ FEATURE_SPEC: List[Tuple[str, str, str]] = [
     ("bull_conviction_score",      "", "bull_conviction_score"),
     ("bear_conviction_score",      "", "bear_conviction_score"),
     ("narrative_dependency_score", "", "narrative_dependency_score"),
+    # To-do item #9 remainder -- macro/rate data (core/macro_data_service.py).
+    # Market-wide, not symbol-specific; NaN wherever ALPHA_VANTAGE_API_KEY
+    # isn't configured, same degrade-gracefully contract as every field above.
+    ("fed_funds_rate_pct",         "", "fed_funds_rate_pct"),
+    ("treasury_10y_yield_pct",     "", "treasury_10y_yield_pct"),
+    # Congress trade disclosures (core/congress_trade_service.py) + 13F
+    # institutional holdings (core/institutional_holdings_service.py) --
+    # same degrade-gracefully contract as every field above.
+    ("congress_buy_count",         "", "congress_buy_count"),
+    ("congress_sell_count",        "", "congress_sell_count"),
+    ("congress_net_signal",        "", "congress_net_signal"),
+    ("institutional_holder_count", "", "institutional_holder_count"),
+    ("market_breadth_200ma",       "", "market_breadth_200ma"),
+    ("market_breadth_8ma",         "", "market_breadth_8ma"),
+    ("market_uptrend_ratio",       "", "market_uptrend_ratio"),
+    # core/free_news_service.py -- yahoo_headline_tags is a dict (prompt-only
+    # context, not a scalar) and intentionally excluded from the numeric vector.
+    ("sec_8k_filing_count",        "", "sec_8k_filing_count"),
+    ("yahoo_headline_count",       "", "yahoo_headline_count"),
+    ("sec_revenue",                "", "sec_revenue"),
+    ("sec_revenue_yoy_pct",        "", "sec_revenue_yoy_pct"),
+    ("sec_net_income",             "", "sec_net_income"),
+    ("sec_net_income_yoy_pct",     "", "sec_net_income_yoy_pct"),
+    ("sec_eps_diluted",            "", "sec_eps_diluted"),
+    # P/E, P/B, P/S -- derived from the SEC XBRL fundamentals above plus the
+    # prediction's own origin_price (core/sec_financials_service.py
+    # compute_valuation_ratios). Missing for loss-making companies (no
+    # meaningful P/E) or filers with no resolvable equity/shares data.
+    ("pe_ratio",                    "", "pe_ratio"),
+    ("pb_ratio",                    "", "pb_ratio"),
+    ("ps_ratio",                    "", "ps_ratio"),
+    # Per-headline news scoring (core/per_headline_news_scorer.py) --
+    # Lopez-Lira & Tang's actual mechanism (per-headline YES/NO), opt-in and
+    # live-only, so NaN for historical replay and whenever the flag is off.
+    ("per_headline_news_score",        "", "per_headline_news_score"),
+    ("per_headline_news_up_count",     "", "per_headline_news_up_count"),
+    ("per_headline_news_down_count",   "", "per_headline_news_down_count"),
+    # macro_regime_current/confidence are categorical strings (prompt-only
+    # context, not scalars) and intentionally excluded from the numeric vector.
+    ("macro_regime_composite_score", "", "macro_regime_composite_score"),
+    # core/ibd_distribution_day_service.py -- ibd_overall_risk_level is a
+    # categorical string (prompt-only context, not a scalar) and
+    # intentionally excluded from the numeric vector.
+    ("ibd_qqq_d25_count", "", "ibd_qqq_d25_count"),
+    # core/market_top_detector_service.py -- market_top_risk_zone is a
+    # categorical string (prompt-only context, not a scalar) and
+    # intentionally excluded from the numeric vector.
+    ("market_top_risk_score", "", "market_top_risk_score"),
+    # core/downtrend_duration_service.py -- per-symbol historical downtrend
+    # duration statistics.
+    ("downtrend_median_duration_days", "", "downtrend_median_duration_days"),
+    ("downtrend_p90_duration_days", "", "downtrend_p90_duration_days"),
+    # core/pead_screener_service.py -- pead_stage is a categorical string
+    # (prompt-only context, not a scalar) and intentionally excluded from
+    # the numeric vector.
+    ("pead_composite_score", "", "pead_composite_score"),
+    # core/earnings_trade_analyzer_service.py -- earnings_reaction_grade is
+    # a categorical string (prompt-only context, not a scalar) and
+    # intentionally excluded from the numeric vector.
+    ("earnings_reaction_score", "", "earnings_reaction_score"),
+    # core/stockbee_exhaustion_hammer_service.py -- hammer_state is a
+    # categorical string (prompt-only context, not a scalar) and
+    # intentionally excluded from the numeric vector.
+    ("hammer_setup_score", "", "hammer_setup_score"),
+    # core/stockbee_momentum_burst_service.py -- momentum_burst_state is a
+    # categorical string (prompt-only context, not a scalar) and
+    # intentionally excluded from the numeric vector.
+    ("momentum_burst_score", "", "momentum_burst_score"),
+    # core/stockbee_episodic_pivot_analyzer_service.py -- episodic_pivot_state
+    # is a categorical string (prompt-only context, not a scalar) and
+    # intentionally excluded from the numeric vector.
+    ("episodic_pivot_score", "", "episodic_pivot_score"),
+    # core/vcp_screener_service.py -- vcp_execution_state is a categorical
+    # string (prompt-only context, not a scalar) and intentionally
+    # excluded from the numeric vector.
+    ("vcp_composite_score", "", "vcp_composite_score"),
+    # core/canslim_screener_service.py -- canslim_rating is a categorical
+    # string (prompt-only context, not a scalar) and intentionally
+    # excluded from the numeric vector.
+    ("canslim_composite_score", "", "canslim_composite_score"),
+    # core/dividend_growth_pullback_screener_service.py -- dividend_cagr_3yr
+    # is a secondary numeric alongside the composite score (both kept,
+    # unlike the categorical-string exclusions elsewhere in this file).
+    ("dividend_growth_score", "", "dividend_growth_score"),
+    ("dividend_cagr_3yr", "", "dividend_cagr_3yr"),
+    # core/value_dividend_screener_service.py -- dividend_stable (bool) is
+    # in BOOL_FEATURE_SPEC below, not here.
+    ("value_dividend_score", "", "value_dividend_score"),
+    # core/stockbee_20pct_study_service.py -- twenty_pct_study_direction is
+    # a categorical string (prompt-only context, not a scalar) and
+    # intentionally excluded from the numeric vector.
+    ("twenty_pct_study_score", "", "twenty_pct_study_score"),
+    # core/macro_calendar_service.py -- live-only (gated to recent-origin
+    # predictions at the call site), so historical replay rows never have
+    # this key; feature_packet_to_vector already treats a missing key as NaN.
+    ("macro_event_days_away", "", "macro_event_days_away"),
+    ("macro_event_tier", "", "macro_event_tier"),
+    # core/institutional_flow_tracker_service.py -- institutional_flow_classification
+    # is a categorical string (prompt-only context, not a scalar) and
+    # intentionally excluded from the numeric vector.
+    ("institutional_flow_score", "", "institutional_flow_score"),
 ]
 
 # Boolean feature paths -- encoded 1.0/0.0, missing treated as 0.0 (false).
@@ -92,6 +200,10 @@ BOOL_FEATURE_SPEC: List[Tuple[str, str, str]] = [
     ("near_support",        "reversal_signals", "near_support"),
     ("near_resistance",     "reversal_signals", "near_resistance"),
     ("momentum_divergence", "reversal_signals", "momentum_divergence"),
+    # core/ftd_status_service.py -- ftd_combined_state is a categorical string
+    # (prompt-only context, not a scalar) and intentionally excluded here.
+    ("ftd_dual_confirmation", "", "ftd_dual_confirmation"),
+    ("dividend_stable", "", "dividend_stable"),
 ]
 
 FEATURE_NAMES: List[str] = [n for n, _, _ in FEATURE_SPEC] + [n for n, _, _ in BOOL_FEATURE_SPEC]

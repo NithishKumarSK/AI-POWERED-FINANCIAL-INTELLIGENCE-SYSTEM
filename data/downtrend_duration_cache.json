@@ -1,0 +1,1842 @@
+{
+  "TSLA:2026-10-26": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 31,
+      "mean_duration_days": 35.3,
+      "p75_duration_days": 35,
+      "p90_duration_days": 74,
+      "most_recent_downtrend": {
+        "peak_idx": 1194,
+        "trough_idx": 1213,
+        "peak_date": "2026-07-01",
+        "trough_date": "2026-07-29",
+        "peak_price": 425.3,
+        "trough_price": 298.32,
+        "duration_days": 19,
+        "depth_pct": -29.86
+      }
+    },
+    "computed_at": 1794314148.99257
+  },
+  "TSLA:2024-01-15": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 27,
+      "mean_duration_days": 29.6,
+      "p75_duration_days": 35,
+      "p90_duration_days": 43,
+      "most_recent_downtrend": {
+        "peak_idx": 1193,
+        "trough_idx": 1225,
+        "peak_date": "2023-09-14",
+        "trough_date": "2023-10-30",
+        "peak_price": 276.04,
+        "trough_price": 197.36,
+        "duration_days": 32,
+        "depth_pct": -28.5
+      }
+    },
+    "computed_at": 1794116685.7047296
+  },
+  "TSLA:2025-06-10": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 29,
+      "mean_duration_days": 31.6,
+      "p75_duration_days": 35,
+      "p90_duration_days": 54,
+      "most_recent_downtrend": {
+        "peak_idx": 1158,
+        "trough_idx": 1233,
+        "peak_date": "2024-12-17",
+        "trough_date": "2025-04-08",
+        "peak_price": 479.86,
+        "trough_price": 221.86,
+        "duration_days": 75,
+        "depth_pct": -53.77
+      }
+    },
+    "computed_at": 1794116822.3056154
+  },
+  "TSLA:2023-03-20": {
+    "data": {
+      "total_downtrends": 14,
+      "median_duration_days": 30,
+      "mean_duration_days": 32.7,
+      "p75_duration_days": 39,
+      "p90_duration_days": 44,
+      "most_recent_downtrend": {
+        "peak_idx": 1153,
+        "trough_idx": 1226,
+        "peak_date": "2022-09-19",
+        "trough_date": "2023-01-03",
+        "peak_price": 309.07,
+        "trough_price": 108.1,
+        "duration_days": 73,
+        "depth_pct": -65.02
+      }
+    },
+    "computed_at": 1794116957.1596286
+  },
+  "TSLA:2026-10-30": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 31,
+      "mean_duration_days": 35.3,
+      "p75_duration_days": 35,
+      "p90_duration_days": 74,
+      "most_recent_downtrend": {
+        "peak_idx": 1190,
+        "trough_idx": 1209,
+        "peak_date": "2026-07-01",
+        "trough_date": "2026-07-29",
+        "peak_price": 425.3,
+        "trough_price": 298.32,
+        "duration_days": 19,
+        "depth_pct": -29.86
+      }
+    },
+    "computed_at": 1794117737.0672362
+  },
+  "TSLA:2023-08-14": {
+    "data": {
+      "total_downtrends": 14,
+      "median_duration_days": 27,
+      "mean_duration_days": 29.9,
+      "p75_duration_days": 35,
+      "p90_duration_days": 43,
+      "most_recent_downtrend": {
+        "peak_idx": 1186,
+        "trough_idx": 1203,
+        "peak_date": "2023-03-31",
+        "trough_date": "2023-04-26",
+        "peak_price": 207.46,
+        "trough_price": 153.75,
+        "duration_days": 17,
+        "depth_pct": -25.89
+      }
+    },
+    "computed_at": 1794117868.5705373
+  },
+  "TSLA:2026-09-01": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 31,
+      "mean_duration_days": 35.3,
+      "p75_duration_days": 35,
+      "p90_duration_days": 74,
+      "most_recent_downtrend": {
+        "peak_idx": 1232,
+        "trough_idx": 1251,
+        "peak_date": "2026-07-01",
+        "trough_date": "2026-07-29",
+        "peak_price": 425.3,
+        "trough_price": 298.32,
+        "duration_days": 19,
+        "depth_pct": -29.86
+      }
+    },
+    "computed_at": 1794392743.017192
+  },
+  "TSLA:2024-11-05": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 27,
+      "mean_duration_days": 28.1,
+      "p75_duration_days": 32,
+      "p90_duration_days": 35,
+      "most_recent_downtrend": {
+        "peak_idx": 1195,
+        "trough_idx": 1215,
+        "peak_date": "2024-07-10",
+        "trough_date": "2024-08-07",
+        "peak_price": 263.26,
+        "trough_price": 191.76,
+        "duration_days": 20,
+        "depth_pct": -27.16
+      }
+    },
+    "computed_at": 1794117230.4650748
+  },
+  "TSLA:2025-01-02": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 27,
+      "mean_duration_days": 28.1,
+      "p75_duration_days": 32,
+      "p90_duration_days": 35,
+      "most_recent_downtrend": {
+        "peak_idx": 1154,
+        "trough_idx": 1174,
+        "peak_date": "2024-07-10",
+        "trough_date": "2024-08-07",
+        "peak_price": 263.26,
+        "trough_price": 191.76,
+        "duration_days": 20,
+        "depth_pct": -27.16
+      }
+    },
+    "computed_at": 1794117372.1560695
+  },
+  "TSLA:2024-04-22": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 23,
+      "mean_duration_days": 26.4,
+      "p75_duration_days": 31,
+      "p90_duration_days": 35,
+      "most_recent_downtrend": {
+        "peak_idx": 1243,
+        "trough_idx": 1252,
+        "peak_date": "2024-03-01",
+        "trough_date": "2024-03-14",
+        "peak_price": 202.64,
+        "trough_price": 162.5,
+        "duration_days": 9,
+        "depth_pct": -19.81
+      }
+    },
+    "computed_at": 1794118038.083893
+  },
+  "TSLA:2025-09-09": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 29,
+      "mean_duration_days": 31.6,
+      "p75_duration_days": 35,
+      "p90_duration_days": 54,
+      "most_recent_downtrend": {
+        "peak_idx": 1095,
+        "trough_idx": 1170,
+        "peak_date": "2024-12-17",
+        "trough_date": "2025-04-08",
+        "peak_price": 479.86,
+        "trough_price": 221.86,
+        "duration_days": 75,
+        "depth_pct": -53.77
+      }
+    },
+    "computed_at": 1794118286.849825
+  },
+  "TSLA:2025-02-14": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 27,
+      "mean_duration_days": 28.1,
+      "p75_duration_days": 32,
+      "p90_duration_days": 35,
+      "most_recent_downtrend": {
+        "peak_idx": 1125,
+        "trough_idx": 1145,
+        "peak_date": "2024-07-10",
+        "trough_date": "2024-08-07",
+        "peak_price": 263.26,
+        "trough_price": 191.76,
+        "duration_days": 20,
+        "depth_pct": -27.16
+      }
+    },
+    "computed_at": 1794118587.9915702
+  },
+  "TSLA:2024-07-07": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 26,
+      "mean_duration_days": 28.1,
+      "p75_duration_days": 33,
+      "p90_duration_days": 35,
+      "most_recent_downtrend": {
+        "peak_idx": 1190,
+        "trough_idx": 1225,
+        "peak_date": "2024-03-01",
+        "trough_date": "2024-04-22",
+        "peak_price": 202.64,
+        "trough_price": 142.05,
+        "duration_days": 35,
+        "depth_pct": -29.9
+      }
+    },
+    "computed_at": 1794118981.0988426
+  },
+  "TSLA:2024-09-30": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 27,
+      "mean_duration_days": 28.1,
+      "p75_duration_days": 32,
+      "p90_duration_days": 35,
+      "most_recent_downtrend": {
+        "peak_idx": 1220,
+        "trough_idx": 1240,
+        "peak_date": "2024-07-10",
+        "trough_date": "2024-08-07",
+        "peak_price": 263.26,
+        "trough_price": 191.76,
+        "duration_days": 20,
+        "depth_pct": -27.16
+      }
+    },
+    "computed_at": 1794123232.850293
+  },
+  "AMZN:2024-12-09": {
+    "data": {
+      "total_downtrends": 14,
+      "median_duration_days": 22,
+      "mean_duration_days": 30.9,
+      "p75_duration_days": 30,
+      "p90_duration_days": 67,
+      "most_recent_downtrend": {
+        "peak_idx": 1168,
+        "trough_idx": 1189,
+        "peak_date": "2024-07-05",
+        "trough_date": "2024-08-05",
+        "peak_price": 200.0,
+        "trough_price": 161.02,
+        "duration_days": 21,
+        "depth_pct": -19.49
+      }
+    },
+    "computed_at": 1794124215.3005853
+  },
+  "AAPL:2026-10-29": {
+    "data": {
+      "total_downtrends": 17,
+      "median_duration_days": 22,
+      "mean_duration_days": 27.2,
+      "p75_duration_days": 35,
+      "p90_duration_days": 49,
+      "most_recent_downtrend": {
+        "peak_idx": 1209,
+        "trough_idx": 1220,
+        "peak_date": "2026-07-28",
+        "trough_date": "2026-08-12",
+        "peak_price": 340.08,
+        "trough_price": 302.25,
+        "duration_days": 11,
+        "depth_pct": -11.12
+      }
+    },
+    "computed_at": 1794123675.3410811
+  },
+  "TSLA:2025-11-20": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 30,
+      "mean_duration_days": 32.9,
+      "p75_duration_days": 35,
+      "p90_duration_days": 57,
+      "most_recent_downtrend": {
+        "peak_idx": 1044,
+        "trough_idx": 1119,
+        "peak_date": "2024-12-17",
+        "trough_date": "2025-04-08",
+        "peak_price": 479.86,
+        "trough_price": 221.86,
+        "duration_days": 75,
+        "depth_pct": -53.77
+      }
+    },
+    "computed_at": 1794122875.4023416
+  },
+  "TSLA:2023-11-01": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 26,
+      "mean_duration_days": 29.4,
+      "p75_duration_days": 35,
+      "p90_duration_days": 43,
+      "most_recent_downtrend": {
+        "peak_idx": 1203,
+        "trough_idx": 1226,
+        "peak_date": "2023-07-18",
+        "trough_date": "2023-08-18",
+        "peak_price": 293.34,
+        "trough_price": 215.49,
+        "duration_days": 23,
+        "depth_pct": -26.54
+      }
+    },
+    "computed_at": 1794122985.057846
+  },
+  "TSLA:2026-01-15": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 29,
+      "mean_duration_days": 31.7,
+      "p75_duration_days": 35,
+      "p90_duration_days": 54,
+      "most_recent_downtrend": {
+        "peak_idx": 1224,
+        "trough_idx": 1238,
+        "peak_date": "2025-11-03",
+        "trough_date": "2025-11-21",
+        "peak_price": 468.37,
+        "trough_price": 391.09,
+        "duration_days": 14,
+        "depth_pct": -16.5
+      }
+    },
+    "computed_at": 1794123118.417291
+  },
+  "TSLA:2025-05-05": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 29,
+      "mean_duration_days": 30.2,
+      "p75_duration_days": 35,
+      "p90_duration_days": 44,
+      "most_recent_downtrend": {
+        "peak_idx": 1183,
+        "trough_idx": 1237,
+        "peak_date": "2024-12-17",
+        "trough_date": "2025-03-10",
+        "peak_price": 479.86,
+        "trough_price": 222.15,
+        "duration_days": 54,
+        "depth_pct": -53.71
+      }
+    },
+    "computed_at": 1794307689.2383661
+  },
+  "TSLA:2023-06-12": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 28,
+      "mean_duration_days": 30.6,
+      "p75_duration_days": 36,
+      "p90_duration_days": 44,
+      "most_recent_downtrend": {
+        "peak_idx": 1229,
+        "trough_idx": 1246,
+        "peak_date": "2023-03-31",
+        "trough_date": "2023-04-26",
+        "peak_price": 207.46,
+        "trough_price": 153.75,
+        "duration_days": 17,
+        "depth_pct": -25.89
+      }
+    },
+    "computed_at": 1794123456.0979407
+  },
+  "TSLA:2026-10-28": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 31,
+      "mean_duration_days": 35.3,
+      "p75_duration_days": 35,
+      "p90_duration_days": 74,
+      "most_recent_downtrend": {
+        "peak_idx": 1192,
+        "trough_idx": 1211,
+        "peak_date": "2026-07-01",
+        "trough_date": "2026-07-29",
+        "peak_price": 425.3,
+        "trough_price": 298.32,
+        "duration_days": 19,
+        "depth_pct": -29.86
+      }
+    },
+    "computed_at": 1794123557.056606
+  },
+  "MSFT:2024-03-18": {
+    "data": {
+      "total_downtrends": 14,
+      "median_duration_days": 12,
+      "mean_duration_days": 20.4,
+      "p75_duration_days": 23,
+      "p90_duration_days": 43,
+      "most_recent_downtrend": {
+        "peak_idx": 1151,
+        "trough_idx": 1159,
+        "peak_date": "2023-09-14",
+        "trough_date": "2023-09-26",
+        "peak_price": 330.9486,
+        "trough_price": 304.9965,
+        "duration_days": 8,
+        "depth_pct": -7.84
+      }
+    },
+    "computed_at": 1794123780.4108417
+  },
+  "NVDA:2026-10-30": {
+    "data": {
+      "total_downtrends": 17,
+      "median_duration_days": 28,
+      "mean_duration_days": 33.6,
+      "p75_duration_days": 50,
+      "p90_duration_days": 62,
+      "most_recent_downtrend": {
+        "peak_idx": 1158,
+        "trough_idx": 1209,
+        "peak_date": "2026-05-14",
+        "trough_date": "2026-07-29",
+        "peak_price": 235.74,
+        "trough_price": 190.01,
+        "duration_days": 51,
+        "depth_pct": -19.4
+      }
+    },
+    "computed_at": 1794123886.806264
+  },
+  "GOOGL:2025-07-21": {
+    "data": {
+      "total_downtrends": 18,
+      "median_duration_days": 16,
+      "mean_duration_days": 21.6,
+      "p75_duration_days": 26,
+      "p90_duration_days": 43,
+      "most_recent_downtrend": {
+        "peak_idx": 1161,
+        "trough_idx": 1205,
+        "peak_date": "2025-02-04",
+        "trough_date": "2025-04-08",
+        "peak_price": 205.1758,
+        "trough_price": 144.0213,
+        "duration_days": 44,
+        "depth_pct": -29.81
+      }
+    },
+    "computed_at": 1794123971.3363194
+  },
+  "META:2025-04-14": {
+    "data": {
+      "total_downtrends": 14,
+      "median_duration_days": 19,
+      "mean_duration_days": 29.7,
+      "p75_duration_days": 44,
+      "p90_duration_days": 53,
+      "most_recent_downtrend": {
+        "peak_idx": 1147,
+        "trough_idx": 1177,
+        "peak_date": "2024-10-04",
+        "trough_date": "2024-11-15",
+        "peak_price": 592.0637,
+        "trough_price": 550.476,
+        "duration_days": 30,
+        "depth_pct": -7.02
+      }
+    },
+    "computed_at": 1794124346.7265618
+  },
+  "SPY:2026-10-27": {
+    "data": {
+      "total_downtrends": 11,
+      "median_duration_days": 34,
+      "mean_duration_days": 31.5,
+      "p75_duration_days": 41,
+      "p90_duration_days": 44,
+      "most_recent_downtrend": {
+        "peak_idx": 1086,
+        "trough_idx": 1129,
+        "peak_date": "2026-01-27",
+        "trough_date": "2026-03-30",
+        "peak_price": 695.49,
+        "trough_price": 631.97,
+        "duration_days": 43,
+        "depth_pct": -9.13
+      }
+    },
+    "computed_at": 1794124461.9801202
+  },
+  "QQQ:2024-06-03": {
+    "data": {
+      "total_downtrends": 14,
+      "median_duration_days": 19,
+      "mean_duration_days": 26.9,
+      "p75_duration_days": 34,
+      "p90_duration_days": 54,
+      "most_recent_downtrend": {
+        "peak_idx": 1229,
+        "trough_idx": 1248,
+        "peak_date": "2024-03-22",
+        "trough_date": "2024-04-19",
+        "peak_price": 440.5872,
+        "trough_price": 409.2689,
+        "duration_days": 19,
+        "depth_pct": -7.11
+      }
+    },
+    "computed_at": 1794124560.5694425
+  },
+  "TEST:2026-11-02": {
+    "data": {
+      "total_downtrends": 3,
+      "median_duration_days": 19,
+      "mean_duration_days": 36.0,
+      "p75_duration_days": 45,
+      "p90_duration_days": 61,
+      "most_recent_downtrend": {
+        "peak_idx": 198,
+        "trough_idx": 215,
+        "peak_date": "2026-09-03",
+        "trough_date": "2026-09-29",
+        "peak_price": 37.4668,
+        "trough_price": 35.3103,
+        "duration_days": 17,
+        "depth_pct": -5.76
+      }
+    },
+    "computed_at": 1793709403.1294694
+  },
+  "AAPL:2026-10-20": {
+    "data": {
+      "total_downtrends": 17,
+      "median_duration_days": 22,
+      "mean_duration_days": 27.2,
+      "p75_duration_days": 35,
+      "p90_duration_days": 49,
+      "most_recent_downtrend": {
+        "peak_idx": 1216,
+        "trough_idx": 1227,
+        "peak_date": "2026-07-28",
+        "trough_date": "2026-08-12",
+        "peak_price": 340.08,
+        "trough_price": 302.25,
+        "duration_days": 11,
+        "depth_pct": -11.12
+      }
+    },
+    "computed_at": 1794116211.6196969
+  },
+  "TSLA:2026-10-31": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 31,
+      "mean_duration_days": 35.3,
+      "p75_duration_days": 35,
+      "p90_duration_days": 74,
+      "most_recent_downtrend": {
+        "peak_idx": 1189,
+        "trough_idx": 1208,
+        "peak_date": "2026-07-01",
+        "trough_date": "2026-07-29",
+        "peak_price": 425.3,
+        "trough_price": 298.32,
+        "duration_days": 19,
+        "depth_pct": -29.86
+      }
+    },
+    "computed_at": 1794117085.3267324
+  },
+  "JPM:2025-10-06": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 24,
+      "mean_duration_days": 25.7,
+      "p75_duration_days": 31,
+      "p90_duration_days": 38,
+      "most_recent_downtrend": {
+        "peak_idx": 1116,
+        "trough_idx": 1149,
+        "peak_date": "2025-02-18",
+        "trough_date": "2025-04-04",
+        "peak_price": 270.3555,
+        "trough_price": 204.3241,
+        "duration_days": 33,
+        "depth_pct": -24.42
+      }
+    },
+    "computed_at": 1794124672.7493749
+  },
+  "TSLA:2025-03-10": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 28,
+      "mean_duration_days": 28.7,
+      "p75_duration_days": 33,
+      "p90_duration_days": 35,
+      "most_recent_downtrend": {
+        "peak_idx": 1110,
+        "trough_idx": 1130,
+        "peak_date": "2024-07-10",
+        "trough_date": "2024-08-07",
+        "peak_price": 263.26,
+        "trough_price": 191.76,
+        "duration_days": 20,
+        "depth_pct": -27.16
+      }
+    },
+    "computed_at": 1794307939.9392657
+  },
+  "XOM:2023-09-25": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 27,
+      "mean_duration_days": 29.8,
+      "p75_duration_days": 34,
+      "p90_duration_days": 50,
+      "most_recent_downtrend": {
+        "peak_idx": 1202,
+        "trough_idx": 1229,
+        "peak_date": "2023-06-07",
+        "trough_date": "2023-07-18",
+        "peak_price": 97.5448,
+        "trough_price": 90.705,
+        "duration_days": 27,
+        "depth_pct": -7.01
+      }
+    },
+    "computed_at": 1794124856.0713897
+  },
+  "TSLA:2023-07-01": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 28,
+      "mean_duration_days": 30.7,
+      "p75_duration_days": 38,
+      "p90_duration_days": 44,
+      "most_recent_downtrend": {
+        "peak_idx": 1215,
+        "trough_idx": 1232,
+        "peak_date": "2023-03-31",
+        "trough_date": "2023-04-26",
+        "peak_price": 207.46,
+        "trough_price": 153.75,
+        "duration_days": 17,
+        "depth_pct": -25.89
+      }
+    },
+    "computed_at": 1794124897.4085116
+  },
+  "TSLA:2024-10-15": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 27,
+      "mean_duration_days": 28.1,
+      "p75_duration_days": 32,
+      "p90_duration_days": 35,
+      "most_recent_downtrend": {
+        "peak_idx": 1210,
+        "trough_idx": 1230,
+        "peak_date": "2024-07-10",
+        "trough_date": "2024-08-07",
+        "peak_price": 263.26,
+        "trough_price": 191.76,
+        "duration_days": 20,
+        "depth_pct": -27.16
+      }
+    },
+    "computed_at": 1794125038.8551972
+  },
+  "TSLA:2025-08-01": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 29,
+      "mean_duration_days": 31.6,
+      "p75_duration_days": 35,
+      "p90_duration_days": 54,
+      "most_recent_downtrend": {
+        "peak_idx": 1121,
+        "trough_idx": 1196,
+        "peak_date": "2024-12-17",
+        "trough_date": "2025-04-08",
+        "peak_price": 479.86,
+        "trough_price": 221.86,
+        "duration_days": 75,
+        "depth_pct": -53.77
+      }
+    },
+    "computed_at": 1794125150.1116688
+  },
+  "TSLA:2023-02-10": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 29,
+      "mean_duration_days": 32.1,
+      "p75_duration_days": 38,
+      "p90_duration_days": 44,
+      "most_recent_downtrend": {
+        "peak_idx": 1178,
+        "trough_idx": 1251,
+        "peak_date": "2022-09-19",
+        "trough_date": "2023-01-03",
+        "peak_price": 309.07,
+        "trough_price": 108.1,
+        "duration_days": 73,
+        "depth_pct": -65.02
+      }
+    },
+    "computed_at": 1794125284.37819
+  },
+  "TSLA:2025-12-01": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 30,
+      "mean_duration_days": 32.9,
+      "p75_duration_days": 35,
+      "p90_duration_days": 57,
+      "most_recent_downtrend": {
+        "peak_idx": 1033,
+        "trough_idx": 1108,
+        "peak_date": "2024-12-17",
+        "trough_date": "2025-04-08",
+        "peak_price": 479.86,
+        "trough_price": 221.86,
+        "duration_days": 75,
+        "depth_pct": -53.77
+      }
+    },
+    "computed_at": 1794125428.9790304
+  },
+  "TSLA:2024-06-20": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 26,
+      "mean_duration_days": 28.1,
+      "p75_duration_days": 33,
+      "p90_duration_days": 35,
+      "most_recent_downtrend": {
+        "peak_idx": 1201,
+        "trough_idx": 1236,
+        "peak_date": "2024-03-01",
+        "trough_date": "2024-04-22",
+        "peak_price": 202.64,
+        "trough_price": 142.05,
+        "duration_days": 35,
+        "depth_pct": -29.9
+      }
+    },
+    "computed_at": 1794125558.1788218
+  },
+  "TSLA:2024-02-20": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 26,
+      "mean_duration_days": 28.5,
+      "p75_duration_days": 33,
+      "p90_duration_days": 38,
+      "most_recent_downtrend": {
+        "peak_idx": 1170,
+        "trough_idx": 1202,
+        "peak_date": "2023-09-14",
+        "trough_date": "2023-10-30",
+        "peak_price": 276.04,
+        "trough_price": 197.36,
+        "duration_days": 32,
+        "depth_pct": -28.5
+      }
+    },
+    "computed_at": 1794308055.6086721
+  },
+  "TSLA:2025-07-15": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 29,
+      "mean_duration_days": 31.6,
+      "p75_duration_days": 35,
+      "p90_duration_days": 54,
+      "most_recent_downtrend": {
+        "peak_idx": 1134,
+        "trough_idx": 1209,
+        "peak_date": "2024-12-17",
+        "trough_date": "2025-04-08",
+        "peak_price": 479.86,
+        "trough_price": 221.86,
+        "duration_days": 75,
+        "depth_pct": -53.77
+      }
+    },
+    "computed_at": 1794308171.17807
+  },
+  "TSLA:2023-05-05": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 29,
+      "mean_duration_days": 31.5,
+      "p75_duration_days": 38,
+      "p90_duration_days": 44,
+      "most_recent_downtrend": {
+        "peak_idx": 1224,
+        "trough_idx": 1239,
+        "peak_date": "2023-02-15",
+        "trough_date": "2023-03-09",
+        "peak_price": 214.24,
+        "trough_price": 172.92,
+        "duration_days": 15,
+        "depth_pct": -19.29
+      }
+    },
+    "computed_at": 1794308370.2950962
+  },
+  "TSLA:2026-01-05": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 29,
+      "mean_duration_days": 31.7,
+      "p75_duration_days": 35,
+      "p90_duration_days": 54,
+      "most_recent_downtrend": {
+        "peak_idx": 1232,
+        "trough_idx": 1246,
+        "peak_date": "2025-11-03",
+        "trough_date": "2025-11-21",
+        "peak_price": 468.37,
+        "trough_price": 391.09,
+        "duration_days": 14,
+        "depth_pct": -16.5
+      }
+    },
+    "computed_at": 1794308566.7481928
+  },
+  "TSLA:2024-12-01": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 27,
+      "mean_duration_days": 28.1,
+      "p75_duration_days": 32,
+      "p90_duration_days": 35,
+      "most_recent_downtrend": {
+        "peak_idx": 1176,
+        "trough_idx": 1196,
+        "peak_date": "2024-07-10",
+        "trough_date": "2024-08-07",
+        "peak_price": 263.26,
+        "trough_price": 191.76,
+        "duration_days": 20,
+        "depth_pct": -27.16
+      }
+    },
+    "computed_at": 1794308786.9127557
+  },
+  "TSLA:2025-10-20": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 30,
+      "mean_duration_days": 32.9,
+      "p75_duration_days": 35,
+      "p90_duration_days": 57,
+      "most_recent_downtrend": {
+        "peak_idx": 1067,
+        "trough_idx": 1142,
+        "peak_date": "2024-12-17",
+        "trough_date": "2025-04-08",
+        "peak_price": 479.86,
+        "trough_price": 221.86,
+        "duration_days": 75,
+        "depth_pct": -53.77
+      }
+    },
+    "computed_at": 1794308993.4213881
+  },
+  "TSLA:2023-09-18": {
+    "data": {
+      "total_downtrends": 14,
+      "median_duration_days": 27,
+      "mean_duration_days": 29.9,
+      "p75_duration_days": 35,
+      "p90_duration_days": 43,
+      "most_recent_downtrend": {
+        "peak_idx": 1161,
+        "trough_idx": 1178,
+        "peak_date": "2023-03-31",
+        "trough_date": "2023-04-26",
+        "peak_price": 207.46,
+        "trough_price": 153.75,
+        "duration_days": 17,
+        "depth_pct": -25.89
+      }
+    },
+    "computed_at": 1794309199.047673
+  },
+  "TSLA:2026-02-10": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 30,
+      "mean_duration_days": 31.9,
+      "p75_duration_days": 35,
+      "p90_duration_days": 57,
+      "most_recent_downtrend": {
+        "peak_idx": 1208,
+        "trough_idx": 1222,
+        "peak_date": "2025-11-03",
+        "trough_date": "2025-11-21",
+        "peak_price": 468.37,
+        "trough_price": 391.09,
+        "duration_days": 14,
+        "depth_pct": -16.5
+      }
+    },
+    "computed_at": 1794309397.70459
+  },
+  "TSLA:2024-06-15": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 26,
+      "mean_duration_days": 28.1,
+      "p75_duration_days": 33,
+      "p90_duration_days": 35,
+      "most_recent_downtrend": {
+        "peak_idx": 1204,
+        "trough_idx": 1239,
+        "peak_date": "2024-03-01",
+        "trough_date": "2024-04-22",
+        "peak_price": 202.64,
+        "trough_price": 142.05,
+        "duration_days": 35,
+        "depth_pct": -29.9
+      }
+    },
+    "computed_at": 1794309609.7188487
+  },
+  "AAPL:2025-01-15": {
+    "data": {
+      "total_downtrends": 17,
+      "median_duration_days": 19,
+      "mean_duration_days": 25.9,
+      "p75_duration_days": 31,
+      "p90_duration_days": 49,
+      "most_recent_downtrend": {
+        "peak_idx": 1181,
+        "trough_idx": 1192,
+        "peak_date": "2024-08-29",
+        "trough_date": "2024-09-16",
+        "peak_price": 227.8837,
+        "trough_price": 214.5255,
+        "duration_days": 11,
+        "depth_pct": -5.86
+      }
+    },
+    "computed_at": 1794309820.998807
+  },
+  "AAPL:2024-05-10": {
+    "data": {
+      "total_downtrends": 14,
+      "median_duration_days": 20,
+      "mean_duration_days": 25.2,
+      "p75_duration_days": 30,
+      "p90_duration_days": 43,
+      "most_recent_downtrend": {
+        "peak_idx": 1177,
+        "trough_idx": 1191,
+        "peak_date": "2023-12-14",
+        "trough_date": "2024-01-05",
+        "peak_price": 195.7238,
+        "trough_price": 178.9977,
+        "duration_days": 14,
+        "depth_pct": -8.55
+      }
+    },
+    "computed_at": 1794310013.8476584
+  },
+  "AAPL:2023-11-01": {
+    "data": {
+      "total_downtrends": 14,
+      "median_duration_days": 19,
+      "mean_duration_days": 24.1,
+      "p75_duration_days": 27,
+      "p90_duration_days": 41,
+      "most_recent_downtrend": {
+        "peak_idx": 1237,
+        "trough_idx": 1253,
+        "peak_date": "2023-09-05",
+        "trough_date": "2023-09-27",
+        "peak_price": 187.1685,
+        "trough_price": 168.1557,
+        "duration_days": 16,
+        "depth_pct": -10.16
+      }
+    },
+    "computed_at": 1794310237.8647962
+  },
+  "MSFT:2026-09-15": {
+    "data": {
+      "total_downtrends": 14,
+      "median_duration_days": 22,
+      "mean_duration_days": 31.2,
+      "p75_duration_days": 43,
+      "p90_duration_days": 66,
+      "most_recent_downtrend": {
+        "peak_idx": 1201,
+        "trough_idx": 1218,
+        "peak_date": "2026-06-01",
+        "trough_date": "2026-06-25",
+        "peak_price": 460.52,
+        "trough_price": 352.83,
+        "duration_days": 17,
+        "depth_pct": -23.38
+      }
+    },
+    "computed_at": 1794310432.6790283
+  },
+  "MSFT:2025-04-01": {
+    "data": {
+      "total_downtrends": 13,
+      "median_duration_days": 13,
+      "mean_duration_days": 21.5,
+      "p75_duration_days": 23,
+      "p90_duration_days": 47,
+      "most_recent_downtrend": {
+        "peak_idx": 1092,
+        "trough_idx": 1113,
+        "peak_date": "2024-07-05",
+        "trough_date": "2024-08-05",
+        "peak_price": 459.4607,
+        "trough_price": 388.305,
+        "duration_days": 21,
+        "depth_pct": -15.49
+      }
+    },
+    "computed_at": 1794310589.3873217
+  },
+  "MSFT:2024-08-20": {
+    "data": {
+      "total_downtrends": 13,
+      "median_duration_days": 13,
+      "mean_duration_days": 21.8,
+      "p75_duration_days": 24,
+      "p90_duration_days": 47,
+      "most_recent_downtrend": {
+        "peak_idx": 1174,
+        "trough_idx": 1201,
+        "peak_date": "2024-03-21",
+        "trough_date": "2024-04-30",
+        "peak_price": 421.1726,
+        "trough_price": 381.897,
+        "duration_days": 27,
+        "depth_pct": -9.33
+      }
+    },
+    "computed_at": 1794310729.6001916
+  },
+  "MSFT:2023-06-05": {
+    "data": {
+      "total_downtrends": 13,
+      "median_duration_days": 13,
+      "mean_duration_days": 20.6,
+      "p75_duration_days": 23,
+      "p90_duration_days": 46,
+      "most_recent_downtrend": {
+        "peak_idx": 1202,
+        "trough_idx": 1212,
+        "peak_date": "2023-02-14",
+        "trough_date": "2023-03-01",
+        "peak_price": 264.1389,
+        "trough_price": 239.6018,
+        "duration_days": 10,
+        "depth_pct": -9.29
+      }
+    },
+    "computed_at": 1794310862.56368
+  },
+  "NVDA:2026-10-15": {
+    "data": {
+      "total_downtrends": 17,
+      "median_duration_days": 28,
+      "mean_duration_days": 33.6,
+      "p75_duration_days": 50,
+      "p90_duration_days": 62,
+      "most_recent_downtrend": {
+        "peak_idx": 1169,
+        "trough_idx": 1220,
+        "peak_date": "2026-05-14",
+        "trough_date": "2026-07-29",
+        "peak_price": 235.74,
+        "trough_price": 190.01,
+        "duration_days": 51,
+        "depth_pct": -19.4
+      }
+    },
+    "computed_at": 1794311160.0004942
+  },
+  "NVDA:2025-02-10": {
+    "data": {
+      "total_downtrends": 18,
+      "median_duration_days": 20,
+      "mean_duration_days": 28.8,
+      "p75_duration_days": 39,
+      "p90_duration_days": 54,
+      "most_recent_downtrend": {
+        "peak_idx": 1214,
+        "trough_idx": 1242,
+        "peak_date": "2024-11-07",
+        "trough_date": "2024-12-18",
+        "peak_price": 148.4816,
+        "trough_price": 128.5739,
+        "duration_days": 28,
+        "depth_pct": -13.41
+      }
+    },
+    "computed_at": 1794311412.0099025
+  },
+  "NVDA:2024-11-20": {
+    "data": {
+      "total_downtrends": 17,
+      "median_duration_days": 20,
+      "mean_duration_days": 28.9,
+      "p75_duration_days": 40,
+      "p90_duration_days": 56,
+      "most_recent_downtrend": {
+        "peak_idx": 1212,
+        "trough_idx": 1225,
+        "peak_date": "2024-08-19",
+        "trough_date": "2024-09-06",
+        "peak_price": 129.641,
+        "trough_price": 102.5461,
+        "duration_days": 13,
+        "depth_pct": -20.9
+      }
+    },
+    "computed_at": 1794311685.2211666
+  },
+  "NVDA:2023-07-10": {
+    "data": {
+      "total_downtrends": 14,
+      "median_duration_days": 28,
+      "mean_duration_days": 33.4,
+      "p75_duration_days": 47,
+      "p90_duration_days": 62,
+      "most_recent_downtrend": {
+        "peak_idx": 1136,
+        "trough_idx": 1146,
+        "peak_date": "2022-12-13",
+        "trough_date": "2022-12-28",
+        "peak_price": 18.0118,
+        "trough_price": 13.9892,
+        "duration_days": 10,
+        "depth_pct": -22.33
+      }
+    },
+    "computed_at": 1794311936.1320996
+  },
+  "GOOGL:2026-09-20": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 26,
+      "mean_duration_days": 27.3,
+      "p75_duration_days": 41,
+      "p90_duration_days": 44,
+      "most_recent_downtrend": {
+        "peak_idx": 1185,
+        "trough_idx": 1233,
+        "peak_date": "2026-05-13",
+        "trough_date": "2026-07-23",
+        "peak_price": 402.62,
+        "trough_price": 317.69,
+        "duration_days": 48,
+        "depth_pct": -21.09
+      }
+    },
+    "computed_at": 1794312152.3945017
+  },
+  "GOOGL:2025-05-05": {
+    "data": {
+      "total_downtrends": 17,
+      "median_duration_days": 15,
+      "mean_duration_days": 20.2,
+      "p75_duration_days": 26,
+      "p90_duration_days": 38,
+      "most_recent_downtrend": {
+        "peak_idx": 1071,
+        "trough_idx": 1114,
+        "peak_date": "2024-07-10",
+        "trough_date": "2024-09-10",
+        "peak_price": 189.5953,
+        "trough_price": 147.6234,
+        "duration_days": 43,
+        "depth_pct": -22.14
+      }
+    },
+    "computed_at": 1794312341.3679414
+  },
+  "GOOGL:2024-09-10": {
+    "data": {
+      "total_downtrends": 17,
+      "median_duration_days": 15,
+      "mean_duration_days": 19.1,
+      "p75_duration_days": 23,
+      "p90_duration_days": 30,
+      "most_recent_downtrend": {
+        "peak_idx": 1122,
+        "trough_idx": 1148,
+        "peak_date": "2024-01-29",
+        "trough_date": "2024-03-06",
+        "peak_price": 152.063,
+        "trough_price": 130.1614,
+        "duration_days": 26,
+        "depth_pct": -14.4
+      }
+    },
+    "computed_at": 1794312467.599596
+  },
+  "GOOGL:2023-12-01": {
+    "data": {
+      "total_downtrends": 19,
+      "median_duration_days": 15,
+      "mean_duration_days": 18.7,
+      "p75_duration_days": 22,
+      "p90_duration_days": 28,
+      "most_recent_downtrend": {
+        "peak_idx": 1241,
+        "trough_idx": 1253,
+        "peak_date": "2023-10-11",
+        "trough_date": "2023-10-27",
+        "peak_price": 139.2252,
+        "trough_price": 121.0184,
+        "duration_days": 12,
+        "depth_pct": -13.08
+      }
+    },
+    "computed_at": 1794312619.489019
+  },
+  "AMZN:2026-10-05": {
+    "data": {
+      "total_downtrends": 13,
+      "median_duration_days": 28,
+      "mean_duration_days": 38.8,
+      "p75_duration_days": 53,
+      "p90_duration_days": 70,
+      "most_recent_downtrend": {
+        "peak_idx": 1170,
+        "trough_idx": 1227,
+        "peak_date": "2026-05-06",
+        "trough_date": "2026-07-29",
+        "peak_price": 274.99,
+        "trough_price": 226.65,
+        "duration_days": 57,
+        "depth_pct": -17.58
+      }
+    },
+    "computed_at": 1794312745.8664548
+  },
+  "AMZN:2025-06-20": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 23,
+      "mean_duration_days": 32.5,
+      "p75_duration_days": 41,
+      "p90_duration_days": 65,
+      "most_recent_downtrend": {
+        "peak_idx": 1181,
+        "trough_idx": 1233,
+        "peak_date": "2025-02-04",
+        "trough_date": "2025-04-21",
+        "peak_price": 242.06,
+        "trough_price": 167.32,
+        "duration_days": 52,
+        "depth_pct": -30.88
+      }
+    },
+    "computed_at": 1794312878.408574
+  },
+  "AMZN:2024-03-15": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 23,
+      "mean_duration_days": 30.9,
+      "p75_duration_days": 30,
+      "p90_duration_days": 65,
+      "most_recent_downtrend": {
+        "peak_idx": 1151,
+        "trough_idx": 1182,
+        "peak_date": "2023-09-13",
+        "trough_date": "2023-10-26",
+        "peak_price": 144.85,
+        "trough_price": 119.57,
+        "duration_days": 31,
+        "depth_pct": -17.45
+      }
+    },
+    "computed_at": 1794313014.4519544
+  },
+  "AMZN:2023-10-10": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 19,
+      "mean_duration_days": 28.3,
+      "p75_duration_days": 29,
+      "p90_duration_days": 63,
+      "most_recent_downtrend": {
+        "peak_idx": 1106,
+        "trough_idx": 1131,
+        "peak_date": "2023-02-02",
+        "trough_date": "2023-03-10",
+        "peak_price": 112.91,
+        "trough_price": 90.73,
+        "duration_days": 25,
+        "depth_pct": -19.64
+      }
+    },
+    "computed_at": 1794313162.8951414
+  },
+  "TSLA:2025-04-18": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 29,
+      "mean_duration_days": 30.2,
+      "p75_duration_days": 35,
+      "p90_duration_days": 44,
+      "most_recent_downtrend": {
+        "peak_idx": 1194,
+        "trough_idx": 1248,
+        "peak_date": "2024-12-17",
+        "trough_date": "2025-03-10",
+        "peak_price": 479.86,
+        "trough_price": 222.15,
+        "duration_days": 54,
+        "depth_pct": -53.71
+      }
+    },
+    "computed_at": 1794314837.4407272
+  },
+  "TSLA:2024-10-01": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 27,
+      "mean_duration_days": 28.1,
+      "p75_duration_days": 32,
+      "p90_duration_days": 35,
+      "most_recent_downtrend": {
+        "peak_idx": 1220,
+        "trough_idx": 1240,
+        "peak_date": "2024-07-10",
+        "trough_date": "2024-08-07",
+        "peak_price": 263.26,
+        "trough_price": 191.76,
+        "duration_days": 20,
+        "depth_pct": -27.16
+      }
+    },
+    "computed_at": 1794314971.3453302
+  },
+  "TSLA:2023-02-15": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 29,
+      "mean_duration_days": 32.1,
+      "p75_duration_days": 38,
+      "p90_duration_days": 44,
+      "most_recent_downtrend": {
+        "peak_idx": 1176,
+        "trough_idx": 1249,
+        "peak_date": "2022-09-19",
+        "trough_date": "2023-01-03",
+        "peak_price": 309.07,
+        "trough_price": 108.1,
+        "duration_days": 73,
+        "depth_pct": -65.02
+      }
+    },
+    "computed_at": 1794315184.905024
+  },
+  "TSLA:2026-03-10": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 30,
+      "mean_duration_days": 31.9,
+      "p75_duration_days": 35,
+      "p90_duration_days": 57,
+      "most_recent_downtrend": {
+        "peak_idx": 1189,
+        "trough_idx": 1203,
+        "peak_date": "2025-11-03",
+        "trough_date": "2025-11-21",
+        "peak_price": 468.37,
+        "trough_price": 391.09,
+        "duration_days": 14,
+        "depth_pct": -16.5
+      }
+    },
+    "computed_at": 1794315305.0160513
+  },
+  "TSLA:2025-08-22": {
+    "data": {
+      "total_downtrends": 16,
+      "median_duration_days": 29,
+      "mean_duration_days": 31.6,
+      "p75_duration_days": 35,
+      "p90_duration_days": 54,
+      "most_recent_downtrend": {
+        "peak_idx": 1107,
+        "trough_idx": 1182,
+        "peak_date": "2024-12-17",
+        "trough_date": "2025-04-08",
+        "peak_price": 479.86,
+        "trough_price": 221.86,
+        "duration_days": 75,
+        "depth_pct": -53.77
+      }
+    },
+    "computed_at": 1794315438.8356385
+  },
+  "TEST:2026-11-10": {
+    "data": {
+      "total_downtrends": 3,
+      "median_duration_days": 19,
+      "mean_duration_days": 36.0,
+      "p75_duration_days": 45,
+      "p90_duration_days": 61,
+      "most_recent_downtrend": {
+        "peak_idx": 198,
+        "trough_idx": 215,
+        "peak_date": "2026-09-03",
+        "trough_date": "2026-09-29",
+        "peak_price": 37.1161,
+        "trough_price": 34.9798,
+        "duration_days": 17,
+        "depth_pct": -5.76
+      }
+    },
+    "computed_at": 1794391173.2436035
+  },
+  "TSLA:2026-10-05": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 31,
+      "mean_duration_days": 35.3,
+      "p75_duration_days": 35,
+      "p90_duration_days": 74,
+      "most_recent_downtrend": {
+        "peak_idx": 1208,
+        "trough_idx": 1227,
+        "peak_date": "2026-07-01",
+        "trough_date": "2026-07-29",
+        "peak_price": 425.3,
+        "trough_price": 298.32,
+        "duration_days": 19,
+        "depth_pct": -29.86
+      }
+    },
+    "computed_at": 1794391606.9959502
+  },
+  "TSLA:2026-09-05": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 31,
+      "mean_duration_days": 35.3,
+      "p75_duration_days": 35,
+      "p90_duration_days": 74,
+      "most_recent_downtrend": {
+        "peak_idx": 1228,
+        "trough_idx": 1247,
+        "peak_date": "2026-07-01",
+        "trough_date": "2026-07-29",
+        "peak_price": 425.3,
+        "trough_price": 298.32,
+        "duration_days": 19,
+        "depth_pct": -29.86
+      }
+    },
+    "computed_at": 1794391723.0679853
+  },
+  "SPY:2026-09-05": {
+    "data": {
+      "total_downtrends": 11,
+      "median_duration_days": 34,
+      "mean_duration_days": 31.5,
+      "p75_duration_days": 41,
+      "p90_duration_days": 44,
+      "most_recent_downtrend": {
+        "peak_idx": 1121,
+        "trough_idx": 1164,
+        "peak_date": "2026-01-27",
+        "trough_date": "2026-03-30",
+        "peak_price": 695.49,
+        "trough_price": 631.97,
+        "duration_days": 43,
+        "depth_pct": -9.13
+      }
+    },
+    "computed_at": 1794392125.8449109
+  },
+  "TSLA:2026-10-01": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 31,
+      "mean_duration_days": 35.3,
+      "p75_duration_days": 35,
+      "p90_duration_days": 74,
+      "most_recent_downtrend": {
+        "peak_idx": 1210,
+        "trough_idx": 1229,
+        "peak_date": "2026-07-01",
+        "trough_date": "2026-07-29",
+        "peak_price": 425.3,
+        "trough_price": 298.32,
+        "duration_days": 19,
+        "depth_pct": -29.86
+      }
+    },
+    "computed_at": 1794392726.993369
+  },
+  "TSLA:2026-07-01": {
+    "data": {
+      "total_downtrends": 14,
+      "median_duration_days": 31,
+      "mean_duration_days": 36.5,
+      "p75_duration_days": 35,
+      "p90_duration_days": 74,
+      "most_recent_downtrend": {
+        "peak_idx": 1141,
+        "trough_idx": 1217,
+        "peak_date": "2025-12-16",
+        "trough_date": "2026-04-08",
+        "peak_price": 489.88,
+        "trough_price": 343.25,
+        "duration_days": 76,
+        "depth_pct": -29.93
+      }
+    },
+    "computed_at": 1794392931.456943
+  },
+  "TSLA:2026-08-01": {
+    "data": {
+      "total_downtrends": 14,
+      "median_duration_days": 31,
+      "mean_duration_days": 36.5,
+      "p75_duration_days": 35,
+      "p90_duration_days": 74,
+      "most_recent_downtrend": {
+        "peak_idx": 1118,
+        "trough_idx": 1194,
+        "peak_date": "2025-12-16",
+        "trough_date": "2026-04-08",
+        "peak_price": 489.88,
+        "trough_price": 343.25,
+        "duration_days": 76,
+        "depth_pct": -29.93
+      }
+    },
+    "computed_at": 1794392934.4238207
+  },
+  "TSLA:2026-06-01": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 31,
+      "mean_duration_days": 35.3,
+      "p75_duration_days": 35,
+      "p90_duration_days": 74,
+      "most_recent_downtrend": {
+        "peak_idx": 1162,
+        "trough_idx": 1238,
+        "peak_date": "2025-12-16",
+        "trough_date": "2026-04-08",
+        "peak_price": 489.88,
+        "trough_price": 343.25,
+        "duration_days": 76,
+        "depth_pct": -29.93
+      }
+    },
+    "computed_at": 1794393056.8656113
+  },
+  "TSLA:2026-05-01": {
+    "data": {
+      "total_downtrends": 14,
+      "median_duration_days": 30,
+      "mean_duration_days": 32.4,
+      "p75_duration_days": 35,
+      "p90_duration_days": 61,
+      "most_recent_downtrend": {
+        "peak_idx": 1152,
+        "trough_idx": 1166,
+        "peak_date": "2025-11-03",
+        "trough_date": "2025-11-21",
+        "peak_price": 468.37,
+        "trough_price": 391.09,
+        "duration_days": 14,
+        "depth_pct": -16.5
+      }
+    },
+    "computed_at": 1794393062.2563667
+  },
+  "TSLA:2026-09-15": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 31,
+      "mean_duration_days": 35.3,
+      "p75_duration_days": 35,
+      "p90_duration_days": 74,
+      "most_recent_downtrend": {
+        "peak_idx": 1222,
+        "trough_idx": 1241,
+        "peak_date": "2026-07-01",
+        "trough_date": "2026-07-29",
+        "peak_price": 425.3,
+        "trough_price": 298.32,
+        "duration_days": 19,
+        "depth_pct": -29.86
+      }
+    },
+    "computed_at": 1794395805.8288314
+  },
+  "TSLA:2026-09-20": {
+    "data": {
+      "total_downtrends": 15,
+      "median_duration_days": 31,
+      "mean_duration_days": 35.3,
+      "p75_duration_days": 35,
+      "p90_duration_days": 74,
+      "most_recent_downtrend": {
+        "peak_idx": 1218,
+        "trough_idx": 1237,
+        "peak_date": "2026-07-01",
+        "trough_date": "2026-07-29",
+        "peak_price": 425.3,
+        "trough_price": 298.32,
+        "duration_days": 19,
+        "depth_pct": -29.86
+      }
+    },
+    "computed_at": 1794396131.665819
+  },
+  "SPY:2026-10-01": {
+    "data": {
+      "total_downtrends": 11,
+      "median_duration_days": 34,
+      "mean_duration_days": 31.5,
+      "p75_duration_days": 41,
+      "p90_duration_days": 44,
+      "most_recent_downtrend": {
+        "peak_idx": 1103,
+        "trough_idx": 1146,
+        "peak_date": "2026-01-27",
+        "trough_date": "2026-03-30",
+        "peak_price": 695.49,
+        "trough_price": 631.97,
+        "duration_days": 43,
+        "depth_pct": -9.13
+      }
+    },
+    "computed_at": 1794397652.9217994
+  },
+  "SPY:2026-09-01": {
+    "data": {
+      "total_downtrends": 12,
+      "median_duration_days": 30,
+      "mean_duration_days": 30.7,
+      "p75_duration_days": 40,
+      "p90_duration_days": 43,
+      "most_recent_downtrend": {
+        "peak_idx": 1125,
+        "trough_idx": 1168,
+        "peak_date": "2026-01-27",
+        "trough_date": "2026-03-30",
+        "peak_price": 695.49,
+        "trough_price": 631.97,
+        "duration_days": 43,
+        "depth_pct": -9.13
+      }
+    },
+    "computed_at": 1794397756.2497616
+  },
+  "SPY:2026-08-01": {
+    "data": {
+      "total_downtrends": 12,
+      "median_duration_days": 30,
+      "mean_duration_days": 30.7,
+      "p75_duration_days": 40,
+      "p90_duration_days": 43,
+      "most_recent_downtrend": {
+        "peak_idx": 1145,
+        "trough_idx": 1188,
+        "peak_date": "2026-01-27",
+        "trough_date": "2026-03-30",
+        "peak_price": 695.49,
+        "trough_price": 631.97,
+        "duration_days": 43,
+        "depth_pct": -9.13
+      }
+    },
+    "computed_at": 1794397844.6206555
+  },
+  "SPY:2026-07-01": {
+    "data": {
+      "total_downtrends": 12,
+      "median_duration_days": 30,
+      "mean_duration_days": 30.7,
+      "p75_duration_days": 40,
+      "p90_duration_days": 43,
+      "most_recent_downtrend": {
+        "peak_idx": 1168,
+        "trough_idx": 1211,
+        "peak_date": "2026-01-27",
+        "trough_date": "2026-03-30",
+        "peak_price": 695.49,
+        "trough_price": 631.97,
+        "duration_days": 43,
+        "depth_pct": -9.13
+      }
+    },
+    "computed_at": 1794397937.8336136
+  },
+  "SPX:2026-11-12": {
+    "data": {
+      "total_downtrends": 11,
+      "median_duration_days": 34,
+      "mean_duration_days": 33.6,
+      "p75_duration_days": 43,
+      "p90_duration_days": 55,
+      "most_recent_downtrend": {
+        "peak_idx": 1074,
+        "trough_idx": 1117,
+        "peak_date": "2026-01-27",
+        "trough_date": "2026-03-30",
+        "peak_price": 6978.6001,
+        "trough_price": 6343.7202,
+        "duration_days": 43,
+        "depth_pct": -9.1
+      }
+    },
+    "computed_at": 1794539351.1923258
+  },
+  "NVDA:2026-11-12": {
+    "data": {
+      "total_downtrends": 17,
+      "median_duration_days": 28,
+      "mean_duration_days": 33.6,
+      "p75_duration_days": 50,
+      "p90_duration_days": 62,
+      "most_recent_downtrend": {
+        "peak_idx": 1149,
+        "trough_idx": 1200,
+        "peak_date": "2026-05-14",
+        "trough_date": "2026-07-29",
+        "peak_price": 235.74,
+        "trough_price": 190.01,
+        "duration_days": 51,
+        "depth_pct": -19.4
+      }
+    },
+    "computed_at": 1794539889.9120414
+  },
+  "NVDA:2026-11-11": {
+    "data": {
+      "total_downtrends": 17,
+      "median_duration_days": 28,
+      "mean_duration_days": 33.6,
+      "p75_duration_days": 50,
+      "p90_duration_days": 62,
+      "most_recent_downtrend": {
+        "peak_idx": 1150,
+        "trough_idx": 1201,
+        "peak_date": "2026-05-14",
+        "trough_date": "2026-07-29",
+        "peak_price": 235.74,
+        "trough_price": 190.01,
+        "duration_days": 51,
+        "depth_pct": -19.4
+      }
+    },
+    "computed_at": 1794540119.72653
+  },
+  "TEST:2026-11-12": {
+    "data": {
+      "total_downtrends": 3,
+      "median_duration_days": 19,
+      "mean_duration_days": 36.0,
+      "p75_duration_days": 45,
+      "p90_duration_days": 61,
+      "most_recent_downtrend": {
+        "peak_idx": 198,
+        "trough_idx": 215,
+        "peak_date": "2026-09-03",
+        "trough_date": "2026-09-29",
+        "peak_price": 37.1161,
+        "trough_price": 34.9798,
+        "duration_days": 17,
+        "depth_pct": -5.76
+      }
+    },
+    "computed_at": 1794541700.405808
+  }
+}

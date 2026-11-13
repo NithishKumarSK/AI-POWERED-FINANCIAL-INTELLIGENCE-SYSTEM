@@ -22,8 +22,15 @@ from typing import List, Optional, Tuple
 # FORMULA CONSTANTS
 # ══════════════════════════════════════════════════════════════════════════════
 
-_BUY_THRESHOLD  =  2.0   # return_pct > +2% → BUY  (the horizon_days=7 baseline)
-_SELL_THRESHOLD = -2.0   # return_pct < -2% → SELL (the horizon_days=7 baseline)
+# Tightened from 2.0 -> 1.0 this session: this project's own live calibration
+# data (744 validated predictions) found OVER_HOLD is the #1 failure reason
+# (84 occurrences), with batch runs repeatedly showing 50-63% HOLD rates --
+# the dead-band was too wide, converting real directional signal into HOLD
+# too often. A narrower band means more predictions clear the bar for a
+# decisive BUY/SELL call, on both the Gemini-facing threshold AND the
+# ground-truth grading (same single source of truth, kept in sync on purpose).
+_BUY_THRESHOLD  =  1.0   # return_pct > +1% → BUY  (the horizon_days=7 baseline)
+_SELL_THRESHOLD = -1.0   # return_pct < -1% → SELL (the horizon_days=7 baseline)
 
 
 def decision_thresholds_for_horizon(horizon_days: Optional[int]) -> Tuple[float, float]:

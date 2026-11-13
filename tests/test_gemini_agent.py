@@ -482,6 +482,89 @@ def test_genuinely_mixed_low_confidence_still_skipped(monkeypatch):
     assert "SKIP" in result.get("error", "")
 
 
+def _consensus_call(decision, **overrides):
+    base = {
+        "status": "SUCCESS", "decision": decision,
+        "decision_reason": "...", "predicted_return_pct": 0.5 if decision == "HOLD" else 2.0,
+        "predicted_target_price": 100.5, "predicted_final_capital": 10050.0,
+        "predicted_total_pl": 50.0, "confidence_score": 55, "risk_score": 50,
+        "data_quality_score": 90, "signal_scores": {}, "gemini_latency_ms": 0,
+        "prompt_hash": "", "gemini_output_hash": "",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_tally_majority_hold_resolves_to_hold_not_low():
+    """2 HOLD + 1 BUY -- a real majority preference for 'don't trade this,'
+    not the genuine 3-way noise the skip gate exists for. This is the exact
+    pattern confirmed firing in production this session (e.g. real logged
+    skip: Votes: {'BUY': 1, 'SELL': 0, 'HOLD': 2}) -- must now resolve as a
+    real HOLD decision instead of being discarded as 'insufficient signal'."""
+    from gemini_stock_prediction_agent import _tally_consensus_votes
+
+    results = [_consensus_call("HOLD"), _consensus_call("HOLD"), _consensus_call("BUY")]
+    result = _tally_consensus_votes(results, ["standard", "devils_advocate", "pure_technical"], lambda: {})
+    assert result["decision"] == "HOLD"
+    assert result["consensus_confidence"] == "MEDIUM"
+    assert result["consensus_votes"] == {"BUY": 1, "SELL": 0, "HOLD": 2}
+
+
+def test_tally_majority_hold_with_sell_dissenter_also_resolves_to_hold():
+    """Same fix, mirrored for a SELL dissenter instead of BUY."""
+    from gemini_stock_prediction_agent import _tally_consensus_votes
+
+    results = [_consensus_call("HOLD"), _consensus_call("HOLD"), _consensus_call("SELL")]
+    result = _tally_consensus_votes(results, ["standard", "devils_advocate", "pure_technical"], lambda: {})
+    assert result["decision"] == "HOLD"
+    assert result["consensus_confidence"] == "MEDIUM"
+    assert result["consensus_votes"] == {"BUY": 0, "SELL": 1, "HOLD": 2}
+
+
+def test_tally_clean_majority_buy_unaffected_by_hold_fix():
+    """2 BUY + 1 SELL must still resolve as BUY/MEDIUM -- the new hold_count>=2
+    branch must not accidentally catch majority-directional votes."""
+    from gemini_stock_prediction_agent import _tally_consensus_votes
+
+    results = [_consensus_call("BUY"), _consensus_call("BUY"), _consensus_call("SELL")]
+    result = _tally_consensus_votes(results, ["standard", "devils_advocate", "pure_technical"], lambda: {})
+    assert result["decision"] == "BUY"
+    assert result["consensus_confidence"] == "MEDIUM"
+
+
+def test_majority_hold_with_dissenter_surfaces_as_hold_end_to_end(monkeypatch):
+    """Integration-level mirror of test_unanimous_hold_surfaces_as_hold_not_skip
+    and test_genuinely_mixed_low_confidence_still_skipped -- confirms the real
+    run_gemini_stock_prediction path (not just _tally_consensus_votes in
+    isolation) surfaces a 2-HOLD+1-BUY consensus as a real SUCCESS/HOLD, not
+    the SKIP path a real user was hitting."""
+    import gemini_stock_prediction_agent as gsp_mod
+
+    monkeypatch.setattr(gsp_mod, "_call_gemini_consensus", lambda *a, **k: {
+        "status": "SUCCESS", "decision": "HOLD",
+        "decision_reason": "Majority consensus leans HOLD (2 of 3 calls).",
+        "predicted_return_pct": 0.4, "predicted_target_price": 100.4,
+        "predicted_final_capital": 10040.0, "predicted_total_pl": 40.0,
+        "confidence_score": 55, "risk_score": 50, "data_quality_score": 90,
+        "signal_scores": {}, "consensus_confidence": "MEDIUM",
+        "consensus_votes": {"BUY": 1, "SELL": 0, "HOLD": 2},
+        "consensus_calls": [], "gemini_latency_ms": 0,
+        "prompt_hash": "", "gemini_output_hash": "",
+    })
+
+    bars = _make_bars(300)
+    spi = {"symbol": "TEST", "benchmark": "SPY", "price_basis": "close",
+           "historical_context_start_date": "2025-01-01",
+           "prediction_origin_date": "2025-06-01",
+           "target_date": "2025-07-01",
+           "decision_horizon_days": 30, "initial_capital": 10000}
+
+    from gemini_stock_prediction_agent import run_gemini_stock_prediction
+    result = run_gemini_stock_prediction(spi, bars)
+    assert result["status"] == "SUCCESS"
+    assert result["decision"] == "HOLD"
+
+
 def test_level_signal_never_fires_for_overbought_near_resistance():
     """The level bonus is asymmetric on purpose -- it must not add a bearish
     equivalent for the overbought/near-resistance mirror case."""
@@ -1033,12 +1116,79 @@ def test_context_enrichment_warnings_wired_into_result():
     assert "_context_enrichment_warnings" in text
     assert '"context_enrichment_warnings":' in text
     assert text.count('_context_enrichment_warnings["benchmark_bars"]') >= 1
-    assert text.count('_context_enrichment_warnings["sec_edgar_insider"]') >= 1
-    assert text.count('_context_enrichment_warnings["apewisdom_reddit"]') >= 1
-    assert text.count('_context_enrichment_warnings["market_movers"]') >= 1
     assert text.count('_context_enrichment_warnings["symbol_calibration"]') >= 1
     # No remaining bare except/pass on these three specific enrichment blocks.
     assert 'except Exception:\n        pass\n\n    # Fetch live market movers' not in text
+
+
+def test_context_enrichment_warnings_actually_populate_from_parallel_tasks(monkeypatch):
+    """sec_edgar_insider, apewisdom_reddit, and market_movers no longer have a
+    single dedicated `_context_enrichment_warnings["key"] = ...` line each --
+    the context-enrichment phase now runs ~28 independent data-fetch calls
+    (SEC EDGAR, ApeWisdom, macro/regime/breadth, CANSLIM/VCP/Stockbee screens,
+    market movers, etc.) CONCURRENTLY via a ThreadPoolExecutor instead of one
+    after another, collapsing their summed latency down to roughly the
+    slowest single provider (see core/gemini_stock_prediction_agent.py, the
+    "Context-enrichment data fetches, run CONCURRENTLY" block). Each task
+    returns its warning as a (key, value) tuple that a generic merge loop
+    assigns afterward, so a literal source-text grep for the old per-source
+    assignment no longer reflects what the code does -- this test instead
+    forces each of those three sources to fail and confirms the failure
+    still surfaces under the correct key in the real returned result, i.e.
+    the behavior the old test actually cared about is still intact.
+    """
+    import gemini_stock_prediction_agent as gsp_mod
+    import insider_activity_service
+    import social_attention_service
+    import rapidapi_market_service
+
+    monkeypatch.setattr(insider_activity_service, "fetch_insider_activity",
+                         lambda *a, **k: (None, "forced test failure: sec edgar"))
+    monkeypatch.setattr(social_attention_service, "fetch_reddit_attention",
+                         lambda *a, **k: (None, "forced test failure: reddit"))
+    monkeypatch.setattr(rapidapi_market_service, "fetch_top_movers_for_gemini",
+                         lambda *a, **k: {"status": "FAILED", "message": "forced test failure: movers"})
+    monkeypatch.setattr(gsp_mod, "_call_gemini_consensus", lambda *a, **k: {
+        "status": "SUCCESS", "decision": "HOLD", "decision_reason": "",
+        "predicted_return_pct": 0.0, "predicted_target_price": 100.0,
+        "predicted_final_capital": 10000.0, "predicted_total_pl": 0.0,
+        "confidence_score": 50, "risk_score": 50, "data_quality_score": 90,
+        "signal_scores": {}, "consensus_confidence": "LOW",
+        "consensus_votes": {"BUY": 0, "SELL": 0, "HOLD": 3},
+        "consensus_calls": [], "gemini_latency_ms": 0,
+        "prompt_hash": "", "gemini_output_hash": "",
+    })
+
+    from datetime import date, timedelta
+    origin = (date.today() - timedelta(days=1)).isoformat()  # within the 7-day
+                                                               # "recent origin" window so
+                                                               # the Reddit/market-movers
+                                                               # tasks actually attempt
+                                                               # their (mocked) fetch
+                                                               # instead of being gated off.
+    start = date.today() - timedelta(days=300)
+    bars = []
+    for i in range(300):
+        d = (start + timedelta(days=i)).isoformat()
+        if d > origin:
+            break
+        close = round(100.0 * (1 + 0.002 * math.sin(i / 10.0)), 4)
+        bars.append({"date": d, "open": round(close * 0.999, 4), "high": round(close * 1.005, 4),
+                      "low": round(close * 0.995, 4), "close": close, "volume": 1_000_000 + i * 1000})
+
+    spi = {"symbol": "TEST", "benchmark": "SPY", "price_basis": "close",
+           "historical_context_start_date": bars[0]["date"],
+           "prediction_origin_date": origin,
+           "target_date": (date.today() + timedelta(days=6)).isoformat(),
+           "decision_horizon_days": 7, "initial_capital": 10000}
+
+    from gemini_stock_prediction_agent import run_gemini_stock_prediction
+    result = run_gemini_stock_prediction(spi, bars)
+    assert result["status"] == "SUCCESS"
+    warnings = result["context_enrichment_warnings"]
+    assert warnings.get("sec_edgar_insider") == "forced test failure: sec edgar"
+    assert warnings.get("apewisdom_reddit") == "forced test failure: reddit"
+    assert warnings.get("market_movers") == "forced test failure: movers"
 
 
 def test_calibration_summary_reports_error_instead_of_silently_swallowing(tmp_path, monkeypatch):
@@ -1213,6 +1363,82 @@ def test_debate_consensus_technical_override_still_applies(monkeypatch):
     result = gsp_mod._call_gemini_debate_consensus({}, {}, {}, 100.0, 10000.0)
     assert result["decision"] == "SELL"
     assert result["predicted_return_pct"] < 0
+
+
+def test_ml_segment_override_fires_when_enabled_and_dedicated_segment():
+    """Research Expansion Program, Component 6 follow-up: when the flag is on
+    AND the segment has its own dedicated trained model, a disagreeing shadow
+    ML prediction must override Gemini's decision and keep return/target/
+    capital/P&L consistent with the new direction."""
+    import gemini_stock_prediction_agent as gsp_mod
+
+    gemini_result = {
+        "decision": "BUY", "predicted_return_pct": 4.0,
+        "predicted_target_price": 104.0, "predicted_final_capital": 10400.0,
+        "predicted_total_pl": 400.0,
+    }
+    ml_pred = {"decision": "SELL", "p_buy": 0.22, "p_sell": 0.78, "segment": "TSLA|8-14d"}
+
+    out = gsp_mod._apply_ml_segment_override(
+        gemini_result, ml_pred, has_dedicated_segment_model=True,
+        origin_price=100.0, initial_capital=10000.0, enabled=True,
+    )
+    assert out["decision"] == "SELL"
+    assert out["predicted_return_pct"] < 0
+    assert out["predicted_final_capital"] < 10000.0
+    assert "ML SEGMENT OVERRIDE" in out["decision_reason"]
+
+
+def test_ml_segment_override_noop_when_flag_disabled():
+    """Same disagreeing shadow prediction, same dedicated segment -- but the
+    flag is off, so Gemini's original decision must survive untouched."""
+    import gemini_stock_prediction_agent as gsp_mod
+
+    gemini_result = {"decision": "BUY", "predicted_return_pct": 4.0}
+    ml_pred = {"decision": "SELL", "p_buy": 0.22, "p_sell": 0.78, "segment": "TSLA|8-14d"}
+
+    out = gsp_mod._apply_ml_segment_override(
+        gemini_result, ml_pred, has_dedicated_segment_model=True,
+        origin_price=100.0, initial_capital=10000.0, enabled=False,
+    )
+    assert out["decision"] == "BUY"
+    assert out["predicted_return_pct"] == 4.0
+    assert "decision_reason" not in out
+
+
+def test_ml_segment_override_noop_without_dedicated_segment_model():
+    """Flag on, shadow prediction disagrees -- but this segment only has the
+    blended default_model (no dedicated model, no supporting evidence), so
+    it must stay shadow-only and never override."""
+    import gemini_stock_prediction_agent as gsp_mod
+
+    gemini_result = {"decision": "BUY", "predicted_return_pct": 4.0}
+    ml_pred = {"decision": "SELL", "p_buy": 0.22, "p_sell": 0.78, "segment": "AAPL|0-7d"}
+
+    out = gsp_mod._apply_ml_segment_override(
+        gemini_result, ml_pred, has_dedicated_segment_model=False,
+        origin_price=100.0, initial_capital=10000.0, enabled=True,
+    )
+    assert out["decision"] == "BUY"
+    assert out["predicted_return_pct"] == 4.0
+
+
+def test_ml_segment_override_noop_when_predictions_already_agree():
+    """Nothing to override when the shadow model agrees with Gemini -- the
+    function must not touch any field (not even re-set an identical value),
+    since nothing disagreed."""
+    import gemini_stock_prediction_agent as gsp_mod
+
+    gemini_result = {"decision": "BUY", "predicted_return_pct": 4.0}
+    ml_pred = {"decision": "BUY", "p_buy": 0.81, "p_sell": 0.19, "segment": "TSLA|8-14d"}
+
+    out = gsp_mod._apply_ml_segment_override(
+        gemini_result, ml_pred, has_dedicated_segment_model=True,
+        origin_price=100.0, initial_capital=10000.0, enabled=True,
+    )
+    assert out["decision"] == "BUY"
+    assert out["predicted_return_pct"] == 4.0
+    assert "decision_reason" not in out
 
 
 def test_enable_debate_consensus_flag_routes_to_debate_function(monkeypatch):

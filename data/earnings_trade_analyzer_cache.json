@@ -1,0 +1,968 @@
+{
+  "TSLA:2026-10-30": {
+    "data": {
+      "gap": {
+        "gap_pct": -3.15,
+        "gap_type": "down",
+        "base_price": 386.47,
+        "gap_price": 374.29,
+        "timing_used": "unknown",
+        "score": 55.0,
+        "timing_note": "timing unknown; AMC window assumed (BMO reporters may be measured on the wrong session pair)"
+      },
+      "pre_earnings_trend": {
+        "return_20d_pct": 1.67,
+        "trend_direction": "up",
+        "score": 50.0
+      },
+      "volume_trend": {
+        "vol_ratio_20_60": 0.98,
+        "recent_avg_volume": 36307649,
+        "longer_avg_volume": 37036218,
+        "score": 20.0
+      },
+      "ma200_position": {
+        "ma200": 385.3,
+        "distance_pct": 3.77,
+        "above_ma200": true,
+        "score": 55.0
+      },
+      "ma50_position": {
+        "ma50": 369.6,
+        "distance_pct": 8.17,
+        "above_ma50": true,
+        "score": 80.0
+      },
+      "composite": {
+        "composite_score": 49.0,
+        "grade": "D",
+        "grade_description": "Weak setup, avoid",
+        "guidance": "Avoid trading. Weak setup with poor risk/reward profile.",
+        "weakest_component": "Volume Trend",
+        "weakest_score": 20.0,
+        "strongest_component": "MA50 Position",
+        "strongest_score": 80.0,
+        "component_breakdown": {
+          "Gap Size": {
+            "score": 55.0,
+            "weight": 0.25,
+            "weighted_score": 13.8
+          },
+          "Pre-Earnings Trend": {
+            "score": 50.0,
+            "weight": 0.3,
+            "weighted_score": 15.0
+          },
+          "Volume Trend": {
+            "score": 20.0,
+            "weight": 0.2,
+            "weighted_score": 4.0
+          },
+          "MA200 Position": {
+            "score": 55.0,
+            "weight": 0.15,
+            "weighted_score": 8.2
+          },
+          "MA50 Position": {
+            "score": 80.0,
+            "weight": 0.1,
+            "weighted_score": 8.0
+          }
+        }
+      }
+    },
+    "computed_at": 1794120940.7021942
+  },
+  "TSLA:2026-10-26": {
+    "data": {
+      "gap": {
+        "gap_pct": -3.15,
+        "gap_type": "down",
+        "base_price": 386.47,
+        "gap_price": 374.29,
+        "timing_used": "unknown",
+        "score": 55.0,
+        "timing_note": "timing unknown; AMC window assumed (BMO reporters may be measured on the wrong session pair)"
+      },
+      "pre_earnings_trend": {
+        "return_20d_pct": 1.67,
+        "trend_direction": "up",
+        "score": 50.0
+      },
+      "volume_trend": {
+        "vol_ratio_20_60": 1.01,
+        "recent_avg_volume": 36938234,
+        "longer_avg_volume": 36701665,
+        "score": 40.0
+      },
+      "ma200_position": {
+        "ma200": 386.13,
+        "distance_pct": 1.42,
+        "above_ma200": true,
+        "score": 55.0
+      },
+      "ma50_position": {
+        "ma50": 364.76,
+        "distance_pct": 7.37,
+        "above_ma50": true,
+        "score": 80.0
+      },
+      "composite": {
+        "composite_score": 53.0,
+        "grade": "D",
+        "grade_description": "Weak setup, avoid",
+        "guidance": "Avoid trading. Weak setup with poor risk/reward profile.",
+        "weakest_component": "Volume Trend",
+        "weakest_score": 40.0,
+        "strongest_component": "MA50 Position",
+        "strongest_score": 80.0,
+        "component_breakdown": {
+          "Gap Size": {
+            "score": 55.0,
+            "weight": 0.25,
+            "weighted_score": 13.8
+          },
+          "Pre-Earnings Trend": {
+            "score": 50.0,
+            "weight": 0.3,
+            "weighted_score": 15.0
+          },
+          "Volume Trend": {
+            "score": 40.0,
+            "weight": 0.2,
+            "weighted_score": 8.0
+          },
+          "MA200 Position": {
+            "score": 55.0,
+            "weight": 0.15,
+            "weighted_score": 8.2
+          },
+          "MA50 Position": {
+            "score": 80.0,
+            "weight": 0.1,
+            "weighted_score": 8.0
+          }
+        }
+      }
+    },
+    "computed_at": 1794314151.4788082
+  },
+  "TSLA:2025-01-02": {
+    "data": {
+      "gap": {
+        "gap_pct": 0.0,
+        "gap_type": "up",
+        "base_price": 0.0,
+        "gap_price": 0.0,
+        "timing_used": "unknown",
+        "score": 0.0,
+        "warning": "Earnings date 2025-01-02 not found in price data"
+      },
+      "pre_earnings_trend": {
+        "return_20d_pct": 0.0,
+        "trend_direction": "up",
+        "score": 0.0,
+        "warning": "Earnings date 2025-01-02 not found in price data"
+      },
+      "volume_trend": {
+        "vol_ratio_20_60": 0.0,
+        "recent_avg_volume": 0,
+        "longer_avg_volume": 0,
+        "score": 0.0,
+        "warning": "Earnings date 2025-01-02 not found in price data"
+      },
+      "ma200_position": {
+        "ma200": 238.84,
+        "distance_pct": 69.09,
+        "above_ma200": true,
+        "score": 100.0
+      },
+      "ma50_position": {
+        "ma50": 346.18,
+        "distance_pct": 16.66,
+        "above_ma50": true,
+        "score": 100.0
+      },
+      "composite": {
+        "composite_score": 25.0,
+        "grade": "D",
+        "grade_description": "Weak setup, avoid",
+        "guidance": "Avoid trading. Weak setup with poor risk/reward profile.",
+        "weakest_component": "Gap Size",
+        "weakest_score": 0.0,
+        "strongest_component": "MA200 Position",
+        "strongest_score": 100.0,
+        "component_breakdown": {
+          "Gap Size": {
+            "score": 0.0,
+            "weight": 0.25,
+            "weighted_score": 0.0
+          },
+          "Pre-Earnings Trend": {
+            "score": 0.0,
+            "weight": 0.3,
+            "weighted_score": 0.0
+          },
+          "Volume Trend": {
+            "score": 0.0,
+            "weight": 0.2,
+            "weighted_score": 0.0
+          },
+          "MA200 Position": {
+            "score": 100.0,
+            "weight": 0.15,
+            "weighted_score": 15.0
+          },
+          "MA50 Position": {
+            "score": 100.0,
+            "weight": 0.1,
+            "weighted_score": 10.0
+          }
+        }
+      }
+    },
+    "computed_at": 1794117381.9567966
+  },
+  "TSLA:2024-07-07": {
+    "data": {
+      "gap": {
+        "gap_pct": 1.43,
+        "gap_type": "up",
+        "base_price": 231.26,
+        "gap_price": 234.56,
+        "timing_used": "unknown",
+        "score": 35.0,
+        "timing_note": "timing unknown; AMC window assumed (BMO reporters may be measured on the wrong session pair)"
+      },
+      "pre_earnings_trend": {
+        "return_20d_pct": 31.18,
+        "trend_direction": "up",
+        "score": 100.0
+      },
+      "volume_trend": {
+        "vol_ratio_20_60": 1.03,
+        "recent_avg_volume": 94015020,
+        "longer_avg_volume": 91026558,
+        "score": 40.0
+      },
+      "ma200_position": {
+        "ma200": 205.49,
+        "distance_pct": 22.4,
+        "above_ma200": true,
+        "score": 100.0
+      },
+      "ma50_position": {
+        "ma50": 183.56,
+        "distance_pct": 37.02,
+        "above_ma50": true,
+        "score": 100.0
+      },
+      "composite": {
+        "composite_score": 71.8,
+        "grade": "B",
+        "grade_description": "Good earnings reaction worth monitoring",
+        "guidance": "Monitor for follow-through buying. Wait for pullback to key support or volume confirmation.",
+        "weakest_component": "Gap Size",
+        "weakest_score": 35.0,
+        "strongest_component": "Pre-Earnings Trend",
+        "strongest_score": 100.0,
+        "component_breakdown": {
+          "Gap Size": {
+            "score": 35.0,
+            "weight": 0.25,
+            "weighted_score": 8.8
+          },
+          "Pre-Earnings Trend": {
+            "score": 100.0,
+            "weight": 0.3,
+            "weighted_score": 30.0
+          },
+          "Volume Trend": {
+            "score": 40.0,
+            "weight": 0.2,
+            "weighted_score": 8.0
+          },
+          "MA200 Position": {
+            "score": 100.0,
+            "weight": 0.15,
+            "weighted_score": 15.0
+          },
+          "MA50 Position": {
+            "score": 100.0,
+            "weight": 0.1,
+            "weighted_score": 10.0
+          }
+        }
+      }
+    },
+    "computed_at": 1794119015.7121985
+  },
+  "TSLA:2026-10-28": {
+    "data": {
+      "gap": {
+        "gap_pct": -3.15,
+        "gap_type": "down",
+        "base_price": 386.47,
+        "gap_price": 374.29,
+        "timing_used": "unknown",
+        "score": 55.0,
+        "timing_note": "timing unknown; AMC window assumed (BMO reporters may be measured on the wrong session pair)"
+      },
+      "pre_earnings_trend": {
+        "return_20d_pct": 1.67,
+        "trend_direction": "up",
+        "score": 50.0
+      },
+      "volume_trend": {
+        "vol_ratio_20_60": 1.01,
+        "recent_avg_volume": 37398422,
+        "longer_avg_volume": 36857204,
+        "score": 40.0
+      },
+      "ma200_position": {
+        "ma200": 385.71,
+        "distance_pct": 4.8,
+        "above_ma200": true,
+        "score": 55.0
+      },
+      "ma50_position": {
+        "ma50": 367.47,
+        "distance_pct": 10.0,
+        "above_ma50": true,
+        "score": 100.0
+      },
+      "composite": {
+        "composite_score": 55.0,
+        "grade": "C",
+        "grade_description": "Mixed signals, use caution",
+        "guidance": "Additional analysis needed. Consider waiting for clearer price action or catalyst.",
+        "weakest_component": "Volume Trend",
+        "weakest_score": 40.0,
+        "strongest_component": "MA50 Position",
+        "strongest_score": 100.0,
+        "component_breakdown": {
+          "Gap Size": {
+            "score": 55.0,
+            "weight": 0.25,
+            "weighted_score": 13.8
+          },
+          "Pre-Earnings Trend": {
+            "score": 50.0,
+            "weight": 0.3,
+            "weighted_score": 15.0
+          },
+          "Volume Trend": {
+            "score": 40.0,
+            "weight": 0.2,
+            "weighted_score": 8.0
+          },
+          "MA200 Position": {
+            "score": 55.0,
+            "weight": 0.15,
+            "weighted_score": 8.2
+          },
+          "MA50 Position": {
+            "score": 100.0,
+            "weight": 0.1,
+            "weighted_score": 10.0
+          }
+        }
+      }
+    },
+    "computed_at": 1794123564.7612672
+  },
+  "TSLA:2026-10-31": {
+    "data": {
+      "gap": {
+        "gap_pct": -3.15,
+        "gap_type": "down",
+        "base_price": 386.47,
+        "gap_price": 374.29,
+        "timing_used": "unknown",
+        "score": 55.0,
+        "timing_note": "timing unknown; AMC window assumed (BMO reporters may be measured on the wrong session pair)"
+      },
+      "pre_earnings_trend": {
+        "return_20d_pct": 1.67,
+        "trend_direction": "up",
+        "score": 50.0
+      },
+      "volume_trend": {
+        "vol_ratio_20_60": 0.98,
+        "recent_avg_volume": 36307649,
+        "longer_avg_volume": 37036218,
+        "score": 20.0
+      },
+      "ma200_position": {
+        "ma200": 385.3,
+        "distance_pct": 3.77,
+        "above_ma200": true,
+        "score": 55.0
+      },
+      "ma50_position": {
+        "ma50": 369.6,
+        "distance_pct": 8.17,
+        "above_ma50": true,
+        "score": 80.0
+      },
+      "composite": {
+        "composite_score": 49.0,
+        "grade": "D",
+        "grade_description": "Weak setup, avoid",
+        "guidance": "Avoid trading. Weak setup with poor risk/reward profile.",
+        "weakest_component": "Volume Trend",
+        "weakest_score": 20.0,
+        "strongest_component": "MA50 Position",
+        "strongest_score": 80.0,
+        "component_breakdown": {
+          "Gap Size": {
+            "score": 55.0,
+            "weight": 0.25,
+            "weighted_score": 13.8
+          },
+          "Pre-Earnings Trend": {
+            "score": 50.0,
+            "weight": 0.3,
+            "weighted_score": 15.0
+          },
+          "Volume Trend": {
+            "score": 20.0,
+            "weight": 0.2,
+            "weighted_score": 4.0
+          },
+          "MA200 Position": {
+            "score": 55.0,
+            "weight": 0.15,
+            "weighted_score": 8.2
+          },
+          "MA50 Position": {
+            "score": 80.0,
+            "weight": 0.1,
+            "weighted_score": 8.0
+          }
+        }
+      }
+    },
+    "computed_at": 1794117095.904278
+  },
+  "TSLA:2025-08-01": {
+    "data": {
+      "gap": {
+        "gap_pct": -6.78,
+        "gap_type": "down",
+        "base_price": 332.56,
+        "gap_price": 310.0,
+        "timing_used": "unknown",
+        "score": 70.0,
+        "timing_note": "timing unknown; AMC window assumed (BMO reporters may be measured on the wrong session pair)"
+      },
+      "pre_earnings_trend": {
+        "return_20d_pct": -2.32,
+        "trend_direction": "down",
+        "score": 30.0
+      },
+      "volume_trend": {
+        "vol_ratio_20_60": 0.88,
+        "recent_avg_volume": 94641965,
+        "longer_avg_volume": 107880381,
+        "score": 20.0
+      },
+      "ma200_position": {
+        "ma200": 321.17,
+        "distance_pct": -4.02,
+        "above_ma200": false,
+        "score": 35.0
+      },
+      "ma50_position": {
+        "ma50": 323.82,
+        "distance_pct": -4.8,
+        "above_ma50": false,
+        "score": 35.0
+      },
+      "composite": {
+        "composite_score": 39.2,
+        "grade": "D",
+        "grade_description": "Weak setup, avoid",
+        "guidance": "Avoid trading. Weak setup with poor risk/reward profile.",
+        "weakest_component": "Volume Trend",
+        "weakest_score": 20.0,
+        "strongest_component": "Gap Size",
+        "strongest_score": 70.0,
+        "component_breakdown": {
+          "Gap Size": {
+            "score": 70.0,
+            "weight": 0.25,
+            "weighted_score": 17.5
+          },
+          "Pre-Earnings Trend": {
+            "score": 30.0,
+            "weight": 0.3,
+            "weighted_score": 9.0
+          },
+          "Volume Trend": {
+            "score": 20.0,
+            "weight": 0.2,
+            "weighted_score": 4.0
+          },
+          "MA200 Position": {
+            "score": 35.0,
+            "weight": 0.15,
+            "weighted_score": 5.2
+          },
+          "MA50 Position": {
+            "score": 35.0,
+            "weight": 0.1,
+            "weighted_score": 3.5
+          }
+        }
+      }
+    },
+    "computed_at": 1794125153.3489394
+  },
+  "TSLA:2026-01-05": {
+    "data": {
+      "gap": {
+        "gap_pct": 0.0,
+        "gap_type": "up",
+        "base_price": 0.0,
+        "gap_price": 0.0,
+        "timing_used": "unknown",
+        "score": 0.0,
+        "warning": "No next trading day available for AMC gap calculation"
+      },
+      "pre_earnings_trend": {
+        "return_20d_pct": -1.94,
+        "trend_direction": "down",
+        "score": 30.0
+      },
+      "volume_trend": {
+        "vol_ratio_20_60": 0.94,
+        "recent_avg_volume": 75359805,
+        "longer_avg_volume": 80434470,
+        "score": 20.0
+      },
+      "ma200_position": {
+        "ma200": 360.2,
+        "distance_pct": 21.62,
+        "above_ma200": true,
+        "score": 100.0
+      },
+      "ma50_position": {
+        "ma50": 445.01,
+        "distance_pct": -1.56,
+        "above_ma50": false,
+        "score": 35.0
+      },
+      "composite": {
+        "composite_score": 31.5,
+        "grade": "D",
+        "grade_description": "Weak setup, avoid",
+        "guidance": "Avoid trading. Weak setup with poor risk/reward profile.",
+        "weakest_component": "Gap Size",
+        "weakest_score": 0.0,
+        "strongest_component": "MA200 Position",
+        "strongest_score": 100.0,
+        "component_breakdown": {
+          "Gap Size": {
+            "score": 0.0,
+            "weight": 0.25,
+            "weighted_score": 0.0
+          },
+          "Pre-Earnings Trend": {
+            "score": 30.0,
+            "weight": 0.3,
+            "weighted_score": 9.0
+          },
+          "Volume Trend": {
+            "score": 20.0,
+            "weight": 0.2,
+            "weighted_score": 4.0
+          },
+          "MA200 Position": {
+            "score": 100.0,
+            "weight": 0.15,
+            "weighted_score": 15.0
+          },
+          "MA50 Position": {
+            "score": 35.0,
+            "weight": 0.1,
+            "weighted_score": 3.5
+          }
+        }
+      }
+    },
+    "computed_at": 1794308569.9592655
+  },
+  "AAPL:2024-05-10": {
+    "data": {
+      "gap": {
+        "gap_pct": 7.87,
+        "gap_type": "up",
+        "base_price": 171.16,
+        "gap_price": 184.64,
+        "timing_used": "unknown",
+        "score": 85.0,
+        "timing_note": "timing unknown; AMC window assumed (BMO reporters may be measured on the wrong session pair)"
+      },
+      "pre_earnings_trend": {
+        "return_20d_pct": 2.49,
+        "trend_direction": "up",
+        "score": 50.0
+      },
+      "volume_trend": {
+        "vol_ratio_20_60": 1.04,
+        "recent_avg_volume": 67211600,
+        "longer_avg_volume": 64668713,
+        "score": 40.0
+      },
+      "ma200_position": {
+        "ma200": 178.77,
+        "distance_pct": 2.13,
+        "above_ma200": true,
+        "score": 55.0
+      },
+      "ma50_position": {
+        "ma50": 170.6,
+        "distance_pct": 7.02,
+        "above_ma50": true,
+        "score": 80.0
+      },
+      "composite": {
+        "composite_score": 60.5,
+        "grade": "C",
+        "grade_description": "Mixed signals, use caution",
+        "guidance": "Additional analysis needed. Consider waiting for clearer price action or catalyst.",
+        "weakest_component": "Volume Trend",
+        "weakest_score": 40.0,
+        "strongest_component": "Gap Size",
+        "strongest_score": 85.0,
+        "component_breakdown": {
+          "Gap Size": {
+            "score": 85.0,
+            "weight": 0.25,
+            "weighted_score": 21.2
+          },
+          "Pre-Earnings Trend": {
+            "score": 50.0,
+            "weight": 0.3,
+            "weighted_score": 15.0
+          },
+          "Volume Trend": {
+            "score": 40.0,
+            "weight": 0.2,
+            "weighted_score": 8.0
+          },
+          "MA200 Position": {
+            "score": 55.0,
+            "weight": 0.15,
+            "weighted_score": 8.2
+          },
+          "MA50 Position": {
+            "score": 80.0,
+            "weight": 0.1,
+            "weighted_score": 8.0
+          }
+        }
+      }
+    },
+    "computed_at": 1794310023.5936048
+  },
+  "NVDA:2024-11-20": {
+    "data": {
+      "gap": {
+        "gap_pct": 0.0,
+        "gap_type": "up",
+        "base_price": 0.0,
+        "gap_price": 0.0,
+        "timing_used": "unknown",
+        "score": 0.0,
+        "warning": "Earnings date 2024-11-20 not found in price data"
+      },
+      "pre_earnings_trend": {
+        "return_20d_pct": 0.0,
+        "trend_direction": "up",
+        "score": 0.0,
+        "warning": "Earnings date 2024-11-20 not found in price data"
+      },
+      "volume_trend": {
+        "vol_ratio_20_60": 0.0,
+        "recent_avg_volume": 0,
+        "longer_avg_volume": 0,
+        "score": 0.0,
+        "warning": "Earnings date 2024-11-20 not found in price data"
+      },
+      "ma200_position": {
+        "ma200": 109.34,
+        "distance_pct": 34.09,
+        "above_ma200": true,
+        "score": 100.0
+      },
+      "ma50_position": {
+        "ma50": 132.06,
+        "distance_pct": 11.02,
+        "above_ma50": true,
+        "score": 100.0
+      },
+      "composite": {
+        "composite_score": 25.0,
+        "grade": "D",
+        "grade_description": "Weak setup, avoid",
+        "guidance": "Avoid trading. Weak setup with poor risk/reward profile.",
+        "weakest_component": "Gap Size",
+        "weakest_score": 0.0,
+        "strongest_component": "MA200 Position",
+        "strongest_score": 100.0,
+        "component_breakdown": {
+          "Gap Size": {
+            "score": 0.0,
+            "weight": 0.25,
+            "weighted_score": 0.0
+          },
+          "Pre-Earnings Trend": {
+            "score": 0.0,
+            "weight": 0.3,
+            "weighted_score": 0.0
+          },
+          "Volume Trend": {
+            "score": 0.0,
+            "weight": 0.2,
+            "weighted_score": 0.0
+          },
+          "MA200 Position": {
+            "score": 100.0,
+            "weight": 0.15,
+            "weighted_score": 15.0
+          },
+          "MA50 Position": {
+            "score": 100.0,
+            "weight": 0.1,
+            "weighted_score": 10.0
+          }
+        }
+      }
+    },
+    "computed_at": 1794311692.8066795
+  },
+  "TSLA:2026-10-05": {
+    "data": {
+      "gap": {
+        "gap_pct": -0.43,
+        "gap_type": "down",
+        "base_price": 370.59,
+        "gap_price": 369.0,
+        "timing_used": "unknown",
+        "score": 15.0,
+        "timing_note": "timing unknown; AMC window assumed (BMO reporters may be measured on the wrong session pair)"
+      },
+      "pre_earnings_trend": {
+        "return_20d_pct": -1.53,
+        "trend_direction": "down",
+        "score": 30.0
+      },
+      "volume_trend": {
+        "vol_ratio_20_60": 0.97,
+        "recent_avg_volume": 36981197,
+        "longer_avg_volume": 38109998,
+        "score": 20.0
+      },
+      "ma200_position": {
+        "ma200": 392.63,
+        "distance_pct": -3.54,
+        "above_ma200": false,
+        "score": 35.0
+      },
+      "ma50_position": {
+        "ma50": 348.9,
+        "distance_pct": 8.55,
+        "above_ma50": true,
+        "score": 80.0
+      },
+      "composite": {
+        "composite_score": 30.0,
+        "grade": "D",
+        "grade_description": "Weak setup, avoid",
+        "guidance": "Avoid trading. Weak setup with poor risk/reward profile.",
+        "weakest_component": "Gap Size",
+        "weakest_score": 15.0,
+        "strongest_component": "MA50 Position",
+        "strongest_score": 80.0,
+        "component_breakdown": {
+          "Gap Size": {
+            "score": 15.0,
+            "weight": 0.25,
+            "weighted_score": 3.8
+          },
+          "Pre-Earnings Trend": {
+            "score": 30.0,
+            "weight": 0.3,
+            "weighted_score": 9.0
+          },
+          "Volume Trend": {
+            "score": 20.0,
+            "weight": 0.2,
+            "weighted_score": 4.0
+          },
+          "MA200 Position": {
+            "score": 35.0,
+            "weight": 0.15,
+            "weighted_score": 5.2
+          },
+          "MA50 Position": {
+            "score": 80.0,
+            "weight": 0.1,
+            "weighted_score": 8.0
+          }
+        }
+      }
+    },
+    "computed_at": 1794391604.6749232
+  },
+  "TSLA:2026-08-01": {
+    "data": {
+      "gap": {
+        "gap_pct": -8.83,
+        "gap_type": "down",
+        "base_price": 374.01,
+        "gap_price": 341.0,
+        "timing_used": "unknown",
+        "score": 85.0,
+        "timing_note": "timing unknown; AMC window assumed (BMO reporters may be measured on the wrong session pair)"
+      },
+      "pre_earnings_trend": {
+        "return_20d_pct": -1.99,
+        "trend_direction": "down",
+        "score": 30.0
+      },
+      "volume_trend": {
+        "vol_ratio_20_60": 0.87,
+        "recent_avg_volume": 41043025,
+        "longer_avg_volume": 47112393,
+        "score": 20.0
+      },
+      "ma200_position": {
+        "ma200": 411.6,
+        "distance_pct": -24.39,
+        "above_ma200": false,
+        "score": 15.0
+      },
+      "ma50_position": {
+        "ma50": 390.76,
+        "distance_pct": -20.36,
+        "above_ma50": false,
+        "score": 15.0
+      },
+      "composite": {
+        "composite_score": 38.0,
+        "grade": "D",
+        "grade_description": "Weak setup, avoid",
+        "guidance": "Avoid trading. Weak setup with poor risk/reward profile.",
+        "weakest_component": "MA200 Position",
+        "weakest_score": 15.0,
+        "strongest_component": "Gap Size",
+        "strongest_score": 85.0,
+        "component_breakdown": {
+          "Gap Size": {
+            "score": 85.0,
+            "weight": 0.25,
+            "weighted_score": 21.2
+          },
+          "Pre-Earnings Trend": {
+            "score": 30.0,
+            "weight": 0.3,
+            "weighted_score": 9.0
+          },
+          "Volume Trend": {
+            "score": 20.0,
+            "weight": 0.2,
+            "weighted_score": 4.0
+          },
+          "MA200 Position": {
+            "score": 15.0,
+            "weight": 0.15,
+            "weighted_score": 2.2
+          },
+          "MA50 Position": {
+            "score": 15.0,
+            "weight": 0.1,
+            "weighted_score": 1.5
+          }
+        }
+      }
+    },
+    "computed_at": 1794392956.3397233
+  },
+  "TSLA:2026-05-01": {
+    "data": {
+      "gap": {
+        "gap_pct": -3.16,
+        "gap_type": "down",
+        "base_price": 387.51,
+        "gap_price": 375.28,
+        "timing_used": "unknown",
+        "score": 55.0,
+        "timing_note": "timing unknown; AMC window assumed (BMO reporters may be measured on the wrong session pair)"
+      },
+      "pre_earnings_trend": {
+        "return_20d_pct": 1.17,
+        "trend_direction": "up",
+        "score": 50.0
+      },
+      "volume_trend": {
+        "vol_ratio_20_60": 1.08,
+        "recent_avg_volume": 67878325,
+        "longer_avg_volume": 63113063,
+        "score": 40.0
+      },
+      "ma200_position": {
+        "ma200": 402.15,
+        "distance_pct": -5.1,
+        "above_ma200": false,
+        "score": 15.0
+      },
+      "ma50_position": {
+        "ma50": 384.13,
+        "distance_pct": -0.65,
+        "above_ma50": false,
+        "score": 35.0
+      },
+      "composite": {
+        "composite_score": 42.5,
+        "grade": "D",
+        "grade_description": "Weak setup, avoid",
+        "guidance": "Avoid trading. Weak setup with poor risk/reward profile.",
+        "weakest_component": "MA200 Position",
+        "weakest_score": 15.0,
+        "strongest_component": "Gap Size",
+        "strongest_score": 55.0,
+        "component_breakdown": {
+          "Gap Size": {
+            "score": 55.0,
+            "weight": 0.25,
+            "weighted_score": 13.8
+          },
+          "Pre-Earnings Trend": {
+            "score": 50.0,
+            "weight": 0.3,
+            "weighted_score": 15.0
+          },
+          "Volume Trend": {
+            "score": 40.0,
+            "weight": 0.2,
+            "weighted_score": 8.0
+          },
+          "MA200 Position": {
+            "score": 15.0,
+            "weight": 0.15,
+            "weighted_score": 2.2
+          },
+          "MA50 Position": {
+            "score": 35.0,
+            "weight": 0.1,
+            "weighted_score": 3.5
+          }
+        }
+      }
+    },
+    "computed_at": 1794393072.5916336
+  }
+}

@@ -104,17 +104,34 @@ def test_ten_pct_gain_is_buy():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TEST 3 — -1.5% return → HOLD (inside -2% to +2% band)
+# TEST 3 — -0.5% return → HOLD (inside -1% to +1% band)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_minus_1_5_pct_is_hold():
-    """Exactly -1.5% must be HOLD, not SELL (threshold is -2%)."""
+def test_minus_0_5_pct_is_hold():
+    """Exactly -0.5% must be HOLD, not SELL (threshold tightened from -2% to
+    -1% this session -- this project's own calibration data found OVER_HOLD
+    was the #1 failure reason, so the dead-band shrank; -1.5% from the old
+    test is now a real SELL, not a HOLD -- see test_minus_1_5_pct_is_now_sell
+    below, which captures that deliberate behavior change explicitly)."""
+    origin = 200.0
+    target = 200.0 * (1.0 - 0.005)  # 199.0
+    result = compute_actual_metrics(origin, target, 50_000.0)
+    assert result["status"] == "SUCCESS"
+    assert abs(result["actual_return_pct"] - (-0.5)) < 1e-6
+    assert result["actual_decision"] == "HOLD"
+
+
+def test_minus_1_5_pct_is_now_sell():
+    """-1.5% is now OUTSIDE the tightened +/-1.0% band -- a deliberate
+    behavior change from this session's HOLD-reduction pass, not a
+    regression. Asserted explicitly so a future reader sees this was
+    intentional, not an accidental threshold drift."""
     origin = 200.0
     target = 200.0 * (1.0 - 0.015)  # 197.0
     result = compute_actual_metrics(origin, target, 50_000.0)
     assert result["status"] == "SUCCESS"
     assert abs(result["actual_return_pct"] - (-1.5)) < 1e-6
-    assert result["actual_decision"] == "HOLD"
+    assert result["actual_decision"] == "SELL"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -568,12 +585,14 @@ def test_get_accuracy_summary_counts_distinct_periods_not_raw_rows():
 # HORIZON-SCALED DECISION THRESHOLD (replaces the old flat ±2% band)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_horizon_threshold_7d_matches_old_flat_band():
-    """horizon_days=7 must reproduce the original flat ±2.0% exactly -- this is
-    the anchor point that keeps already-proven short-horizon behavior unchanged."""
+def test_horizon_threshold_7d_is_the_anchor_point():
+    """horizon_days=7 is the anchor the whole sqrt-time scaling is built from.
+    Tightened from +/-2.0% to +/-1.0% this session (this project's own
+    calibration data found OVER_HOLD was the #1 failure reason) -- this test
+    asserts the CURRENT anchor value, not the historical one."""
     buy, sell = decision_thresholds_for_horizon(7)
-    assert abs(buy - 2.0) < 1e-9
-    assert abs(sell - (-2.0)) < 1e-9
+    assert abs(buy - 1.0) < 1e-9
+    assert abs(sell - (-1.0)) < 1e-9
 
 
 def test_horizon_threshold_widens_with_horizon():

@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-10-30T14:09:40.315603+00:00",
+  "model_card_source": "https://storage.googleapis.com/deepmind-media/Model-Cards/Gemini-3-7-Flash-Model-Card.pdf",
+  "model_card_quote": "The knowledge cutoff date for Gemini 3.7 Flash is March 2026 -- users can expect updated information for some domains while in others they may experience the model's knowledge is limited to January 2025 (in line with the Gemini 3 Model Family).",
+  "conservative_cutoff": "2025-01-01",
+  "generous_cutoff": "2026-03-01",
+  "records_considered": 572,
+  "records_skipped_no_target_date": 0,
+  "buckets": {
+    "jan2025_to_mar2026_ambiguous": {
+      "n": 160,
+      "decision_match_pct": 35.0,
+      "direction_match_pct": 53.8,
+      "avg_abs_return_error_pp": 7.31
+    },
+    "post_mar2026_genuinely_unseen": {
+      "n": 389,
+      "decision_match_pct": 34.4,
+      "direction_match_pct": 52.2,
+      "avg_abs_return_error_pp": 10.66
+    },
+    "pre_jan2025_plausibly_memorized": {
+      "n": 23,
+      "decision_match_pct": 43.5,
+      "direction_match_pct": 60.9,
+      "avg_abs_return_error_pp": 13.17
+    }
+  },
+  "two_proportion_z_test": {
+    "decision_match": {
+      "z": 0.883,
+      "p_value": 0.3774
+    },
+    "direction_match": {
+      "z": 0.811,
+      "p_value": 0.4176
+    },
+    "significance_threshold": "|z| >= 1.96 (p < 0.05)"
+  },
+  "verdict": "NO STATISTICALLY SIGNIFICANT MEMORIZATION SIGNAL: any gap between the plausibly-memorized and genuinely-unseen buckets is within the range expected from sampling noise at this sample size (|z| < 1.96 for both decision_match and direction_match). This project's real, measured accuracy on the large genuinely-unseen bucket is not meaningfully different from the small plausibly-memorized bucket, which is evidence AGAINST memorization being a material driver of this project's reported numbers -- not proof of its absence, since the plausibly-memorized sample is small."
+}

@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import statistics
 import sys
 import traceback
 import uuid
@@ -539,10 +540,16 @@ def _build_summary(rows: List[dict], symbols: List[str], horizons: List[int]) ->
                  if _direction_match(r.get("ai_decision"), r.get("actual_decision"))]
     direction_match_pct = round(len(dir_match) / n_valid * 100, 1) if n_valid else 0.0
 
-    # Return error
-    errs = [r["return_error_pp"] for r in valid
+    # Return error -- report median alongside mean. A single extreme,
+    # genuinely-real move (e.g. DELL rallying ~$242->$466 in two weeks, cross-
+    # verified against two independent providers, not a data bug) can drag
+    # the mean far above what a typical prediction actually experiences;
+    # median is robust to that and shows the typical case honestly instead of
+    # one outlier dominating the headline number.
+    errs = [abs(float(r["return_error_pp"])) for r in valid
             if r.get("return_error_pp") is not None]
-    avg_return_error = round(sum(abs(float(e)) for e in errs) / len(errs), 4) if errs else None
+    avg_return_error = round(sum(errs) / len(errs), 4) if errs else None
+    median_return_error = round(statistics.median(errs), 4) if errs else None
 
     # Hold rate
     holds = [r for r in valid if (r.get("ai_decision") or "").upper() == "HOLD"]
@@ -554,15 +561,23 @@ def _build_summary(rows: List[dict], symbols: List[str], horizons: List[int]) ->
                   if (r.get("ai_decision") or "").upper() == "HOLD"
                   and (r.get("actual_decision") or "").upper() in ("BUY", "SELL")]
 
-    # Per-symbol match rate
+    # Per-symbol match rate + error (mean AND median -- a symbol with one
+    # extreme real move, like DELL's ~$242->$466 two-week rally this project
+    # already cross-verified against two independent data providers as real
+    # (not corrupted data), will show a mean error far above its median; both
+    # numbers together make that visible instead of one hiding the other).
     match_by_symbol = {}
     for sym in symbols:
         sym_rows  = [r for r in valid if r.get("symbol") == sym]
         sym_match = [r for r in sym_rows if r.get("agreement") == "MATCH"]
+        sym_errs  = [abs(float(r["return_error_pp"])) for r in sym_rows
+                     if r.get("return_error_pp") is not None]
         match_by_symbol[sym] = {
             "runs":       len(sym_rows),
             "matches":    len(sym_match),
             "match_pct":  round(len(sym_match) / len(sym_rows) * 100, 1) if sym_rows else 0.0,
+            "avg_return_error_pp":    round(sum(sym_errs) / len(sym_errs), 4) if sym_errs else None,
+            "median_return_error_pp": round(statistics.median(sym_errs), 4) if sym_errs else None,
         }
 
     # Per-horizon match rate
@@ -620,6 +635,7 @@ def _build_summary(rows: List[dict], symbols: List[str], horizons: List[int]) ->
         "decision_match_pct":    decision_match_pct,
         "direction_match_pct":   direction_match_pct,
         "avg_return_error_pp":   avg_return_error,
+        "median_return_error_pp": median_return_error,
         "hold_rate_pct":         hold_rate,
         "false_buy_count":       len(false_buy),
         "false_sell_count":      len(false_sell),
@@ -687,6 +703,7 @@ def _print_summary(summary: dict) -> None:
     print(f"  Decision match %:      {summary['decision_match_pct']}  (valid runs only)")
     print(f"  Direction match %:     {summary['direction_match_pct']}  (valid runs only)")
     print(f"  Avg return error pp:   {summary['avg_return_error_pp']}")
+    print(f"  Median return error pp: {summary.get('median_return_error_pp')}  (robust to single extreme-move outliers, e.g. DELL)")
     print(f"  Hold rate %:           {summary['hold_rate_pct']}")
     print(f"  Over-hold count:       {summary['over_hold_count']}")
     print(f"  False buy count:       {summary['false_buy_count']}")

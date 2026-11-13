@@ -17,12 +17,24 @@ Usage:
     python calibration_profile_builder.py
     python calibration_profile_builder.py --symbol SPY TSLA
     python calibration_profile_builder.py --tag baseline
+    python calibration_profile_builder.py --from-db
+
+--from-db sources rows from the live, current DB (same _load_calibration_
+source_records() the live prediction path itself uses) instead of the static
+batch_validation_results.csv snapshot. Use this for routine refreshes --
+the CSV-based path only reflects whatever one-off batch run last wrote that
+file (found stale this session: data/batch_validation_results.csv was a
+5-row snapshot from Sep 25, covering only SPY/TSLA, while the real DB had
+grown to 572 records across 10+ symbols). The CSV path is kept, unchanged,
+for reproducing a specific historical batch run's calibration profile on
+demand -- not removed, just no longer the only option.
 """
 from __future__ import annotations
 
 import argparse
 import csv
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -33,6 +45,40 @@ FAILURE_JSON     = ROOT / "data" / "failure_analysis.json"
 PROFILE_JSON     = ROOT / "data" / "calibration_profiles.json"
 
 FOCUSED_SYMBOLS = ["SPY", "TSLA", "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "QQQ", "IWM"]
+
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "core"))
+
+
+def rows_from_db(as_of_date: str = "") -> List[dict]:
+    """Build the same flat row shape build_profiles() expects (symbol,
+    validation_status, agreement, ai_decision, actual_decision,
+    return_error_pp, target_date) from the live DB's validated records,
+    via the exact same source function the live prediction path uses
+    (_load_calibration_source_records) -- one source of truth, not a
+    second, independently-drifting data path."""
+    import bootstrap_paths
+    bootstrap_paths.add_module_paths()
+    from gemini_stock_prediction_agent import _load_calibration_source_records
+    from record_dedup import dedup_records
+
+    records = dedup_records(_load_calibration_source_records())
+    rows = []
+    for r in records:
+        spi  = r.get("stock_prediction_input") or {}
+        av   = r.get("actual_validation") or {}
+        comp = r.get("comparison") or {}
+        target_date = av.get("effective_target_date") or spi.get("target_date") or ""
+        rows.append({
+            "symbol":             spi.get("symbol"),
+            "validation_status":  "OK" if comp.get("status") == "SUCCESS" else comp.get("status"),
+            "agreement":          comp.get("agreement"),
+            "ai_decision":        comp.get("final_decision"),
+            "actual_decision":    av.get("actual_decision"),
+            "return_error_pp":    comp.get("return_error_pct"),
+            "target_date":        target_date,
+        })
+    return rows
 
 
 def _direction_match(ai: Optional[str], actual: Optional[str]) -> bool:
@@ -172,6 +218,7 @@ def build_profiles(
     fail_json: Path = FAILURE_JSON,
     tag: str = "",
     as_of_date: str = "",
+    rows: Optional[List[dict]] = None,
 ) -> dict:
     """Build calibration profiles for each symbol.
 
@@ -179,13 +226,19 @@ def build_profiles(
     excluded — keeps a historical replay from being calibrated on outcomes that
     hadn't resolved yet as of the origin being replayed. Empty (default) keeps
     all rows, matching prior behavior.
+
+    rows: when given, used directly instead of reading csv_path -- lets a
+    caller (e.g. --from-db / rows_from_db()) source from the live DB instead
+    of a static batch-run CSV snapshot, without duplicating this function's
+    aggregation logic. None (default) preserves prior CSV-reading behavior.
     """
     symbols = symbols or FOCUSED_SYMBOLS
 
-    rows: List[dict] = []
-    if csv_path.exists():
-        with open(csv_path, newline="", encoding="utf-8") as f:
-            rows = list(csv.DictReader(f))
+    if rows is None:
+        rows = []
+        if csv_path.exists():
+            with open(csv_path, newline="", encoding="utf-8") as f:
+                rows = list(csv.DictReader(f))
 
     if as_of_date:
         rows = [r for r in rows if (r.get("target_date") or "") < as_of_date]
@@ -315,6 +368,8 @@ if __name__ == "__main__":
                         help="Tag for input/output file naming (e.g. 'baseline')")
     parser.add_argument("--as-of-date", default="",
                         help="Exclude rows whose target_date is on/after this date (YYYY-MM-DD) — for isolating historical replays")
+    parser.add_argument("--from-db", action="store_true",
+                        help="Source rows from the live DB instead of the static batch_validation_results.csv snapshot — the routine-refresh path (see module docstring).")
     args = parser.parse_args()
 
     if args.tag:
@@ -326,7 +381,8 @@ if __name__ == "__main__":
         fail_path = FAILURE_JSON
         out_path  = Path(args.out) if args.out else PROFILE_JSON
 
-    result = build_profiles(symbols=args.symbol, csv_path=csv_path, fail_json=fail_path, tag=args.tag, as_of_date=args.as_of_date)
+    db_rows = rows_from_db(as_of_date=args.as_of_date) if args.from_db else None
+    result = build_profiles(symbols=args.symbol, csv_path=csv_path, fail_json=fail_path, tag=args.tag, as_of_date=args.as_of_date, rows=db_rows)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
     _print_profiles(result)

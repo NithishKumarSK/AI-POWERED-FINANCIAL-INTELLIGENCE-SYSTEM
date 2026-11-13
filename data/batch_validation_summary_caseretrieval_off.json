@@ -1,0 +1,196 @@
+{
+  "generated_at": "2026-10-13T08:53:13.725366",
+  "symbols": [
+    "TSLA",
+    "NVDA",
+    "META",
+    "SPY"
+  ],
+  "horizons": [
+    3,
+    7,
+    14,
+    21
+  ],
+  "total_runs": 50,
+  "valid_runs": 29,
+  "failed_runs": 5,
+  "data_unavailable_count": 16,
+  "symbols_failed": [
+    "NVDA",
+    "SPY",
+    "TSLA",
+    "META"
+  ],
+  "decision_match_pct": 34.5,
+  "direction_match_pct": 34.5,
+  "avg_return_error_pp": 8.0979,
+  "hold_rate_pct": 37.9,
+  "false_buy_count": 4,
+  "false_sell_count": 7,
+  "over_hold_count": 8,
+  "match_by_symbol": {
+    "TSLA": {
+      "runs": 9,
+      "matches": 2,
+      "match_pct": 22.2
+    },
+    "NVDA": {
+      "runs": 10,
+      "matches": 6,
+      "match_pct": 60.0
+    },
+    "META": {
+      "runs": 5,
+      "matches": 0,
+      "match_pct": 0.0
+    },
+    "SPY": {
+      "runs": 5,
+      "matches": 2,
+      "match_pct": 40.0
+    }
+  },
+  "match_by_horizon": {
+    "3": {
+      "runs": 5,
+      "matches": 1,
+      "match_pct": 20.0
+    },
+    "7": {
+      "runs": 9,
+      "matches": 4,
+      "match_pct": 44.4
+    },
+    "14": {
+      "runs": 7,
+      "matches": 2,
+      "match_pct": 28.6
+    },
+    "21": {
+      "runs": 8,
+      "matches": 3,
+      "match_pct": 37.5
+    }
+  },
+  "match_by_segment": {
+    "TSLA|0-7d": {
+      "symbol": "TSLA",
+      "horizon_bucket": "0-7d",
+      "runs": 4,
+      "decision_match_pct": 25.0,
+      "direction_match_pct": 25.0
+    },
+    "TSLA|8-14d": {
+      "symbol": "TSLA",
+      "horizon_bucket": "8-14d",
+      "runs": 2,
+      "decision_match_pct": 0.0,
+      "direction_match_pct": 0.0
+    },
+    "TSLA|15-30d": {
+      "symbol": "TSLA",
+      "horizon_bucket": "15-30d",
+      "runs": 3,
+      "decision_match_pct": 33.3,
+      "direction_match_pct": 33.3
+    },
+    "NVDA|0-7d": {
+      "symbol": "NVDA",
+      "horizon_bucket": "0-7d",
+      "runs": 4,
+      "decision_match_pct": 75.0,
+      "direction_match_pct": 75.0
+    },
+    "NVDA|8-14d": {
+      "symbol": "NVDA",
+      "horizon_bucket": "8-14d",
+      "runs": 3,
+      "decision_match_pct": 66.7,
+      "direction_match_pct": 66.7
+    },
+    "NVDA|15-30d": {
+      "symbol": "NVDA",
+      "horizon_bucket": "15-30d",
+      "runs": 3,
+      "decision_match_pct": 33.3,
+      "direction_match_pct": 33.3
+    },
+    "META|0-7d": {
+      "symbol": "META",
+      "horizon_bucket": "0-7d",
+      "runs": 3,
+      "decision_match_pct": 0.0,
+      "direction_match_pct": 0.0
+    },
+    "META|8-14d": {
+      "symbol": "META",
+      "horizon_bucket": "8-14d",
+      "runs": 1,
+      "decision_match_pct": 0.0,
+      "direction_match_pct": 0.0
+    },
+    "META|15-30d": {
+      "symbol": "META",
+      "horizon_bucket": "15-30d",
+      "runs": 1,
+      "decision_match_pct": 0.0,
+      "direction_match_pct": 0.0
+    },
+    "SPY|0-7d": {
+      "symbol": "SPY",
+      "horizon_bucket": "0-7d",
+      "runs": 3,
+      "decision_match_pct": 33.3,
+      "direction_match_pct": 33.3
+    },
+    "SPY|8-14d": {
+      "symbol": "SPY",
+      "horizon_bucket": "8-14d",
+      "runs": 1,
+      "decision_match_pct": 0.0,
+      "direction_match_pct": 0.0
+    },
+    "SPY|15-30d": {
+      "symbol": "SPY",
+      "horizon_bucket": "15-30d",
+      "runs": 1,
+      "decision_match_pct": 100.0,
+      "direction_match_pct": 100.0
+    }
+  },
+  "top_failure_reasons": [
+    {
+      "reason": "TREND_REVERSAL_MISSED",
+      "count": 7
+    },
+    {
+      "reason": "OVER_HOLD",
+      "count": 5
+    },
+    {
+      "reason": "VOLATILITY_SHIFT_MISSED",
+      "count": 3
+    },
+    {
+      "reason": "WRONG_MAGNITUDE",
+      "count": 2
+    },
+    {
+      "reason": "BENCHMARK_CONTEXT_MISSING",
+      "count": 1
+    },
+    {
+      "reason": "FALSE_BUY",
+      "count": 1
+    }
+  ],
+  "recommended_prompt_changes": [
+    "OVER_HOLD detected: widen BUY/SELL thresholds or add stronger signal requirement before HOLD.",
+    "VOLATILITY_SHIFT_MISSED: add vol-regime change detection to feature packet.",
+    "TREND_REVERSAL_MISSED: inject news/earnings context into Gemini prompt.",
+    "FALSE_BUY: add reversal_risk and RSI overbought guard to buy logic.",
+    "WRONG_MAGNITUDE: recalibrate predicted_return_pct scaling vs actual by horizon.",
+    "BENCHMARK_CONTEXT_MISSING: ensure relative_strength vs SPY is in feature packet."
+  ]
+}

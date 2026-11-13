@@ -89,25 +89,32 @@ def _import_batch_runner():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_dynamic_thresholds_7d():
-    # Near-zero threshold: any return sign triggers decision, not a large hurdle
+    """_get_horizon_thresholds must match decision_thresholds_for_horizon exactly --
+    that's the REAL guardrail Gemini is actually graded against, so the prompt must
+    show Gemini the same number, not an independent (and previously near-zero,
+    HOLD-eliminating) threshold. At horizon_days=7 that's the anchored +/-1.0%
+    (tightened from +/-2.0% this session -- OVER_HOLD was this project's own
+    #1 real-data failure reason)."""
     _get_horizon_thresholds, *_ = _import_agent()
     buy, sell = _get_horizon_thresholds(7)
-    assert buy == 0.1
-    assert sell == -0.1
+    assert buy == 1.0
+    assert sell == -1.0
 
 
 def test_dynamic_thresholds_30d():
     _get_horizon_thresholds, *_ = _import_agent()
+    from stock_comparison_engine import decision_thresholds_for_horizon
     buy, sell = _get_horizon_thresholds(30)
-    assert buy == 0.1
-    assert sell == -0.1
+    assert (buy, sell) == decision_thresholds_for_horizon(30)
+    assert buy > 1.0  # scales up from the 7d anchor, not a flat near-zero band
 
 
 def test_dynamic_thresholds_45d():
     _get_horizon_thresholds, *_ = _import_agent()
+    from stock_comparison_engine import decision_thresholds_for_horizon
     buy, sell = _get_horizon_thresholds(45)
-    assert buy == 0.1
-    assert sell == -0.1
+    assert (buy, sell) == decision_thresholds_for_horizon(45)
+    assert buy > 2.0
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -505,20 +512,25 @@ def test_gemini_prompt_has_decision_threshold_in_json_schema():
     assert "decision_threshold_used" in prompt
 
 
-def test_gemini_prompt_has_hold_reason_field():
-    """Prompt contains 'hold_reason' field in JSON schema."""
+def test_gemini_prompt_output_schema_is_compact():
+    """'hold_reason', 'invalidating_conditions', and 'calibration_notes' were
+    removed from the JSON schema (Nov 2026 latency optimization) -- confirmed
+    via code read that none of the three had any downstream consumer (never
+    read via .get() anywhere in this file or stock_prediction_app.py's result
+    dict construction), so cutting them trims real output-token latency with
+    zero functional loss. See the research-backed incident.io case study
+    (output-token volume, not input size or call count, is the dominant LLM
+    pipeline latency driver) that motivated this change. The 8-step
+    chain-of-thought REASONING requirement (_cot_block, which drives the
+    actual bull/bear decision) is deliberately left untouched -- only the
+    separate, additional narrative-explanation fields were shortened."""
     _, _apply_guardrails, _build_gemini_prompt, _ = _import_agent()
     ni, fp, cs = _make_minimal_prompt_args()
     prompt = _build_gemini_prompt(ni, fp, cs)
-    assert "hold_reason" in prompt
-
-
-def test_gemini_prompt_has_invalidating_conditions():
-    """Prompt contains 'invalidating_conditions' field."""
-    _, _apply_guardrails, _build_gemini_prompt, _ = _import_agent()
-    ni, fp, cs = _make_minimal_prompt_args()
-    prompt = _build_gemini_prompt(ni, fp, cs)
-    assert "invalidating_conditions" in prompt
+    assert "hold_reason" not in prompt
+    assert "invalidating_conditions" not in prompt
+    assert "calibration_notes" not in prompt
+    assert "MANDATORY CHAIN-OF-THOUGHT REASONING" in prompt
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -584,3 +596,109 @@ def test_over_hold_reduction_mechanism_exists():
     )
     assert decision == "HOLD"
     assert "HOLD" in reason
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 31-36: calibration_profile_builder.rows_from_db -- fixes the stale,
+# TSLA/SPY-only calibration_profiles.json found this session (last generated
+# 2026-07-20 from a 5-row CSV snapshot, while the live DB had grown to 572
+# records across 10 symbols -- GOOGL and 7 others had NO profile at all).
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _db_record(symbol: str, target_date: str, ai_decision: str, actual_decision: str,
+                return_error_pct: float = 1.0, status: str = "SUCCESS") -> dict:
+    return {
+        "stock_prediction_input": {"symbol": symbol, "target_date": target_date},
+        "actual_validation": {"actual_decision": actual_decision},
+        "comparison": {
+            "status": status,
+            "agreement": "MATCH" if ai_decision == actual_decision else "MISMATCH",
+            "final_decision": ai_decision,
+            "return_error_pct": return_error_pct,
+        },
+    }
+
+
+def test_rows_from_db_maps_fields_correctly(monkeypatch):
+    from calibration_profile_builder import rows_from_db
+    import gemini_stock_prediction_agent as gspa
+
+    monkeypatch.setattr(
+        gspa, "_load_calibration_source_records",
+        lambda: [_db_record("GOOGL", "2026-05-01", "BUY", "BUY", 3.5)],
+    )
+
+    rows = rows_from_db()
+    assert len(rows) == 1
+    r = rows[0]
+    assert r["symbol"] == "GOOGL"
+    assert r["validation_status"] == "OK"
+    assert r["agreement"] == "MATCH"
+    assert r["ai_decision"] == "BUY"
+    assert r["actual_decision"] == "BUY"
+    assert r["return_error_pp"] == 3.5
+    assert r["target_date"] == "2026-05-01"
+
+
+def test_rows_from_db_prefers_effective_target_date(monkeypatch):
+    from calibration_profile_builder import rows_from_db
+    import gemini_stock_prediction_agent as gspa
+
+    rec = _db_record("TSLA", "2024-01-01", "SELL", "SELL")
+    rec["actual_validation"]["effective_target_date"] = "2026-09-15"
+    monkeypatch.setattr(gspa, "_load_calibration_source_records", lambda: [rec])
+
+    rows = rows_from_db()
+    assert rows[0]["target_date"] == "2026-09-15"
+
+
+def test_rows_from_db_non_success_status_passthrough(monkeypatch):
+    """A non-SUCCESS comparison status must not be silently relabeled "OK" --
+    build_profiles' own ERROR/DATA_UNAVAILABLE filter depends on seeing the
+    real status."""
+    from calibration_profile_builder import rows_from_db
+    import gemini_stock_prediction_agent as gspa
+
+    monkeypatch.setattr(
+        gspa, "_load_calibration_source_records",
+        lambda: [_db_record("TSLA", "2026-01-01", "BUY", "BUY", status="ERROR")],
+    )
+    rows = rows_from_db()
+    assert rows[0]["validation_status"] == "ERROR"
+
+
+def test_build_profiles_accepts_rows_directly_bypassing_csv(tmp_path):
+    """Passing rows= must skip reading csv_path entirely -- lets --from-db
+    source from the DB without requiring a CSV file to exist at all."""
+    build_profiles, *_ = _import_calibration_builder()
+
+    nonexistent_csv = tmp_path / "does_not_exist.csv"
+    fail_json = tmp_path / "fail.json"
+    rows = [
+        {"symbol": "GOOGL", "validation_status": "OK", "agreement": "MATCH",
+         "ai_decision": "BUY", "actual_decision": "BUY", "return_error_pp": "2.0",
+         "target_date": "2026-05-01"},
+        {"symbol": "GOOGL", "validation_status": "OK", "agreement": "MISMATCH",
+         "ai_decision": "SELL", "actual_decision": "BUY", "return_error_pp": "4.0",
+         "target_date": "2026-05-02"},
+    ]
+
+    result = build_profiles(symbols=["GOOGL"], csv_path=nonexistent_csv, fail_json=fail_json, rows=rows)
+    assert result["profiles"]["GOOGL"]["runs_available"] == 2
+    assert result["profiles"]["GOOGL"]["match_pct"] == 50.0
+
+
+def test_build_profiles_rows_none_preserves_csv_behavior(tmp_path):
+    """Omitting rows= (the default, None) must preserve the original
+    CSV-reading behavior exactly -- no regression for existing callers."""
+    build_profiles, *_ = _import_calibration_builder()
+
+    csv_path = tmp_path / "batch.csv"
+    csv_path.write_text(
+        _CSV_HEADER + _csv_row("r1", "SPY", "2026-05-01"),
+        encoding="utf-8",
+    )
+    fail_json = tmp_path / "fail.json"
+
+    result = build_profiles(symbols=["SPY"], csv_path=csv_path, fail_json=fail_json)
+    assert result["profiles"]["SPY"]["runs_available"] == 1

@@ -582,6 +582,7 @@ def fetch_price_history_for_range(
     symbol: str,
     requested_start: str,
     requested_end: str,
+    _retry_on_total_failure: bool = True,
 ) -> Tuple[List[Dict], str, Dict]:
     """
     Fetch daily OHLCV for a specific date range using a provider fallback chain.
@@ -598,6 +599,16 @@ def fetch_price_history_for_range(
         provider         — name of provider used
         coverage_status  — "FULL" if effective_start <= requested_start, else "PARTIAL"
         providers_tried  — list of {provider, status, first_bar, error}
+
+    _retry_on_total_failure: confirmed real pattern (not hypothetical) --
+    running several prediction tasks concurrently (ThreadPoolExecutor) caused
+    EVERY provider (RapidAPI, NASDAQ, yfinance, Yahoo direct) to fail for the
+    same symbols that fetched fine moments earlier run alone, pointing to
+    transient network/DNS congestion from many simultaneous outbound
+    connections rather than a real data gap (mirrors the same DNS-under-load
+    issue already fixed for the Supabase connection in db/connection.py).
+    If every provider fails on the first pass, wait briefly and retry the
+    whole chain exactly once before giving up for real.
     """
     try:
         from datetime import datetime as _vdt
@@ -715,6 +726,12 @@ def fetch_price_history_for_range(
         }
 
     # ── All providers failed ────────────────────────────────────────────────────
+    if _retry_on_total_failure:
+        time.sleep(2.0)
+        return fetch_price_history_for_range(
+            symbol, requested_start, requested_end, _retry_on_total_failure=False
+        )
+
     combined_err = (
         f"No provider could fetch data for {symbol} from {requested_start}. "
         f"TradingView RapidAPI: {tv_err}. NASDAQ: {nash_err}. "
@@ -735,6 +752,26 @@ _CACHE_TTL = 10 * 60
 
 
 def fetch_price_history(symbol: str, min_days: int = 500) -> Tuple[List[Dict], str]:
+    """Fetch daily price history for symbol, retrying once on total failure.
+
+    Confirmed real: under concurrent load (several prediction tasks running
+    in parallel threads) every provider failed for symbols that fetched fine
+    moments earlier run alone -- transient network/DNS congestion, not a real
+    data gap. One retry after a short pause catches that case cheaply.
+    """
+    sym_key = symbol.upper().replace("-", ".").replace(":", "_")
+    cached  = _PRICE_CACHE.get(sym_key)
+    if cached and (time.time() - cached["ts"]) < _CACHE_TTL:
+        return cached["bars"], ""
+
+    bars, err = _fetch_price_history_once(symbol, min_days)
+    if bars or sym_key in _PRICE_CACHE:
+        return bars, err
+    time.sleep(2.0)
+    return _fetch_price_history_once(symbol, min_days)
+
+
+def _fetch_price_history_once(symbol: str, min_days: int = 500) -> Tuple[List[Dict], str]:
     """
     Fetch daily price history for symbol.
 

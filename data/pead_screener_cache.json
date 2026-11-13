@@ -1,0 +1,2735 @@
+{
+  "TSLA:2026-10-26": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "MONITORING",
+      "earnings_date": "2026-10-21",
+      "earnings_timing": "unknown",
+      "gap_pct": -3.15,
+      "weeks_since_earnings": 1,
+      "red_candle": null,
+      "current_price": 391.62,
+      "breakout_pct": 0.0,
+      "entry_price": 391.62,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 13728004489.0,
+      "composite_score": 40.5,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 35.0,
+          "weight": 0.3,
+          "weighted": 10.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794314150.7017062
+  },
+  "TSLA:2024-01-15": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2024-01-02",
+      "earnings_timing": "unknown",
+      "gap_pct": -1.38,
+      "weeks_since_earnings": 1,
+      "red_candle": {
+        "high": 241.25,
+        "low": 217.15,
+        "open": 236.14,
+        "close": 218.89,
+        "week_start": "2024-01-08",
+        "week_index": 0,
+        "lower_wick_pct": 7.2,
+        "volume_vs_avg": 1.21
+      },
+      "current_price": 218.89,
+      "breakout_pct": -9.27,
+      "entry_price": 218.89,
+      "stop_price": 217.15,
+      "target_price": 222.37,
+      "risk_pct": 0.79,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 26743954847.0,
+      "composite_score": 54.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 50.0,
+          "weight": 0.3,
+          "weighted": 15.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794116694.1037362
+  },
+  "TSLA:2025-06-10": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "EXPIRED",
+      "earnings_date": "2025-04-22",
+      "earnings_timing": "unknown",
+      "gap_pct": 7.1,
+      "weeks_since_earnings": 7,
+      "red_candle": null,
+      "current_price": 308.58,
+      "breakout_pct": 0.0,
+      "entry_price": 308.58,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 39392329124.0,
+      "composite_score": 42.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 40.0,
+          "weight": 0.3,
+          "weighted": 12.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794116825.4512942
+  },
+  "TSLA:2026-10-30": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "MONITORING",
+      "earnings_date": "2026-10-21",
+      "earnings_timing": "unknown",
+      "gap_pct": -3.15,
+      "weeks_since_earnings": 1,
+      "red_candle": null,
+      "current_price": 399.81,
+      "breakout_pct": 0.0,
+      "entry_price": 399.81,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 13821514317.0,
+      "composite_score": 40.5,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 35.0,
+          "weight": 0.3,
+          "weighted": 10.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794120941.3177047
+  },
+  "TSLA:2023-08-14": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2023-07-19",
+      "earnings_timing": "unknown",
+      "gap_pct": -4.02,
+      "weeks_since_earnings": 3,
+      "red_candle": {
+        "high": 253.65,
+        "low": 238.02,
+        "open": 251.45,
+        "close": 242.65,
+        "week_start": "2023-08-07",
+        "week_index": 0,
+        "lower_wick_pct": 29.6,
+        "volume_vs_avg": 1.01
+      },
+      "current_price": 242.65,
+      "breakout_pct": -4.34,
+      "entry_price": 242.65,
+      "stop_price": 238.02,
+      "target_price": 251.91,
+      "risk_pct": 1.91,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 29859764936.0,
+      "composite_score": 54.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 50.0,
+          "weight": 0.3,
+          "weighted": 15.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794117876.629633
+  },
+  "TSLA:2026-09-01": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "EXPIRED",
+      "earnings_date": "2026-07-22",
+      "earnings_timing": "unknown",
+      "gap_pct": -8.83,
+      "weeks_since_earnings": 6,
+      "red_candle": null,
+      "current_price": 367.95,
+      "breakout_pct": 0.0,
+      "entry_price": 367.95,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 11805924980.0,
+      "composite_score": 33.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 10.0,
+          "weight": 0.3,
+          "weighted": 3.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794392828.3921344
+  },
+  "TSLA:2024-11-05": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2024-10-23",
+      "earnings_timing": "unknown",
+      "gap_pct": 14.52,
+      "weeks_since_earnings": 2,
+      "red_candle": {
+        "high": 248.9,
+        "low": 238.88,
+        "open": 244.56,
+        "close": 242.84,
+        "week_start": "2024-11-04",
+        "week_index": 0,
+        "lower_wick_pct": 39.5,
+        "volume_vs_avg": 0.17
+      },
+      "current_price": 242.84,
+      "breakout_pct": -2.43,
+      "entry_price": 242.84,
+      "stop_price": 238.88,
+      "target_price": 250.76,
+      "risk_pct": 1.63,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 19556468658.0,
+      "composite_score": 67.5,
+      "rating": "Developing",
+      "guidance": "Watchlist, wait for cleaner breakout",
+      "components": {
+        "setup_quality": {
+          "score": 95.0,
+          "weight": 0.3,
+          "weighted": 28.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794117236.4906461
+  },
+  "TSLA:2025-01-02": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2025-01-02",
+      "earnings_timing": "unknown",
+      "gap_pct": 0.0,
+      "weeks_since_earnings": 0,
+      "red_candle": {
+        "high": 488.54,
+        "low": 417.64,
+        "open": 441.09,
+        "close": 421.06,
+        "week_start": "2024-12-16",
+        "week_index": 1,
+        "lower_wick_pct": 4.8,
+        "volume_vs_avg": 1.73
+      },
+      "current_price": 403.84,
+      "breakout_pct": -17.34,
+      "entry_price": 403.84,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 38658783620.0,
+      "composite_score": 45.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 50.0,
+          "weight": 0.3,
+          "weighted": 15.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794117382.4154038
+  },
+  "TSLA:2024-04-22": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2024-04-02",
+      "earnings_timing": "unknown",
+      "gap_pct": -1.57,
+      "weeks_since_earnings": 2,
+      "red_candle": {
+        "high": 170.69,
+        "low": 146.22,
+        "open": 170.24,
+        "close": 147.05,
+        "week_start": "2024-04-15",
+        "week_index": 0,
+        "lower_wick_pct": 3.4,
+        "volume_vs_avg": 1.01
+      },
+      "current_price": 147.05,
+      "breakout_pct": -13.85,
+      "entry_price": 147.05,
+      "stop_price": 146.22,
+      "target_price": 148.71,
+      "risk_pct": 0.56,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 15819735136.0,
+      "composite_score": 54.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 50.0,
+          "weight": 0.3,
+          "weighted": 15.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794118049.0463245
+  },
+  "TSLA:2025-09-09": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "EXPIRED",
+      "earnings_date": "2025-07-23",
+      "earnings_timing": "unknown",
+      "gap_pct": -6.78,
+      "weeks_since_earnings": 7,
+      "red_candle": null,
+      "current_price": 346.4,
+      "breakout_pct": 0.0,
+      "entry_price": 346.4,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 25956343030.0,
+      "composite_score": 33.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 10.0,
+          "weight": 0.3,
+          "weighted": 3.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794118298.8342488
+  },
+  "TSLA:2025-02-14": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2025-01-29",
+      "earnings_timing": "unknown",
+      "gap_pct": 5.57,
+      "weeks_since_earnings": 2,
+      "red_candle": {
+        "high": 362.7,
+        "low": 325.1,
+        "open": 356.21,
+        "close": 355.94,
+        "week_start": "2025-02-10",
+        "week_index": 0,
+        "lower_wick_pct": 82.0,
+        "volume_vs_avg": 1.29
+      },
+      "current_price": 355.94,
+      "breakout_pct": -1.86,
+      "entry_price": 355.94,
+      "stop_price": 325.1,
+      "target_price": 417.62,
+      "risk_pct": 8.66,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 29248246792.0,
+      "composite_score": 61.5,
+      "rating": "Developing",
+      "guidance": "Watchlist, wait for cleaner breakout",
+      "components": {
+        "setup_quality": {
+          "score": 75.0,
+          "weight": 0.3,
+          "weighted": 22.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794118595.7271905
+  },
+  "TSLA:2024-07-07": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "MONITORING",
+      "earnings_date": "2024-07-02",
+      "earnings_timing": "unknown",
+      "gap_pct": 1.43,
+      "weeks_since_earnings": 0,
+      "red_candle": null,
+      "current_price": 251.52,
+      "breakout_pct": 0.0,
+      "entry_price": 251.52,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 19019687056.0,
+      "composite_score": 40.5,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 35.0,
+          "weight": 0.3,
+          "weighted": 10.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794119015.4895978
+  },
+  "AMZN:2024-12-09": {
+    "data": {
+      "symbol": "AMZN",
+      "stage": "BREAKOUT",
+      "earnings_date": "2024-10-31",
+      "earnings_timing": "unknown",
+      "gap_pct": 6.76,
+      "weeks_since_earnings": 5,
+      "red_candle": {
+        "high": 205.3,
+        "low": 195.75,
+        "open": 204.15,
+        "close": 197.12,
+        "week_start": "2024-11-18",
+        "week_index": 2,
+        "lower_wick_pct": 14.3,
+        "volume_vs_avg": 0.93
+      },
+      "current_price": 227.03,
+      "breakout_pct": 10.58,
+      "entry_price": 227.03,
+      "stop_price": 195.75,
+      "target_price": 289.59,
+      "risk_pct": 13.78,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 8521749340.0,
+      "composite_score": 88.0,
+      "rating": "Strong Setup",
+      "guidance": "High-conviction PEAD trade, full position size",
+      "components": {
+        "setup_quality": {
+          "score": 80.0,
+          "weight": 0.3,
+          "weighted": 24.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794124225.9563708
+  },
+  "TSLA:2025-11-20": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2025-10-22",
+      "earnings_timing": "unknown",
+      "gap_pct": -4.32,
+      "weeks_since_earnings": 4,
+      "red_candle": {
+        "high": 449.67,
+        "low": 382.78,
+        "open": 439.6,
+        "close": 404.35,
+        "week_start": "2025-11-10",
+        "week_index": 1,
+        "lower_wick_pct": 32.2,
+        "volume_vs_avg": 1.11
+      },
+      "current_price": 403.99,
+      "breakout_pct": -10.16,
+      "entry_price": 403.99,
+      "stop_price": 382.78,
+      "target_price": 446.41,
+      "risk_pct": 5.25,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 38756218582.0,
+      "composite_score": 55.5,
+      "rating": "Developing",
+      "guidance": "Watchlist, wait for cleaner breakout",
+      "components": {
+        "setup_quality": {
+          "score": 55.0,
+          "weight": 0.3,
+          "weighted": 16.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794122883.970085
+  },
+  "TSLA:2023-11-01": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2023-10-18",
+      "earnings_timing": "unknown",
+      "gap_pct": -6.89,
+      "weeks_since_earnings": 2,
+      "red_candle": {
+        "high": 210.88,
+        "low": 194.07,
+        "open": 209.28,
+        "close": 200.84,
+        "week_start": "2023-10-30",
+        "week_index": 0,
+        "lower_wick_pct": 40.3,
+        "volume_vs_avg": 0.5
+      },
+      "current_price": 200.84,
+      "breakout_pct": -4.76,
+      "entry_price": 200.84,
+      "stop_price": 194.07,
+      "target_price": 214.38,
+      "risk_pct": 3.37,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 27700312493.0,
+      "composite_score": 55.5,
+      "rating": "Developing",
+      "guidance": "Watchlist, wait for cleaner breakout",
+      "components": {
+        "setup_quality": {
+          "score": 55.0,
+          "weight": 0.3,
+          "weighted": 16.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794122996.2766507
+  },
+  "TSLA:2026-01-15": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2026-01-02",
+      "earnings_timing": "unknown",
+      "gap_pct": 2.26,
+      "weeks_since_earnings": 2,
+      "red_candle": {
+        "high": 454.3,
+        "low": 434.22,
+        "open": 441.23,
+        "close": 439.2,
+        "week_start": "2026-01-12",
+        "week_index": 0,
+        "lower_wick_pct": 24.8,
+        "volume_vs_avg": 0.81
+      },
+      "current_price": 439.2,
+      "breakout_pct": -3.32,
+      "entry_price": 439.2,
+      "stop_price": 434.22,
+      "target_price": 449.16,
+      "risk_pct": 1.13,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 33028460372.0,
+      "composite_score": 54.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 50.0,
+          "weight": 0.3,
+          "weighted": 15.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794123127.0965812
+  },
+  "TSLA:2025-05-05": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2025-04-22",
+      "earnings_timing": "unknown",
+      "gap_pct": 7.1,
+      "weeks_since_earnings": 1,
+      "red_candle": {
+        "high": 294.86,
+        "low": 270.78,
+        "open": 288.98,
+        "close": 287.21,
+        "week_start": "2025-04-28",
+        "week_index": 0,
+        "lower_wick_pct": 68.2,
+        "volume_vs_avg": 1.33
+      },
+      "current_price": 287.21,
+      "breakout_pct": -2.59,
+      "entry_price": 287.21,
+      "stop_price": 270.78,
+      "target_price": 320.07,
+      "risk_pct": 5.72,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 34426626786.0,
+      "composite_score": 64.5,
+      "rating": "Developing",
+      "guidance": "Watchlist, wait for cleaner breakout",
+      "components": {
+        "setup_quality": {
+          "score": 85.0,
+          "weight": 0.3,
+          "weighted": 25.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794307693.7666512
+  },
+  "TSLA:2026-10-28": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "MONITORING",
+      "earnings_date": "2026-10-21",
+      "earnings_timing": "unknown",
+      "gap_pct": -3.15,
+      "weeks_since_earnings": 1,
+      "red_candle": null,
+      "current_price": 404.22,
+      "breakout_pct": 0.0,
+      "entry_price": 404.22,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 14101770608.0,
+      "composite_score": 40.5,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 35.0,
+          "weight": 0.3,
+          "weighted": 10.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794123565.270062
+  },
+  "MSFT:2024-03-18": {
+    "data": {
+      "symbol": "MSFT",
+      "stage": "EXPIRED",
+      "earnings_date": "2024-01-30",
+      "earnings_timing": "unknown",
+      "gap_pct": -0.4,
+      "weeks_since_earnings": 6,
+      "red_candle": null,
+      "current_price": 408.4698,
+      "breakout_pct": 0.0,
+      "entry_price": 408.4698,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 8879070182.0,
+      "composite_score": 33.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 10.0,
+          "weight": 0.3,
+          "weighted": 3.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794123788.1498344
+  },
+  "TSLA:2026-10-31": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "MONITORING",
+      "earnings_date": "2026-10-21",
+      "earnings_timing": "unknown",
+      "gap_pct": -3.15,
+      "weeks_since_earnings": 1,
+      "red_candle": null,
+      "current_price": 399.81,
+      "breakout_pct": 0.0,
+      "entry_price": 399.81,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 13821514317.0,
+      "composite_score": 40.5,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 35.0,
+          "weight": 0.3,
+          "weighted": 10.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794307419.9787045
+  },
+  "TSLA:2025-03-10": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2025-01-29",
+      "earnings_timing": "unknown",
+      "gap_pct": 5.57,
+      "weeks_since_earnings": 5,
+      "red_candle": {
+        "high": 303.94,
+        "low": 250.73,
+        "open": 300.34,
+        "close": 262.67,
+        "week_start": "2025-03-03",
+        "week_index": 0,
+        "lower_wick_pct": 22.4,
+        "volume_vs_avg": 1.4
+      },
+      "current_price": 262.67,
+      "breakout_pct": -13.58,
+      "entry_price": 262.67,
+      "stop_price": 250.73,
+      "target_price": 286.55,
+      "risk_pct": 4.55,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 28542080255.0,
+      "composite_score": 60.0,
+      "rating": "Developing",
+      "guidance": "Watchlist, wait for cleaner breakout",
+      "components": {
+        "setup_quality": {
+          "score": 70.0,
+          "weight": 0.3,
+          "weighted": 21.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794124735.3048084
+  },
+  "TSLA:2024-10-15": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2024-10-02",
+      "earnings_timing": "unknown",
+      "gap_pct": -1.82,
+      "weeks_since_earnings": 2,
+      "red_candle": {
+        "high": 221.91,
+        "low": 213.74,
+        "open": 220.13,
+        "close": 219.16,
+        "week_start": "2024-10-14",
+        "week_index": 0,
+        "lower_wick_pct": 66.3,
+        "volume_vs_avg": 0.25
+      },
+      "current_price": 219.16,
+      "breakout_pct": -1.24,
+      "entry_price": 219.16,
+      "stop_price": 213.74,
+      "target_price": 230.0,
+      "risk_pct": 2.47,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 20120001103.0,
+      "composite_score": 55.5,
+      "rating": "Developing",
+      "guidance": "Watchlist, wait for cleaner breakout",
+      "components": {
+        "setup_quality": {
+          "score": 55.0,
+          "weight": 0.3,
+          "weighted": 16.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794125040.89978
+  },
+  "TSLA:2025-08-01": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2025-07-23",
+      "earnings_timing": "unknown",
+      "gap_pct": -6.78,
+      "weeks_since_earnings": 1,
+      "red_candle": {
+        "high": 330.49,
+        "low": 306.1,
+        "open": 318.45,
+        "close": 308.27,
+        "week_start": "2025-07-28",
+        "week_index": 0,
+        "lower_wick_pct": 8.9,
+        "volume_vs_avg": 0.9
+      },
+      "current_price": 308.27,
+      "breakout_pct": -6.72,
+      "entry_price": 308.27,
+      "stop_price": 306.1,
+      "target_price": 312.61,
+      "risk_pct": 0.7,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 29795554880.0,
+      "composite_score": 54.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 50.0,
+          "weight": 0.3,
+          "weighted": 15.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794125157.883397
+  },
+  "TSLA:2023-02-10": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "MONITORING",
+      "earnings_date": "2023-01-25",
+      "earnings_timing": "unknown",
+      "gap_pct": 10.76,
+      "weeks_since_earnings": 2,
+      "red_candle": null,
+      "current_price": 207.32,
+      "breakout_pct": 0.0,
+      "entry_price": 207.32,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 32769891968.0,
+      "composite_score": 52.5,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 75.0,
+          "weight": 0.3,
+          "weighted": 22.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794125292.0543888
+  },
+  "TSLA:2025-12-01": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "BREAKOUT",
+      "earnings_date": "2025-10-22",
+      "earnings_timing": "unknown",
+      "gap_pct": -4.32,
+      "weeks_since_earnings": 5,
+      "red_candle": {
+        "high": 428.94,
+        "low": 383.76,
+        "open": 398.74,
+        "close": 391.09,
+        "week_start": "2025-11-17",
+        "week_index": 1,
+        "lower_wick_pct": 16.2,
+        "volume_vs_avg": 1.21
+      },
+      "current_price": 430.17,
+      "breakout_pct": 0.29,
+      "entry_price": 430.17,
+      "stop_price": 383.76,
+      "target_price": 522.99,
+      "risk_pct": 10.79,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 36325127255.0,
+      "composite_score": 70.8,
+      "rating": "Good Setup",
+      "guidance": "Solid PEAD setup, standard position size",
+      "components": {
+        "setup_quality": {
+          "score": 60.0,
+          "weight": 0.3,
+          "weighted": 18.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 55.0,
+          "weight": 0.25,
+          "weighted": 13.8,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794125438.7059114
+  },
+  "TSLA:2024-02-20": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "MONITORING",
+      "earnings_date": "2024-01-24",
+      "earnings_timing": "unknown",
+      "gap_pct": -8.72,
+      "weeks_since_earnings": 3,
+      "red_candle": null,
+      "current_price": 199.95,
+      "breakout_pct": 0.0,
+      "entry_price": 199.95,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 21329458730.0,
+      "composite_score": 37.5,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 25.0,
+          "weight": 0.3,
+          "weighted": 7.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794308062.1015227
+  },
+  "TSLA:2025-07-15": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2025-07-02",
+      "earnings_timing": "unknown",
+      "gap_pct": 0.74,
+      "weeks_since_earnings": 2,
+      "red_candle": {
+        "high": 322.6,
+        "low": 312.67,
+        "open": 317.73,
+        "close": 316.9,
+        "week_start": "2025-07-14",
+        "week_index": 0,
+        "lower_wick_pct": 42.6,
+        "volume_vs_avg": 0.23
+      },
+      "current_price": 316.9,
+      "breakout_pct": -1.77,
+      "entry_price": 316.9,
+      "stop_price": 312.67,
+      "target_price": 325.36,
+      "risk_pct": 1.33,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 33030096233.0,
+      "composite_score": 55.5,
+      "rating": "Developing",
+      "guidance": "Watchlist, wait for cleaner breakout",
+      "components": {
+        "setup_quality": {
+          "score": 55.0,
+          "weight": 0.3,
+          "weighted": 16.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794308180.1546922
+  },
+  "TSLA:2023-05-05": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2023-04-19",
+      "earnings_timing": "unknown",
+      "gap_pct": -7.98,
+      "weeks_since_earnings": 2,
+      "red_candle": {
+        "high": 165.49,
+        "low": 158.83,
+        "open": 163.17,
+        "close": 161.2,
+        "week_start": "2023-05-01",
+        "week_index": 0,
+        "lower_wick_pct": 35.6,
+        "volume_vs_avg": 0.8
+      },
+      "current_price": 161.2,
+      "breakout_pct": -2.59,
+      "entry_price": 161.2,
+      "stop_price": 158.83,
+      "target_price": 165.94,
+      "risk_pct": 1.47,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 21609688798.0,
+      "composite_score": 55.5,
+      "rating": "Developing",
+      "guidance": "Watchlist, wait for cleaner breakout",
+      "components": {
+        "setup_quality": {
+          "score": 55.0,
+          "weight": 0.3,
+          "weighted": 16.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794308362.52916
+  },
+  "TSLA:2026-01-05": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "MONITORING",
+      "earnings_date": "2026-01-02",
+      "earnings_timing": "unknown",
+      "gap_pct": 0.0,
+      "weeks_since_earnings": 0,
+      "red_candle": null,
+      "current_price": 438.07,
+      "breakout_pct": 0.0,
+      "entry_price": 438.07,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 35113609390.0,
+      "composite_score": 40.5,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 35.0,
+          "weight": 0.3,
+          "weighted": 10.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794308572.3796918
+  },
+  "TSLA:2024-12-01": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2024-10-23",
+      "earnings_timing": "unknown",
+      "gap_pct": 14.52,
+      "weeks_since_earnings": 5,
+      "red_candle": {
+        "high": 361.93,
+        "low": 326.59,
+        "open": 360.14,
+        "close": 345.16,
+        "week_start": "2024-11-25",
+        "week_index": 0,
+        "lower_wick_pct": 52.5,
+        "volume_vs_avg": 0.44
+      },
+      "current_price": 345.16,
+      "breakout_pct": -4.63,
+      "entry_price": 345.16,
+      "stop_price": 326.59,
+      "target_price": 382.3,
+      "risk_pct": 5.38,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 33508794323.0,
+      "composite_score": 67.5,
+      "rating": "Developing",
+      "guidance": "Watchlist, wait for cleaner breakout",
+      "components": {
+        "setup_quality": {
+          "score": 95.0,
+          "weight": 0.3,
+          "weighted": 28.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794308789.82291
+  },
+  "TSLA:2025-10-20": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2025-10-02",
+      "earnings_timing": "unknown",
+      "gap_pct": 1.67,
+      "weeks_since_earnings": 2,
+      "red_candle": {
+        "high": 453.55,
+        "low": 411.45,
+        "open": 440.75,
+        "close": 413.49,
+        "week_start": "2025-10-06",
+        "week_index": 1,
+        "lower_wick_pct": 4.8,
+        "volume_vs_avg": 1.17
+      },
+      "current_price": 439.31,
+      "breakout_pct": -3.14,
+      "entry_price": 439.31,
+      "stop_price": 411.45,
+      "target_price": 495.03,
+      "risk_pct": 6.34,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 39756368088.0,
+      "composite_score": 54.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 50.0,
+          "weight": 0.3,
+          "weighted": 15.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794308998.8375661
+  },
+  "TSLA:2026-02-10": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2026-01-28",
+      "earnings_timing": "unknown",
+      "gap_pct": 1.47,
+      "weeks_since_earnings": 2,
+      "red_candle": {
+        "high": 428.56,
+        "low": 387.53,
+        "open": 421.29,
+        "close": 411.11,
+        "week_start": "2026-02-02",
+        "week_index": 1,
+        "lower_wick_pct": 57.5,
+        "volume_vs_avg": 1.83
+      },
+      "current_price": 417.32,
+      "breakout_pct": -2.62,
+      "entry_price": 417.32,
+      "stop_price": 387.53,
+      "target_price": 476.9,
+      "risk_pct": 7.14,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 26296719953.0,
+      "composite_score": 55.5,
+      "rating": "Developing",
+      "guidance": "Watchlist, wait for cleaner breakout",
+      "components": {
+        "setup_quality": {
+          "score": 55.0,
+          "weight": 0.3,
+          "weighted": 16.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794309407.476672
+  },
+  "AAPL:2024-05-10": {
+    "data": {
+      "symbol": "AAPL",
+      "stage": "MONITORING",
+      "earnings_date": "2024-05-02",
+      "earnings_timing": "unknown",
+      "gap_pct": 7.87,
+      "weeks_since_earnings": 1,
+      "red_candle": null,
+      "current_price": 182.5796,
+      "breakout_pct": 0.0,
+      "entry_price": 182.5796,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 11583232276.0,
+      "composite_score": 49.5,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 65.0,
+          "weight": 0.3,
+          "weighted": 19.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794310019.260468
+  },
+  "MSFT:2026-09-15": {
+    "data": {
+      "symbol": "MSFT",
+      "stage": "EXPIRED",
+      "earnings_date": "2026-07-29",
+      "earnings_timing": "unknown",
+      "gap_pct": 12.13,
+      "weeks_since_earnings": 7,
+      "red_candle": null,
+      "current_price": 505.41,
+      "breakout_pct": 0.0,
+      "entry_price": 505.41,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 10474023222.0,
+      "composite_score": 45.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 50.0,
+          "weight": 0.3,
+          "weighted": 15.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794310438.1111414
+  },
+  "MSFT:2024-08-20": {
+    "data": {
+      "symbol": "MSFT",
+      "stage": "MONITORING",
+      "earnings_date": "2024-07-30",
+      "earnings_timing": "unknown",
+      "gap_pct": -0.57,
+      "weeks_since_earnings": 3,
+      "red_candle": null,
+      "current_price": 414.9747,
+      "breakout_pct": 0.0,
+      "entry_price": 414.9747,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 9837661179.0,
+      "composite_score": 37.5,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 25.0,
+          "weight": 0.3,
+          "weighted": 7.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794310731.4673617
+  },
+  "MSFT:2023-06-05": {
+    "data": {
+      "symbol": "MSFT",
+      "stage": "BREAKOUT",
+      "earnings_date": "2023-04-25",
+      "earnings_timing": "unknown",
+      "gap_pct": 7.73,
+      "weeks_since_earnings": 5,
+      "red_candle": {
+        "high": 304.52,
+        "low": 297.8,
+        "open": 301.73,
+        "close": 300.6,
+        "week_start": "2023-05-08",
+        "week_index": 3,
+        "lower_wick_pct": 41.7,
+        "volume_vs_avg": 0.84
+      },
+      "current_price": 327.0318,
+      "breakout_pct": 7.39,
+      "entry_price": 327.03,
+      "stop_price": 297.8,
+      "target_price": 385.5,
+      "risk_pct": 8.94,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 8732152727.0,
+      "composite_score": 83.5,
+      "rating": "Good Setup",
+      "guidance": "Solid PEAD setup, standard position size",
+      "components": {
+        "setup_quality": {
+          "score": 90.0,
+          "weight": 0.3,
+          "weighted": 27.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 70.0,
+          "weight": 0.25,
+          "weighted": 17.5,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794310868.088259
+  },
+  "NVDA:2024-11-20": {
+    "data": {
+      "symbol": "NVDA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2024-11-20",
+      "earnings_timing": "unknown",
+      "gap_pct": 0.0,
+      "weeks_since_earnings": 0,
+      "red_candle": {
+        "high": 149.25,
+        "low": 139.71,
+        "open": 148.28,
+        "close": 141.6,
+        "week_start": "2024-11-11",
+        "week_index": 0,
+        "lower_wick_pct": 19.8,
+        "volume_vs_avg": 1.04
+      },
+      "current_price": 146.6166,
+      "breakout_pct": -1.76,
+      "entry_price": 146.62,
+      "stop_price": 139.71,
+      "target_price": 160.43,
+      "risk_pct": 4.71,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 28985364406.0,
+      "composite_score": 54.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 50.0,
+          "weight": 0.3,
+          "weighted": 15.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794311687.4169421
+  },
+  "NVDA:2023-07-10": {
+    "data": {
+      "symbol": "NVDA",
+      "stage": "EXPIRED",
+      "earnings_date": "2023-05-24",
+      "earnings_timing": "unknown",
+      "gap_pct": 26.15,
+      "weeks_since_earnings": 6,
+      "red_candle": null,
+      "current_price": 42.3729,
+      "breakout_pct": 0.0,
+      "entry_price": 42.3729,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 19343429660.0,
+      "composite_score": 45.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 50.0,
+          "weight": 0.3,
+          "weighted": 15.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794311928.8213654
+  },
+  "GOOGL:2025-05-05": {
+    "data": {
+      "symbol": "GOOGL",
+      "stage": "MONITORING",
+      "earnings_date": "2025-04-24",
+      "earnings_timing": "unknown",
+      "gap_pct": 3.64,
+      "weeks_since_earnings": 1,
+      "red_candle": null,
+      "current_price": 163.2607,
+      "breakout_pct": 0.0,
+      "entry_price": 163.2607,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 6121381253.0,
+      "composite_score": 43.5,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 45.0,
+          "weight": 0.3,
+          "weighted": 13.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794312348.1165915
+  },
+  "GOOGL:2024-09-10": {
+    "data": {
+      "symbol": "GOOGL",
+      "stage": "EXPIRED",
+      "earnings_date": "2024-07-23",
+      "earnings_timing": "unknown",
+      "gap_pct": -4.51,
+      "weeks_since_earnings": 7,
+      "red_candle": null,
+      "current_price": 147.673,
+      "breakout_pct": 0.0,
+      "entry_price": 147.673,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 3728939975.0,
+      "composite_score": 33.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 10.0,
+          "weight": 0.3,
+          "weighted": 3.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794312479.7119586
+  },
+  "GOOGL:2023-12-01": {
+    "data": {
+      "symbol": "GOOGL",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2023-10-24",
+      "earnings_timing": "unknown",
+      "gap_pct": -7.67,
+      "weeks_since_earnings": 5,
+      "red_candle": {
+        "high": 137.12,
+        "low": 130.04,
+        "open": 134.75,
+        "close": 131.28,
+        "week_start": "2023-11-27",
+        "week_index": 0,
+        "lower_wick_pct": 17.5,
+        "volume_vs_avg": 0.95
+      },
+      "current_price": 131.2808,
+      "breakout_pct": -4.26,
+      "entry_price": 131.28,
+      "stop_price": 130.04,
+      "target_price": 133.76,
+      "risk_pct": 0.95,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 3341355838.0,
+      "composite_score": 54.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 50.0,
+          "weight": 0.3,
+          "weighted": 15.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794312631.388737
+  },
+  "AMZN:2024-03-15": {
+    "data": {
+      "symbol": "AMZN",
+      "stage": "EXPIRED",
+      "earnings_date": "2024-02-01",
+      "earnings_timing": "unknown",
+      "gap_pct": 6.22,
+      "weeks_since_earnings": 6,
+      "red_candle": null,
+      "current_price": 178.75,
+      "breakout_pct": 0.0,
+      "entry_price": 178.75,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 7020551548.0,
+      "composite_score": 39.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 30.0,
+          "weight": 0.3,
+          "weighted": 9.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794313029.510571
+  },
+  "TSLA:2025-04-18": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2025-04-02",
+      "earnings_timing": "unknown",
+      "gap_pct": -6.18,
+      "weeks_since_earnings": 2,
+      "red_candle": {
+        "high": 261.8,
+        "low": 233.89,
+        "open": 258.36,
+        "close": 241.37,
+        "week_start": "2025-04-14",
+        "week_index": 0,
+        "lower_wick_pct": 26.8,
+        "volume_vs_avg": 0.53
+      },
+      "current_price": 241.37,
+      "breakout_pct": -7.8,
+      "entry_price": 241.37,
+      "stop_price": 233.89,
+      "target_price": 256.33,
+      "risk_pct": 3.1,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 38401032837.0,
+      "composite_score": 54.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 50.0,
+          "weight": 0.3,
+          "weighted": 15.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794314849.2075734
+  },
+  "TSLA:2023-02-15": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "MONITORING",
+      "earnings_date": "2023-01-25",
+      "earnings_timing": "unknown",
+      "gap_pct": 10.76,
+      "weeks_since_earnings": 3,
+      "red_candle": null,
+      "current_price": 209.25,
+      "breakout_pct": 0.0,
+      "entry_price": 209.25,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 35350270944.0,
+      "composite_score": 49.5,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 65.0,
+          "weight": 0.3,
+          "weighted": 19.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794315177.9690645
+  },
+  "TSLA:2026-03-10": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "EXPIRED",
+      "earnings_date": "2026-01-28",
+      "earnings_timing": "unknown",
+      "gap_pct": 1.47,
+      "weeks_since_earnings": 6,
+      "red_candle": null,
+      "current_price": 398.68,
+      "breakout_pct": 0.0,
+      "entry_price": 398.68,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 23874334771.0,
+      "composite_score": 33.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 10.0,
+          "weight": 0.3,
+          "weighted": 3.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794315313.7685795
+  },
+  "TSLA:2025-08-22": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2025-07-23",
+      "earnings_timing": "unknown",
+      "gap_pct": -6.78,
+      "weeks_since_earnings": 4,
+      "red_candle": {
+        "high": 340.55,
+        "low": 314.6,
+        "open": 329.62,
+        "close": 320.11,
+        "week_start": "2025-08-18",
+        "week_index": 0,
+        "lower_wick_pct": 21.2,
+        "volume_vs_avg": 0.69
+      },
+      "current_price": 320.11,
+      "breakout_pct": -6.0,
+      "entry_price": 320.11,
+      "stop_price": 314.6,
+      "target_price": 331.13,
+      "risk_pct": 1.72,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 26673864074.0,
+      "composite_score": 54.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 50.0,
+          "weight": 0.3,
+          "weighted": 15.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794315449.5347102
+  },
+  "TSLA:2026-10-05": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "MONITORING",
+      "earnings_date": "2026-10-02",
+      "earnings_timing": "unknown",
+      "gap_pct": 0.0,
+      "weeks_since_earnings": 0,
+      "red_candle": null,
+      "current_price": 370.59,
+      "breakout_pct": 0.0,
+      "entry_price": 370.59,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 13897391342.0,
+      "composite_score": 40.5,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 35.0,
+          "weight": 0.3,
+          "weighted": 10.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794391610.8891594
+  },
+  "TSLA:2026-09-05": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "EXPIRED",
+      "earnings_date": "2026-07-22",
+      "earnings_timing": "unknown",
+      "gap_pct": -8.83,
+      "weeks_since_earnings": 6,
+      "red_candle": null,
+      "current_price": 354.08,
+      "breakout_pct": 0.0,
+      "entry_price": 354.08,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 13346981105.0,
+      "composite_score": 33.0,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 10.0,
+          "weight": 0.3,
+          "weighted": 3.0,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794391754.8737576
+  },
+  "TSLA:2026-08-01": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "SIGNAL_READY",
+      "earnings_date": "2026-07-22",
+      "earnings_timing": "unknown",
+      "gap_pct": -8.83,
+      "weeks_since_earnings": 1,
+      "red_candle": {
+        "high": 317.0,
+        "low": 297.38,
+        "open": 313.24,
+        "close": 311.21,
+        "week_start": "2026-07-27",
+        "week_index": 0,
+        "lower_wick_pct": 70.5,
+        "volume_vs_avg": 1.11
+      },
+      "current_price": 311.21,
+      "breakout_pct": -1.83,
+      "entry_price": 311.21,
+      "stop_price": 297.38,
+      "target_price": 338.87,
+      "risk_pct": 4.44,
+      "risk_reward_ratio": 2.0,
+      "adv20_dollar": 14639527505.0,
+      "composite_score": 55.5,
+      "rating": "Developing",
+      "guidance": "Watchlist, wait for cleaner breakout",
+      "components": {
+        "setup_quality": {
+          "score": 55.0,
+          "weight": 0.3,
+          "weighted": 16.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 70.0,
+          "weight": 0.2,
+          "weighted": 14.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794392953.0400658
+  },
+  "TSLA:2026-05-01": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "MONITORING",
+      "earnings_date": "2026-04-22",
+      "earnings_timing": "unknown",
+      "gap_pct": -3.16,
+      "weeks_since_earnings": 1,
+      "red_candle": null,
+      "current_price": 381.63,
+      "breakout_pct": 0.0,
+      "entry_price": 381.63,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 25232442154.0,
+      "composite_score": 40.5,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 35.0,
+          "weight": 0.3,
+          "weighted": 10.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794393085.9151614
+  },
+  "TSLA:2026-06-01": {
+    "data": {
+      "symbol": "TSLA",
+      "stage": "MONITORING",
+      "earnings_date": "2026-04-22",
+      "earnings_timing": "unknown",
+      "gap_pct": -3.16,
+      "weeks_since_earnings": 5,
+      "red_candle": null,
+      "current_price": 435.79,
+      "breakout_pct": 0.0,
+      "entry_price": 435.79,
+      "stop_price": 0.0,
+      "target_price": 0.0,
+      "risk_pct": 0.0,
+      "risk_reward_ratio": 0.0,
+      "adv20_dollar": 22164787363.0,
+      "composite_score": 37.5,
+      "rating": "Weak",
+      "guidance": "Not actionable",
+      "components": {
+        "setup_quality": {
+          "score": 25.0,
+          "weight": 0.3,
+          "weighted": 7.5,
+          "label": "Setup Quality"
+        },
+        "breakout_strength": {
+          "score": 0.0,
+          "weight": 0.25,
+          "weighted": 0.0,
+          "label": "Breakout Strength"
+        },
+        "liquidity": {
+          "score": 100.0,
+          "weight": 0.25,
+          "weighted": 25.0,
+          "label": "Liquidity"
+        },
+        "risk_reward": {
+          "score": 25.0,
+          "weight": 0.2,
+          "weighted": 5.0,
+          "label": "Risk/Reward"
+        }
+      }
+    },
+    "computed_at": 1794393087.8305194
+  }
+}

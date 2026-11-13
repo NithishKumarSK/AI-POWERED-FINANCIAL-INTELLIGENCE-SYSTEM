@@ -35,6 +35,15 @@ bootstrap_paths.add_module_paths()
 # and silently treated as a real signal.
 MIN_HOLDOUT_ACCURACY_PCT = 52.0
 
+# A holdout test set must have at least this many samples before its accuracy
+# number means anything. Confirmed real during this project's own use: a
+# 39-sample segment (29 train / 10 test after the 75/25 split) reported
+# "100% holdout accuracy" and cleared the gate above -- 10/10 correct is
+# easily pure chance, not a real signal, but nothing stopped it from being
+# saved and overwriting a previously-validated segment. n=20 is still small,
+# but a filtering floor, not a claim of statistical power.
+MIN_HOLDOUT_TEST_SAMPLES = 20
+
 
 def _train_and_gate(X, y, meta, label: str):
     """Train on a walk-forward holdout, evaluate, and apply the non-negotiable
@@ -87,12 +96,19 @@ def _train_and_gate(X, y, meta, label: str):
         and result["accuracy_pct"] >= baseline_pct + 3.0
     )
     clears_floor = result["accuracy_pct"] is not None and result["accuracy_pct"] >= MIN_HOLDOUT_ACCURACY_PCT
+    clears_test_size = result["n"] >= MIN_HOLDOUT_TEST_SAMPLES
 
-    if not (beats_baseline and clears_floor):
-        info["reason"] = (
-            f"did not beat the {baseline_pct}% majority-class baseline by a real margin"
-            if not beats_baseline else f"did not clear the {MIN_HOLDOUT_ACCURACY_PCT}% absolute floor"
-        )
+    if not (beats_baseline and clears_floor and clears_test_size):
+        if not clears_test_size:
+            info["reason"] = (
+                f"holdout test set too small to trust ({result['n']} samples, "
+                f"need >= {MIN_HOLDOUT_TEST_SAMPLES}) -- its {result['accuracy_pct']}% could easily be chance"
+            )
+        else:
+            info["reason"] = (
+                f"did not beat the {baseline_pct}% majority-class baseline by a real margin"
+                if not beats_baseline else f"did not clear the {MIN_HOLDOUT_ACCURACY_PCT}% absolute floor"
+            )
         return None, info
 
     # Re-fit on ALL data (train+test) before returning -- the holdout split
@@ -185,9 +201,43 @@ def main() -> None:
               "This is an honest negative result, not a bug; data/ml_signal_model.pkl is left untouched.")
         return
 
+    # Never let a retrain silently destroy a previously-validated segment just
+    # because this run's data composition didn't happen to reproduce it (e.g.
+    # the segment's rows got diluted by newer, unrelated DB records, or this
+    # run used a different --bulk mix). Confirmed real: an earlier retrain on
+    # this exact codebase dropped 4 of 5 live-validated segments this way.
+    # A segment is only ever replaced if THIS run's model for it also clears
+    # the save gate; segments this run has no data for at all are carried
+    # forward untouched. Only an explicit --no-segments run intentionally
+    # drops segment models (that's its documented purpose).
+    kept_from_previous = 0
+    if not args.no_segments:
+        try:
+            from ml_signal_model import load_model as _load_existing_model
+            existing = _load_existing_model()
+        except Exception:
+            existing = None
+        if existing is not None and getattr(existing, "models", None):
+            for seg, old_model in existing.models.items():
+                if seg not in segment_models:
+                    segment_models[seg] = old_model
+                    kept_from_previous += 1
+    if default_model is None:
+        try:
+            from ml_signal_model import load_model as _load_existing_model2
+            existing2 = _load_existing_model2()
+        except Exception:
+            existing2 = None
+        if existing2 is not None and getattr(existing2, "default_model", None) is not None:
+            default_model = existing2.default_model
+            print("  (global fallback did not clear the gate this run -- keeping the previously-saved one)")
+
     combined = SegmentedModel(models=segment_models, default_model=default_model)
     save_model(combined)
-    print(f"\nSaved to data/ml_signal_model.pkl -- {len(segment_models)} segment-specific model(s)"
+    new_this_run = len(segment_models) - kept_from_previous
+    print(f"\nSaved to data/ml_signal_model.pkl -- {len(segment_models)} segment-specific model(s) total "
+          f"({new_this_run} new/updated this run, {kept_from_previous} carried forward unchanged from the "
+          f"previous save since this run had no qualifying replacement for them)"
           + (", plus a global fallback" if default_model is not None else ", no global fallback (it didn't clear the gate either)"))
 
 

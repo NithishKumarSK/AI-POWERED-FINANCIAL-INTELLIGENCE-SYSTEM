@@ -1,0 +1,26 @@
+{
+  "bins": [
+    {
+      "lo": 0,
+      "hi": 2,
+      "n": 129,
+      "hit_rate": 73.6
+    },
+    {
+      "lo": 2,
+      "hi": 5,
+      "n": 350,
+      "hit_rate": 48.9
+    },
+    {
+      "lo": 5,
+      "hi": 10000,
+      "n": 265,
+      "hit_rate": 48.3
+    }
+  ],
+  "overall_hit_rate": 53.0,
+  "n_total": 744,
+  "generated_at": "2026-11-11T11:03:45.139392",
+  "source_record_count": 744
+}

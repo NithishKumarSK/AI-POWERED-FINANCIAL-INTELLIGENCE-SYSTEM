@@ -132,6 +132,26 @@ class SegmentedModel:
 
 def _predict_proba_single(model, feature_vector: List[float]) -> dict:
     import numpy as np
+
+    # A saved model's feature count is frozen at its training time
+    # (FEATURE_SPEC/BOOL_FEATURE_SPEC in ml_feature_extractor.py). Appending
+    # a new feature there (e.g. the macro/rate data added for to-do item #9)
+    # changes the live vector length for every NEWER prediction, but an
+    # already-saved OLDER model still expects its original, shorter shape --
+    # this happened for real this session. sklearn's own error for that case
+    # ("X has N features, but SimpleImputer is expecting M features") is
+    # accurate but cryptic; raise the same real condition with the actual
+    # cause named, so a caller reading ml_signal_shadow_error understands
+    # WHY rather than needing to decode an internal sklearn message.
+    expected = getattr(model, "n_features_in_", None)
+    if expected is not None and len(feature_vector) != expected:
+        raise ValueError(
+            f"Stale model: trained on {expected} features but this prediction's "
+            f"vector has {len(feature_vector)} -- FEATURE_SPEC has grown since this "
+            "model was last trained. Not a bug; awaiting the next retrain that "
+            "clears the save gate with the current feature set."
+        )
+
     x = np.array([feature_vector], dtype=float)
     proba = model.predict_proba(x)[0]  # [p(class=0 SELL), p(class=1 BUY)]
     p_sell, p_buy = float(proba[0]), float(proba[1])

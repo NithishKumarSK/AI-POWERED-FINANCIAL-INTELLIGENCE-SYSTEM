@@ -1,0 +1,447 @@
+{
+  "total_records": 744,
+  "skipped_no_origin_date": 0,
+  "monthly": [
+    {
+      "month": "2023-02",
+      "n": 1,
+      "decision_match_rate_pct": 0.0,
+      "direction_match_rate_pct": 0.0,
+      "mean_strategy_return_pct": null,
+      "strategy_sharpe_raw_nonannualized": null,
+      "mean_strategy_return_pct_after_costs": null,
+      "strategy_sharpe_after_costs_nonannualized": null
+    },
+    {
+      "month": "2023-03",
+      "n": 1,
+      "decision_match_rate_pct": 0.0,
+      "direction_match_rate_pct": 100.0,
+      "mean_strategy_return_pct": null,
+      "strategy_sharpe_raw_nonannualized": null,
+      "mean_strategy_return_pct_after_costs": null,
+      "strategy_sharpe_after_costs_nonannualized": null
+    },
+    {
+      "month": "2023-05",
+      "n": 1,
+      "decision_match_rate_pct": 0.0,
+      "direction_match_rate_pct": 0.0,
+      "mean_strategy_return_pct": null,
+      "strategy_sharpe_raw_nonannualized": null,
+      "mean_strategy_return_pct_after_costs": null,
+      "strategy_sharpe_after_costs_nonannualized": null
+    },
+    {
+      "month": "2023-06",
+      "n": 2,
+      "decision_match_rate_pct": 0.0,
+      "direction_match_rate_pct": 0.0,
+      "mean_strategy_return_pct": -15.3466,
+      "strategy_sharpe_raw_nonannualized": -0.8012,
+      "mean_strategy_return_pct_after_costs": -15.5466,
+      "strategy_sharpe_after_costs_nonannualized": -0.8116
+    },
+    {
+      "month": "2023-07",
+      "n": 1,
+      "decision_match_rate_pct": 100.0,
+      "direction_match_rate_pct": 100.0,
+      "mean_strategy_return_pct": null,
+      "strategy_sharpe_raw_nonannualized": null,
+      "mean_strategy_return_pct_after_costs": null,
+      "strategy_sharpe_after_costs_nonannualized": null
+    },
+    {
+      "month": "2023-08",
+      "n": 1,
+      "decision_match_rate_pct": 0.0,
+      "direction_match_rate_pct": 100.0,
+      "mean_strategy_return_pct": null,
+      "strategy_sharpe_raw_nonannualized": null,
+      "mean_strategy_return_pct_after_costs": null,
+      "strategy_sharpe_after_costs_nonannualized": null
+    },
+    {
+      "month": "2023-09",
+      "n": 2,
+      "decision_match_rate_pct": 0.0,
+      "direction_match_rate_pct": 0.0,
+      "mean_strategy_return_pct": -3.8066,
+      "strategy_sharpe_raw_nonannualized": -0.7071,
+      "mean_strategy_return_pct_after_costs": -3.9066,
+      "strategy_sharpe_after_costs_nonannualized": -0.7071
+    },
+    {
+      "month": "2023-10",
+      "n": 1,
+      "decision_match_rate_pct": 0.0,
+      "direction_match_rate_pct": 0.0,
+      "mean_strategy_return_pct": null,
+      "strategy_sharpe_raw_nonannualized": null,
+      "mean_strategy_return_pct_after_costs": null,
+      "strategy_sharpe_after_costs_nonannualized": null
+    },
+    {
+      "month": "2023-11",
+      "n": 2,
+      "decision_match_rate_pct": 50.0,
+      "direction_match_rate_pct": 0.0,
+      "mean_strategy_return_pct": 0.0,
+      "strategy_sharpe_raw_nonannualized": null,
+      "mean_strategy_return_pct_after_costs": 0.0,
+      "strategy_sharpe_after_costs_nonannualized": null
+    },
+    {
+      "month": "2023-12",
+      "n": 1,
+      "decision_match_rate_pct": 100.0,
+      "direction_match_rate_pct": 100.0,
+      "mean_strategy_return_pct": null,
+      "strategy_sharpe_raw_nonannualized": null,
+      "mean_strategy_return_pct_after_costs": null,
+      "strategy_sharpe_after_costs_nonannualized": null
+    },
+    {
+      "month": "2024-01",
+      "n": 1,
+      "decision_match_rate_pct": 100.0,
+      "direction_match_rate_pct": 100.0,
+      "mean_strategy_return_pct": null,
+      "strategy_sharpe_raw_nonannualized": null,
+      "mean_strategy_return_pct_after_costs": null,
+      "strategy_sharpe_after_costs_nonannualized": null
+    },
+    {
+      "month": "2024-02",
+      "n": 1,
+      "decision_match_rate_pct": 0.0,
+      "direction_match_rate_pct": 0.0,
+      "mean_strategy_return_pct": null,
+      "strategy_sharpe_raw_nonannualized": null,
+      "mean_strategy_return_pct_after_costs": null,
+      "strategy_sharpe_after_costs_nonannualized": null
+    },
+    {
+      "month": "2024-03",
+      "n": 2,
+      "decision_match_rate_pct": 0.0,
+      "direction_match_rate_pct": 50.0,
+      "mean_strategy_return_pct": 0.235,
+      "strategy_sharpe_raw_nonannualized": 0.2455,
+      "mean_strategy_return_pct_after_costs": 0.035,
+      "strategy_sharpe_after_costs_nonannualized": 0.0366
+    },
+    {
+      "month": "2024-04",
+      "n": 1,
+      "decision_match_rate_pct": 0.0,
+      "direction_match_rate_pct": 0.0,
+      "mean_strategy_return_pct": null,
+      "strategy_sharpe_raw_nonannualized": null,
+      "mean_strategy_return_pct_after_costs": null,
+      "strategy_sharpe_after_costs_nonannualized": null
+    },
+    {
+      "month": "2024-05",
+      "n": 1,
+      "decision_match_rate_pct": 0.0,
+      "direction_match_rate_pct": 100.0,
+      "mean_strategy_return_pct": null,
+      "strategy_sharpe_raw_nonannualized": null,
+      "mean_strategy_return_pct_after_costs": null,
+      "strategy_sharpe_after_costs_nonannualized": null
+    },
+    {
+      "month": "2024-06",
+      "n": 4,
+      "decision_match_rate_pct": 75.0,
+      "direction_match_rate_pct": 100.0,
+      "mean_strategy_return_pct": 42.5388,
+      "strategy_sharpe_raw_nonannualized": 0.6562,
+      "mean_strategy_return_pct_after_costs": 42.3888,
+      "strategy_sharpe_after_costs_nonannualized": 0.6544
+    },
+    {
+      "month": "2024-07",
+      "n": 4,
+      "decision_match_rate_pct": 0.0,
+      "direction_match_rate_pct": 25.0,
+      "mean_strategy_return_pct": -5.2668,
+      "strategy_sharpe_raw_nonannualized": -0.822,
+      "mean_strategy_return_pct_after_costs": -5.4668,
+      "strategy_sharpe_after_costs_nonannualized": -0.8532
+    },
+    {
+      "month": "2024-08",
+      "n": 3,
+      "decision_match_rate_pct": 66.7,
+      "direction_match_rate_pct": 66.7,
+      "mean_strategy_return_pct": -1.0442,
+      "strategy_sharpe_raw_nonannualized": -0.0939,
+      "mean_strategy_return_pct_after_costs": -1.1775,
+      "strategy_sharpe_after_costs_nonannualized": -0.1058
+    },
+    {
+      "month": "2024-09",
+      "n": 6,
+      "decision_match_rate_pct": 16.7,
+      "direction_match_rate_pct": 50.0,
+      "mean_strategy_return_pct": 0.0848,
+      "strategy_sharpe_raw_nonannualized": 0.0081,
+      "mean_strategy_return_pct_after_costs": -0.0818,
+      "strategy_sharpe_after_costs_nonannualized": -0.0078
+    },
+    {
+      "month": "2024-10",
+      "n": 4,
+      "decision_match_rate_pct": 25.0,
+      "direction_match_rate_pct": 50.0,
+      "mean_strategy_return_pct": -8.2556,
+      "strategy_sharpe_raw_nonannualized": -0.246,
+      "mean_strategy_return_pct_after_costs": -8.4556,
+      "strategy_sharpe_after_costs_nonannualized": -0.252
+    },
+    {
+      "month": "2024-11",
+      "n": 6,
+      "decision_match_rate_pct": 33.3,
+      "direction_match_rate_pct": 33.3,
+      "mean_strategy_return_pct": 14.3407,
+      "strategy_sharpe_raw_nonannualized": 0.4179,
+      "mean_strategy_return_pct_after_costs": 14.1407,
+      "strategy_sharpe_after_costs_nonannualized": 0.4121
+    },
+    {
+      "month": "2024-12",
+      "n": 9,
+      "decision_match_rate_pct": 66.7,
+      "direction_match_rate_pct": 77.8,
+      "mean_strategy_return_pct": 3.6036,
+      "strategy_sharpe_raw_nonannualized": 0.3157,
+      "mean_strategy_return_pct_after_costs": 3.4036,
+      "strategy_sharpe_after_costs_nonannualized": 0.2981
+    },
+    {
+      "month": "2025-01",
+      "n": 10,
+      "decision_match_rate_pct": 50.0,
+      "direction_match_rate_pct": 40.0,
+      "mean_strategy_return_pct": 2.0654,
+      "strategy_sharpe_raw_nonannualized": 0.1657,
+      "mean_strategy_return_pct_after_costs": 1.9054,
+      "strategy_sharpe_after_costs_nonannualized": 0.1529
+    },
+    {
+      "month": "2025-02",
+      "n": 7,
+      "decision_match_rate_pct": 42.9,
+      "direction_match_rate_pct": 85.7,
+      "mean_strategy_return_pct": 3.9459,
+      "strategy_sharpe_raw_nonannualized": 0.3285,
+      "mean_strategy_return_pct_after_costs": 3.803,
+      "strategy_sharpe_after_costs_nonannualized": 0.3172
+    },
+    {
+      "month": "2025-03",
+      "n": 8,
+      "decision_match_rate_pct": 0.0,
+      "direction_match_rate_pct": 50.0,
+      "mean_strategy_return_pct": -5.3785,
+      "strategy_sharpe_raw_nonannualized": -0.8096,
+      "mean_strategy_return_pct_after_costs": -5.4785,
+      "strategy_sharpe_after_costs_nonannualized": -0.8133
+    },
+    {
+      "month": "2025-04",
+      "n": 10,
+      "decision_match_rate_pct": 10.0,
+      "direction_match_rate_pct": 20.0,
+      "mean_strategy_return_pct": -3.6201,
+      "strategy_sharpe_raw_nonannualized": -0.5954,
+      "mean_strategy_return_pct_after_costs": -3.8001,
+      "strategy_sharpe_after_costs_nonannualized": -0.6236
+    },
+    {
+      "month": "2025-05",
+      "n": 8,
+      "decision_match_rate_pct": 50.0,
+      "direction_match_rate_pct": 75.0,
+      "mean_strategy_return_pct": 2.7867,
+      "strategy_sharpe_raw_nonannualized": 0.2925,
+      "mean_strategy_return_pct_after_costs": 2.6117,
+      "strategy_sharpe_after_costs_nonannualized": 0.2743
+    },
+    {
+      "month": "2025-06",
+      "n": 9,
+      "decision_match_rate_pct": 44.4,
+      "direction_match_rate_pct": 66.7,
+      "mean_strategy_return_pct": -1.2143,
+      "strategy_sharpe_raw_nonannualized": -0.1659,
+      "mean_strategy_return_pct_after_costs": -1.3476,
+      "strategy_sharpe_after_costs_nonannualized": -0.1838
+    },
+    {
+      "month": "2025-07",
+      "n": 13,
+      "decision_match_rate_pct": 23.1,
+      "direction_match_rate_pct": 46.2,
+      "mean_strategy_return_pct": -2.3841,
+      "strategy_sharpe_raw_nonannualized": -0.2924,
+      "mean_strategy_return_pct_after_costs": -2.5841,
+      "strategy_sharpe_after_costs_nonannualized": -0.317
+    },
+    {
+      "month": "2025-08",
+      "n": 10,
+      "decision_match_rate_pct": 50.0,
+      "direction_match_rate_pct": 80.0,
+      "mean_strategy_return_pct": -0.0719,
+      "strategy_sharpe_raw_nonannualized": -0.0042,
+      "mean_strategy_return_pct_after_costs": -0.2119,
+      "strategy_sharpe_after_costs_nonannualized": -0.0124
+    },
+    {
+      "month": "2025-09",
+      "n": 11,
+      "decision_match_rate_pct": 45.5,
+      "direction_match_rate_pct": 63.6,
+      "mean_strategy_return_pct": 3.1323,
+      "strategy_sharpe_raw_nonannualized": 0.2482,
+      "mean_strategy_return_pct_after_costs": 2.9868,
+      "strategy_sharpe_after_costs_nonannualized": 0.2369
+    },
+    {
+      "month": "2025-10",
+      "n": 20,
+      "decision_match_rate_pct": 50.0,
+      "direction_match_rate_pct": 60.0,
+      "mean_strategy_return_pct": 1.6832,
+      "strategy_sharpe_raw_nonannualized": 0.1859,
+      "mean_strategy_return_pct_after_costs": 1.5132,
+      "strategy_sharpe_after_costs_nonannualized": 0.1672
+    },
+    {
+      "month": "2025-11",
+      "n": 19,
+      "decision_match_rate_pct": 36.8,
+      "direction_match_rate_pct": 47.4,
+      "mean_strategy_return_pct": -2.6083,
+      "strategy_sharpe_raw_nonannualized": -0.3019,
+      "mean_strategy_return_pct_after_costs": -2.7978,
+      "strategy_sharpe_after_costs_nonannualized": -0.3237
+    },
+    {
+      "month": "2025-12",
+      "n": 22,
+      "decision_match_rate_pct": 27.3,
+      "direction_match_rate_pct": 45.5,
+      "mean_strategy_return_pct": -2.3734,
+      "strategy_sharpe_raw_nonannualized": -0.4374,
+      "mean_strategy_return_pct_after_costs": -2.528,
+      "strategy_sharpe_after_costs_nonannualized": -0.464
+    },
+    {
+      "month": "2026-01",
+      "n": 28,
+      "decision_match_rate_pct": 35.7,
+      "direction_match_rate_pct": 60.7,
+      "mean_strategy_return_pct": 0.8948,
+      "strategy_sharpe_raw_nonannualized": 0.1848,
+      "mean_strategy_return_pct_after_costs": 0.7305,
+      "strategy_sharpe_after_costs_nonannualized": 0.151
+    },
+    {
+      "month": "2026-02",
+      "n": 25,
+      "decision_match_rate_pct": 36.0,
+      "direction_match_rate_pct": 44.0,
+      "mean_strategy_return_pct": 4.4315,
+      "strategy_sharpe_raw_nonannualized": 0.2062,
+      "mean_strategy_return_pct_after_costs": 4.2795,
+      "strategy_sharpe_after_costs_nonannualized": 0.1992
+    },
+    {
+      "month": "2026-03",
+      "n": 37,
+      "decision_match_rate_pct": 29.7,
+      "direction_match_rate_pct": 43.2,
+      "mean_strategy_return_pct": 3.3961,
+      "strategy_sharpe_raw_nonannualized": 0.1054,
+      "mean_strategy_return_pct_after_costs": 3.2461,
+      "strategy_sharpe_after_costs_nonannualized": 0.1008
+    },
+    {
+      "month": "2026-04",
+      "n": 63,
+      "decision_match_rate_pct": 39.7,
+      "direction_match_rate_pct": 50.8,
+      "mean_strategy_return_pct": 0.8496,
+      "strategy_sharpe_raw_nonannualized": 0.0399,
+      "mean_strategy_return_pct_after_costs": 0.7012,
+      "strategy_sharpe_after_costs_nonannualized": 0.0329
+    },
+    {
+      "month": "2026-05",
+      "n": 61,
+      "decision_match_rate_pct": 31.1,
+      "direction_match_rate_pct": 54.1,
+      "mean_strategy_return_pct": 1.2964,
+      "strategy_sharpe_raw_nonannualized": 0.1177,
+      "mean_strategy_return_pct_after_costs": 1.1331,
+      "strategy_sharpe_after_costs_nonannualized": 0.1029
+    },
+    {
+      "month": "2026-06",
+      "n": 53,
+      "decision_match_rate_pct": 32.1,
+      "direction_match_rate_pct": 43.4,
+      "mean_strategy_return_pct": -0.2055,
+      "strategy_sharpe_raw_nonannualized": -0.0342,
+      "mean_strategy_return_pct_after_costs": -0.3716,
+      "strategy_sharpe_after_costs_nonannualized": -0.0618
+    },
+    {
+      "month": "2026-07",
+      "n": 63,
+      "decision_match_rate_pct": 39.7,
+      "direction_match_rate_pct": 50.8,
+      "mean_strategy_return_pct": -0.0011,
+      "strategy_sharpe_raw_nonannualized": -0.0001,
+      "mean_strategy_return_pct_after_costs": -0.1486,
+      "strategy_sharpe_after_costs_nonannualized": -0.0166
+    },
+    {
+      "month": "2026-08",
+      "n": 78,
+      "decision_match_rate_pct": 26.9,
+      "direction_match_rate_pct": 52.6,
+      "mean_strategy_return_pct": -0.5138,
+      "strategy_sharpe_raw_nonannualized": -0.1051,
+      "mean_strategy_return_pct_after_costs": -0.6625,
+      "strategy_sharpe_after_costs_nonannualized": -0.1354
+    },
+    {
+      "month": "2026-09",
+      "n": 94,
+      "decision_match_rate_pct": 36.2,
+      "direction_match_rate_pct": 59.6,
+      "mean_strategy_return_pct": -0.5078,
+      "strategy_sharpe_raw_nonannualized": -0.1466,
+      "mean_strategy_return_pct_after_costs": -0.6653,
+      "strategy_sharpe_after_costs_nonannualized": -0.1917
+    },
+    {
+      "month": "2026-10",
+      "n": 40,
+      "decision_match_rate_pct": 32.5,
+      "direction_match_rate_pct": 62.5,
+      "mean_strategy_return_pct": -0.4334,
+      "strategy_sharpe_raw_nonannualized": -0.1596,
+      "mean_strategy_return_pct_after_costs": -0.5784,
+      "strategy_sharpe_after_costs_nonannualized": -0.2122
+    }
+  ],
+  "trend_note": "First usable month (2024-06, n=4): direction_match=100.0%, sharpe_raw=0.6562. Most recent usable month (2026-10, n=40): direction_match=62.5%, sharpe_raw=-0.1596. This is a trend SIGNAL only (small-n months are noisy) -- not a claim of statistical significance, unlike Lopez-Lira & Tang's multi-year, large-n decay finding."
+}

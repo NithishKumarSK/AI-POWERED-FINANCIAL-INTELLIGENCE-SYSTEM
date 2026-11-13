@@ -1,0 +1,282 @@
+{
+  "symbols_checked": [
+    "SPY",
+    "TSLA",
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "AMZN",
+    "GOOGL",
+    "META",
+    "QQQ",
+    "IWM"
+  ],
+  "window": {
+    "start": "2021-01-01",
+    "end": "2026-11-11"
+  },
+  "results": [
+    {
+      "symbol": "SPY",
+      "former_names_check": {
+        "symbol": "SPY",
+        "sec_filer": true,
+        "cik": "0000884394",
+        "current_name": "SPDR S&P 500 ETF TRUST",
+        "former_names": [
+          {
+            "name": "SPDR TRUST SERIES 1",
+            "from": "1996-02-14",
+            "to": "2009-12-29"
+          }
+        ],
+        "flag": true
+      },
+      "continuity_check": {
+        "symbol": "SPY",
+        "bars_found": 1470,
+        "first_bar": "2021-01-04",
+        "last_bar": "2026-11-10",
+        "requested_start": "2021-01-01",
+        "coverage_status": "FULL",
+        "max_gap_calendar_days": 4,
+        "max_gap_window": "2021-01-15 to 2021-01-19",
+        "flag": false
+      }
+    },
+    {
+      "symbol": "TSLA",
+      "former_names_check": {
+        "symbol": "TSLA",
+        "sec_filer": true,
+        "cik": "0001318605",
+        "current_name": "Tesla, Inc.",
+        "former_names": [
+          {
+            "name": "TESLA MOTORS INC",
+            "from": "2005-02-17",
+            "to": "2017-01-27"
+          }
+        ],
+        "flag": true
+      },
+      "continuity_check": {
+        "symbol": "TSLA",
+        "bars_found": 1471,
+        "first_bar": "2021-01-04",
+        "last_bar": "2026-11-10",
+        "requested_start": "2021-01-01",
+        "coverage_status": "FULL",
+        "max_gap_calendar_days": 4,
+        "max_gap_window": "2021-01-15 to 2021-01-19",
+        "flag": false
+      }
+    },
+    {
+      "symbol": "AAPL",
+      "former_names_check": {
+        "symbol": "AAPL",
+        "sec_filer": true,
+        "cik": "0000320193",
+        "current_name": "Apple Inc.",
+        "former_names": [
+          {
+            "name": "APPLE INC",
+            "from": "2007-01-10",
+            "to": "2019-08-05"
+          },
+          {
+            "name": "APPLE COMPUTER INC",
+            "from": "1994-01-26",
+            "to": "2007-01-04"
+          },
+          {
+            "name": "APPLE COMPUTER INC/ FA",
+            "from": "1997-07-28",
+            "to": "1997-07-28"
+          }
+        ],
+        "flag": true
+      },
+      "continuity_check": {
+        "symbol": "AAPL",
+        "bars_found": 1471,
+        "first_bar": "2021-01-04",
+        "last_bar": "2026-11-10",
+        "requested_start": "2021-01-01",
+        "coverage_status": "FULL",
+        "max_gap_calendar_days": 4,
+        "max_gap_window": "2021-01-15 to 2021-01-19",
+        "flag": false
+      }
+    },
+    {
+      "symbol": "MSFT",
+      "former_names_check": {
+        "symbol": "MSFT",
+        "sec_filer": true,
+        "cik": "0000789019",
+        "current_name": "MICROSOFT CORP",
+        "former_names": [],
+        "flag": false
+      },
+      "continuity_check": {
+        "symbol": "MSFT",
+        "bars_found": 1471,
+        "first_bar": "2021-01-04",
+        "last_bar": "2026-11-10",
+        "requested_start": "2021-01-01",
+        "coverage_status": "FULL",
+        "max_gap_calendar_days": 4,
+        "max_gap_window": "2021-01-15 to 2021-01-19",
+        "flag": false
+      }
+    },
+    {
+      "symbol": "NVDA",
+      "former_names_check": {
+        "symbol": "NVDA",
+        "sec_filer": true,
+        "cik": "0001045810",
+        "current_name": "NVIDIA CORP",
+        "former_names": [
+          {
+            "name": "NVIDIA CORP/CA",
+            "from": "1998-05-07",
+            "to": "2002-06-04"
+          }
+        ],
+        "flag": true
+      },
+      "continuity_check": {
+        "symbol": "NVDA",
+        "bars_found": 1471,
+        "first_bar": "2021-01-04",
+        "last_bar": "2026-11-10",
+        "requested_start": "2021-01-01",
+        "coverage_status": "FULL",
+        "max_gap_calendar_days": 4,
+        "max_gap_window": "2021-01-15 to 2021-01-19",
+        "flag": false
+      }
+    },
+    {
+      "symbol": "AMZN",
+      "former_names_check": {
+        "symbol": "AMZN",
+        "sec_filer": true,
+        "cik": "0001018724",
+        "current_name": "AMAZON COM INC",
+        "former_names": [],
+        "flag": false
+      },
+      "continuity_check": {
+        "symbol": "AMZN",
+        "bars_found": 1471,
+        "first_bar": "2021-01-04",
+        "last_bar": "2026-11-10",
+        "requested_start": "2021-01-01",
+        "coverage_status": "FULL",
+        "max_gap_calendar_days": 4,
+        "max_gap_window": "2021-01-15 to 2021-01-19",
+        "flag": false
+      }
+    },
+    {
+      "symbol": "GOOGL",
+      "former_names_check": {
+        "symbol": "GOOGL",
+        "sec_filer": true,
+        "cik": "0001652044",
+        "current_name": "Alphabet Inc.",
+        "former_names": [],
+        "flag": false
+      },
+      "continuity_check": {
+        "symbol": "GOOGL",
+        "bars_found": 1471,
+        "first_bar": "2021-01-04",
+        "last_bar": "2026-11-10",
+        "requested_start": "2021-01-01",
+        "coverage_status": "FULL",
+        "max_gap_calendar_days": 4,
+        "max_gap_window": "2021-01-15 to 2021-01-19",
+        "flag": false
+      }
+    },
+    {
+      "symbol": "META",
+      "former_names_check": {
+        "symbol": "META",
+        "sec_filer": true,
+        "cik": "0001326801",
+        "current_name": "Meta Platforms, Inc.",
+        "former_names": [
+          {
+            "name": "Facebook Inc",
+            "from": "2005-05-06",
+            "to": "2021-10-27"
+          }
+        ],
+        "flag": true
+      },
+      "continuity_check": {
+        "symbol": "META",
+        "bars_found": 1471,
+        "first_bar": "2021-01-04",
+        "last_bar": "2026-11-10",
+        "requested_start": "2021-01-01",
+        "coverage_status": "FULL",
+        "max_gap_calendar_days": 4,
+        "max_gap_window": "2021-01-15 to 2021-01-19",
+        "flag": false
+      }
+    },
+    {
+      "symbol": "QQQ",
+      "former_names_check": {
+        "symbol": "QQQ",
+        "sec_filer": false,
+        "note": "QQQ not found in SEC ticker list"
+      },
+      "continuity_check": {
+        "symbol": "QQQ",
+        "bars_found": 1471,
+        "first_bar": "2021-01-04",
+        "last_bar": "2026-11-10",
+        "requested_start": "2021-01-01",
+        "coverage_status": "FULL",
+        "max_gap_calendar_days": 4,
+        "max_gap_window": "2021-01-15 to 2021-01-19",
+        "flag": false
+      }
+    },
+    {
+      "symbol": "IWM",
+      "former_names_check": {
+        "symbol": "IWM",
+        "sec_filer": false,
+        "note": "IWM not found in SEC ticker list"
+      },
+      "continuity_check": {
+        "symbol": "IWM",
+        "bars_found": 1471,
+        "first_bar": "2021-01-04",
+        "last_bar": "2026-11-10",
+        "requested_start": "2021-01-01",
+        "coverage_status": "FULL",
+        "max_gap_calendar_days": 4,
+        "max_gap_window": "2021-01-15 to 2021-01-19",
+        "flag": false
+      }
+    }
+  ],
+  "flagged_symbols": [
+    "SPY",
+    "TSLA",
+    "AAPL",
+    "NVDA",
+    "META"
+  ],
+  "honest_summary": "This audit checks ticker/identity continuity for the CURRENT universe only -- it does NOT add delisted/failed companies to the training set, so it does not fix survivorship bias in the classic academic sense (Zhong & Hitchcock's 67-delisted-name approach). It answers a narrower question: is any symbol we currently use silently discontinuous? Flagged: SPY, TSLA, AAPL, NVDA, META -- see results for details."
+}

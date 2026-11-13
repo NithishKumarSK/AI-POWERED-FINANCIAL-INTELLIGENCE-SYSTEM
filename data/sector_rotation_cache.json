@@ -1,0 +1,95 @@
+{
+  "sector_summary": {
+    "rows": [
+      {
+        "sector": "Energy",
+        "ratio": 0.4276729559748428,
+        "ma10": 0.4351206114162885,
+        "trend": "Up",
+        "slope": 0.009433962264150886,
+        "status": "Overbought"
+      },
+      {
+        "sector": "Healthcare",
+        "ratio": 0.3567961165048544,
+        "ma10": 0.3188069676621512,
+        "trend": "Up",
+        "slope": 0.01403782060570935,
+        "status": "Normal"
+      },
+      {
+        "sector": "Technology",
+        "ratio": 0.2813299232736573,
+        "ma10": 0.32285703602116644,
+        "trend": "Up",
+        "slope": 0.007776758230673586,
+        "status": "Normal"
+      },
+      {
+        "sector": "Consumer Cyclical",
+        "ratio": 0.2642857142857143,
+        "ma10": 0.23639470306667376,
+        "trend": "Up",
+        "slope": 0.004845837615621795,
+        "status": "Normal"
+      },
+      {
+        "sector": "Consumer Defensive",
+        "ratio": 0.2605042016806723,
+        "ma10": 0.25995899746647505,
+        "trend": "Down",
+        "slope": -0.0015918562546969883,
+        "status": "Normal"
+      },
+      {
+        "sector": "Communication Services",
+        "ratio": 0.2376237623762376,
+        "ma10": 0.2562107504868134,
+        "trend": "Up",
+        "slope": 0.006286648082283991,
+        "status": "Normal"
+      },
+      {
+        "sector": "Financial",
+        "ratio": 0.21196581196581196,
+        "ma10": 0.19950484174434396,
+        "trend": "Up",
+        "slope": 0.011214094331432306,
+        "status": "Normal"
+      },
+      {
+        "sector": "Real Estate",
+        "ratio": 0.18045112781954886,
+        "ma10": 0.1426672467729237,
+        "trend": "Up",
+        "slope": 0.0046122769610593695,
+        "status": "Normal"
+      },
+      {
+        "sector": "Industrials",
+        "ratio": 0.1518324607329843,
+        "ma10": 0.1680478177245024,
+        "trend": "Up",
+        "slope": 0.002518338421583388,
+        "status": "Normal"
+      },
+      {
+        "sector": "Basic Materials",
+        "ratio": 0.11971830985915492,
+        "ma10": 0.1147930642274041,
+        "trend": "Up",
+        "slope": 0.003128293570949528,
+        "status": "Normal"
+      },
+      {
+        "sector": "Utilities",
+        "ratio": 0.02666666666666667,
+        "ma10": 0.021333333333333336,
+        "trend": "Up",
+        "slope": 0.0013333333333333357,
+        "status": "Oversold"
+      }
+    ],
+    "fetched_at": 1793618389.1271017
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "by_target_coverage": {
+    "0.8": {
+      "multiplier": 1.0018,
+      "target_coverage": 0.8,
+      "raw_coverage_pct": 79.9,
+      "n": 304,
+      "calibrated_coverage_on_calibration_set_pct": 80.3
+    },
+    "0.9": {
+      "multiplier": 1.3938,
+      "target_coverage": 0.9,
+      "raw_coverage_pct": 79.9,
+      "n": 304,
+      "calibrated_coverage_on_calibration_set_pct": 90.5
+    },
+    "0.95": {
+      "multiplier": 1.664,
+      "target_coverage": 0.95,
+      "raw_coverage_pct": 79.9,
+      "n": 304,
+      "calibrated_coverage_on_calibration_set_pct": 95.4
+    }
+  },
+  "generated_at": "2026-11-11T11:20:00.640121",
+  "source_case_count": 730,
+  "source_file": "price_range_calibration_source.json"
+}

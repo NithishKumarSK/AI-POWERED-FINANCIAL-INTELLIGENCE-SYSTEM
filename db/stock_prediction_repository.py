@@ -79,9 +79,18 @@ def save_stock_prediction_record(
 ) -> Tuple[bool, str]:
     """Save a validated stock prediction record to the central database.
     Returns (saved, message) -- same contract as the old JSONL-backed version.
+
+    Never raises -- a DB outage here must degrade to "not saved", not crash
+    the caller. The AI prediction and validation above already succeeded and
+    must still be returned/shown to the user even if Supabase is unreachable
+    (confirmed real: a paused/unreachable Supabase project was previously
+    discarding an already-valid prediction result entirely).
     """
-    record = _build_record(spi, ai_prediction, actual_validation)
-    user_id = get_current_profile_id()
+    try:
+        record = _build_record(spi, ai_prediction, actual_validation)
+        user_id = get_current_profile_id()
+    except Exception as exc:
+        return False, f"DB save failed — not saved: {type(exc).__name__}: {exc}"
     run_id = record["run_id"]
     input_hash = record["stock_prediction_input_hash"]
 
@@ -132,52 +141,55 @@ def save_stock_prediction_record(
         "cmp_raw": Jsonb(cmp),
     }
 
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                insert into stock_predictions (
-                    run_id, user_id, model_version, symbol,
-                    historical_context_start_date, prediction_origin_date,
-                    decision_horizon_days, target_date, initial_capital,
-                    benchmark, validation_mode, price_basis,
-                    stock_prediction_input, stock_prediction_input_hash,
-                    predicted_target_price, predicted_return_pct,
-                    predicted_final_capital, predicted_total_pl, decision,
-                    confidence_score, risk_score, ai_prediction_raw,
-                    status,
-                    actual_origin_price, actual_target_price,
-                    effective_origin_date, effective_target_date,
-                    actual_return_pct, actual_final_capital, actual_total_pl,
-                    actual_decision,
-                    decision_match, directional_match, abs_return_error_pct,
-                    abs_price_error, abs_capital_error, comparison_raw,
-                    resolved_at
-                ) values (
-                    %(run_id)s, %(user_id)s, %(model_version)s, %(symbol)s,
-                    %(hist_start)s::date, %(origin_date)s::date,
-                    %(horizon)s, %(target_date)s::date, %(capital)s,
-                    %(benchmark)s, %(val_mode)s, %(price_basis)s,
-                    %(spi)s, %(input_hash)s,
-                    %(pred_price)s, %(pred_ret)s,
-                    %(pred_cap)s, %(pred_pl)s, %(decision)s,
-                    %(conf)s, %(risk)s, %(ai_raw)s,
-                    'validated',
-                    %(a_origin)s, %(a_target)s,
-                    %(eff_origin)s::date, %(eff_target)s::date,
-                    %(a_ret)s, %(a_cap)s, %(a_pl)s,
-                    %(a_dec)s,
-                    %(dec_match)s, %(dir_match)s, %(abs_ret_err)s,
-                    %(abs_price_err)s, %(abs_cap_err)s, %(cmp_raw)s,
-                    now()
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into stock_predictions (
+                        run_id, user_id, model_version, symbol,
+                        historical_context_start_date, prediction_origin_date,
+                        decision_horizon_days, target_date, initial_capital,
+                        benchmark, validation_mode, price_basis,
+                        stock_prediction_input, stock_prediction_input_hash,
+                        predicted_target_price, predicted_return_pct,
+                        predicted_final_capital, predicted_total_pl, decision,
+                        confidence_score, risk_score, ai_prediction_raw,
+                        status,
+                        actual_origin_price, actual_target_price,
+                        effective_origin_date, effective_target_date,
+                        actual_return_pct, actual_final_capital, actual_total_pl,
+                        actual_decision,
+                        decision_match, directional_match, abs_return_error_pct,
+                        abs_price_error, abs_capital_error, comparison_raw,
+                        resolved_at
+                    ) values (
+                        %(run_id)s, %(user_id)s, %(model_version)s, %(symbol)s,
+                        %(hist_start)s::date, %(origin_date)s::date,
+                        %(horizon)s, %(target_date)s::date, %(capital)s,
+                        %(benchmark)s, %(val_mode)s, %(price_basis)s,
+                        %(spi)s, %(input_hash)s,
+                        %(pred_price)s, %(pred_ret)s,
+                        %(pred_cap)s, %(pred_pl)s, %(decision)s,
+                        %(conf)s, %(risk)s, %(ai_raw)s,
+                        'validated',
+                        %(a_origin)s, %(a_target)s,
+                        %(eff_origin)s::date, %(eff_target)s::date,
+                        %(a_ret)s, %(a_cap)s, %(a_pl)s,
+                        %(a_dec)s,
+                        %(dec_match)s, %(dir_match)s, %(abs_ret_err)s,
+                        %(abs_price_err)s, %(abs_cap_err)s, %(cmp_raw)s,
+                        now()
+                    )
+                    on conflict (symbol, prediction_origin_date, decision_horizon_days, target_date)
+                    do nothing
+                    returning id
+                    """,
+                    params,
                 )
-                on conflict (symbol, prediction_origin_date, decision_horizon_days, target_date)
-                do nothing
-                returning id
-                """,
-                params,
-            )
-            row = cur.fetchone()
+                row = cur.fetchone()
+    except Exception as exc:
+        return False, f"DB save failed — not saved: {type(exc).__name__}: {exc}"
 
     if row:
         _log_attempt(user_id, run_id, "stock_price_validation", input_hash, "stored_validated", row[0])
@@ -291,8 +303,16 @@ def load_stock_prediction_records(limit: int = 200, user_id: Optional[str] = Non
 
 def save_pending_prediction(spi: dict, ai_result: dict) -> Tuple[bool, str]:
     """Save a live future prediction (target_date in the future) to the
-    central DB with status='pending'. Resolved later by db.resolver."""
-    user_id = get_current_profile_id()
+    central DB with status='pending'. Resolved later by db.resolver.
+
+    Never raises -- a DB outage here must degrade to "not saved", not crash
+    the caller (the AI prediction above already succeeded and must still be
+    shown to the user even if Supabase is unreachable).
+    """
+    try:
+        user_id = get_current_profile_id()
+    except Exception as exc:
+        return False, f"Failed to save pending prediction: {exc}"
     run_id = str(uuid.uuid4())[:8].upper()
     input_hash = str(ai_result.get("stock_prediction_input_hash", "") or "")
 

@@ -91,3 +91,31 @@ def test_classify_records_symbol_case_insensitive():
     records = [_rec("spy", 5, True)] * 15
     result = classify_records(records, "SPY", 5)
     assert result["n"] == 15
+
+
+# ── regime_reliability_note: item #6 "adapt methodology per regime" ─────────
+
+def test_regime_reliability_note_known_trend_and_adx():
+    from segment_reliability import regime_reliability_note
+    note = regime_reliability_note("bearish", "choppy_market")
+    assert "38.9%" in note
+    assert "bearish" in note
+    assert "57.3%" in note
+    assert "choppy_market" in note
+
+
+def test_regime_reliability_note_unknown_regime_returns_empty():
+    from segment_reliability import regime_reliability_note
+    assert regime_reliability_note("some_unmapped_regime", "also_unmapped") == ""
+
+
+def test_regime_reliability_note_partial_known_still_returns_something():
+    from segment_reliability import regime_reliability_note
+    note = regime_reliability_note("sideways", "unmapped_adx")
+    assert "63.8%" in note
+    assert "adx=" not in note  # only the known axis should be present
+
+
+def test_regime_reliability_note_none_inputs_degrade_gracefully():
+    from segment_reliability import regime_reliability_note
+    assert regime_reliability_note(None, None) == ""

@@ -1,0 +1,48 @@
+name: Coverage waiver expiry notification
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-waiver-expiry-523
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    if: github.repository == 'tradermonty/claude-trading-skills' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.12.10"
+      - name: Install locked dependencies
+        run: uv sync --locked --no-install-project --extra dev
+      - name: Report and notify on existing tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: >-
+          uv run --locked --no-sync
+          python scripts/check_coverage_waiver_expiry.py
+          --output coverage-waiver-expiry.json --notify "$GH_REPO"
+      - name: Upload expiry evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-waiver-expiry
+          path: coverage-waiver-expiry.json
+          if-no-files-found: warn
+          retention-days: 30

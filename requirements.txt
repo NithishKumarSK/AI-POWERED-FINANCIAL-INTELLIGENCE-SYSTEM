@@ -7,6 +7,11 @@ pandas>=2.0.0
 openpyxl>=3.1.0
 numpy>=1.24.0
 yfinance>=0.2.40
+scipy>=1.11.0
+
+# Statistics (pair-trade-screener's cointegration/half-life analysis;
+# see core/pair_trade_analyzer.py)
+statsmodels>=0.14,<0.15
 
 # ML signal model (Phase 4 accuracy-improvement program -- a trained,
 # non-narrative alternative/ensemble signal alongside the LLM consensus;
